@@ -322,6 +322,7 @@ pub enum RolloutItem {
     TurnContext(TurnContextItem),
     EventMsg(EventMsg),
     BackgroundTask(crate::background_tasks::TaskJournalEvent),
+    GoalCheckpoint(GoalCheckpointItem),
 }
 
 impl<'de> Deserialize<'de> for RolloutItem {
@@ -339,6 +340,7 @@ impl<'de> Deserialize<'de> for RolloutItem {
             TurnContext(TurnContextItem),
             EventMsg(Value),
             BackgroundTask(crate::background_tasks::TaskJournalEvent),
+            GoalCheckpoint(GoalCheckpointItem),
         }
 
         let item = RolloutItemWire::deserialize(deserializer)?;
@@ -349,6 +351,7 @@ impl<'de> Deserialize<'de> for RolloutItem {
             RolloutItemWire::CompactionControl(item) => Ok(Self::CompactionControl(item)),
             RolloutItemWire::TurnContext(item) => Ok(Self::TurnContext(item)),
             RolloutItemWire::BackgroundTask(item) => Ok(Self::BackgroundTask(item)),
+            RolloutItemWire::GoalCheckpoint(item) => Ok(Self::GoalCheckpoint(item)),
             RolloutItemWire::EventMsg(value) => {
                 let is_retired_undo_event = value
                     .get("type")
@@ -362,6 +365,16 @@ impl<'de> Deserialize<'de> for RolloutItem {
             }
         }
     }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, JsonSchema)]
+pub struct GoalCheckpointItem {
+    pub conversation_id: ProcessId,
+    pub server: String,
+    pub endpoint: String,
+    pub version: u32,
+    pub snapshot: Value,
+    pub verdict: Option<Value>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, JsonSchema)]

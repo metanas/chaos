@@ -317,6 +317,13 @@ pub struct McpServerInstructions {
 /// Structured server notifications consumed by the kernel.
 #[derive(Debug, Clone)]
 pub enum McpServerNotification {
+    GoalRequest {
+        server: String,
+        endpoint: String,
+        connection: u64,
+        params: serde_json::Value,
+        reply: Sender<Result<serde_json::Value, String>>,
+    },
     /// Explicit wake hint, never resource content or permission authority.
     FleetInbox {
         server: String,
@@ -337,6 +344,22 @@ pub enum McpServerNotification {
 impl PartialEq for McpServerNotification {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
+            (
+                Self::GoalRequest {
+                    server: a,
+                    endpoint: x,
+                    connection: c,
+                    params: p,
+                    reply: r,
+                },
+                Self::GoalRequest {
+                    server: b,
+                    endpoint: y,
+                    connection: d,
+                    params: q,
+                    reply: s,
+                },
+            ) => a == b && x == y && c == d && p == q && r.same_channel(s),
             (
                 Self::FleetInbox {
                     server: a,
@@ -692,6 +715,26 @@ impl McpConnectionManager {
             tools.extend(qualify_tools(server_tools));
         }
         tools
+    }
+
+    /// Rehydrate drivers which negotiated durable goals before each sample.
+    pub async fn refresh_goal_tools(&self) {
+        for (name, client) in &self.clients {
+            let Ok(client) = client.client().await else {
+                continue;
+            };
+            if !client
+                .goal_protocol
+                .load(std::sync::atomic::Ordering::Acquire)
+            {
+                continue;
+            }
+            if let Err(error) = client.refresh_listed_tools(name).await {
+                // Never keep stale mutable goal routes after a failed refresh.
+                filter::store_managed_tools(&client.tool_filter, &client.tools, Vec::new());
+                warn!(%error, server = name, "goal capability refresh failed");
+            }
+        }
     }
 
     /// Returns non-empty instructions advertised by initialized MCP servers.

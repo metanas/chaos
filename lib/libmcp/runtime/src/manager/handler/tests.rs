@@ -88,6 +88,8 @@ impl McpCatalogSink for NoopCatalog {
 fn test_handler(notification_tx: Option<Sender<McpServerNotification>>) -> ChaosClientHandler {
     let (tx_event, _) = async_channel::bounded(1);
     ChaosClientHandler {
+        connection: 1,
+        goal_protocol: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         server_name: "peer".into(),
         endpoint: "stdio".into(),
         tx_event,

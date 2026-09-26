@@ -1845,4 +1845,7 @@ fn cwd_matches(session_cwd: &Path, cwd: &Path) -> bool {
 mod lease_tests;
 
 #[cfg(test)]
+mod goal_tests;
+
+#[cfg(test)]
 mod tests;

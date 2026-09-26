@@ -41,6 +41,7 @@ fn approval_metadata(
     tool_description: Option<&str>,
 ) -> McpToolApprovalMetadata {
     McpToolApprovalMetadata {
+        goal_protocol: false,
         annotations: None,
         connector_id: connector_id.map(str::to_string),
         connector_name: connector_name.map(str::to_string),
@@ -584,6 +585,7 @@ fn sanitize_mcp_tool_result_for_model_uses_structured_content_only_when_present(
 #[test]
 fn codex_apps_tool_call_request_meta_includes_codex_apps_meta() {
     let metadata = McpToolApprovalMetadata {
+        goal_protocol: false,
         annotations: None,
         connector_id: Some("calendar".to_string()),
         connector_name: Some("Calendar".to_string()),
@@ -932,6 +934,7 @@ async fn approve_mode_skips_when_annotations_do_not_require_approval() {
         arguments: None,
     };
     let metadata = McpToolApprovalMetadata {
+        goal_protocol: false,
         annotations: Some(annotations(Some(true), None, None)),
         connector_id: None,
         connector_name: None,
@@ -997,6 +1000,7 @@ async fn approve_mode_blocks_when_arc_returns_interrupt_for_model() {
         arguments: Some(serde_json::json!({ "id": 1 })),
     };
     let metadata = McpToolApprovalMetadata {
+        goal_protocol: false,
         annotations: Some(annotations(Some(false), Some(true), Some(true))),
         connector_id: Some("calendar".to_string()),
         connector_name: Some("Calendar".to_string()),

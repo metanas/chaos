@@ -317,6 +317,11 @@ pub(crate) async fn run_turn(
         .unwrap_or_default();
     let agent_context = hook_agent_context(sess.conversation_id, &sess.session_source().await);
     if owner_turn {
+        sess.state
+            .lock()
+            .await
+            .goal
+            .begin_turn(&turn_context.sub_id, &before_turn_input_messages.join("\n"));
         sess.record_initial_user_prompt(
             turn_context.as_ref(),
             &input,
@@ -635,7 +640,38 @@ pub(crate) async fn run_turn(
                         }
                     }
                     if stop_outcome.should_stop {
+                        sess.state.lock().await.goal.pause("stop_hook");
                         break;
+                    }
+                    if owner_turn {
+                        let outcome = crate::goal::checkpoint(
+                            &sess,
+                            &turn_context,
+                            last_agent_message.as_deref().unwrap_or(""),
+                        )
+                        .or_cancel(&cancellation_token)
+                        .await;
+                        match outcome {
+                            Ok(outcome) => {
+                                if let Some(event) = outcome.status_event() {
+                                    sess.send_event(&turn_context, event).await;
+                                }
+                                if let Some(prompt) = outcome.follow_up_prompt() {
+                                    let message: ResponseItem =
+                                        DeveloperInstructions::new(prompt).into();
+                                    sess.record_conversation_items(&turn_context, &[message])
+                                        .await;
+                                    // Success/pause get a wrap-up response, not
+                                    // a forced end. Terminal state makes the
+                                    // next stop a no-op unless evidence changes.
+                                    continue;
+                                }
+                            }
+                            Err(_) => {
+                                sess.state.lock().await.goal.pause("cancelled");
+                                return None;
+                            }
+                        }
                     }
                     let hook_outcomes = sess
                         .hooks()
@@ -739,6 +775,12 @@ pub(crate) async fn built_tools(
     cancellation_token: &CancellationToken,
 ) -> ChaosResult<Arc<ToolRouter>> {
     let has_mcp_servers = sess.services.mcp_registry.has_servers();
+    sess.services
+        .mcp_registry
+        .current_manager()
+        .refresh_goal_tools()
+        .or_cancel(cancellation_token)
+        .await?;
     let mcp_tools = sess
         .services
         .mcp_registry

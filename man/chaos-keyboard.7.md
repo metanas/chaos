@@ -66,6 +66,10 @@ warning confirmation unless already acknowledged. Cancelling leaves permissions
 unchanged and returns to the draft. `/permissions` remains available for explicit
 selection. Use `Up`, not `Ctrl+P`, to recall previous input in the composer.
 
+`/goal <request>` submits a normal message asking the model to set observable
+completion criteria through a compatible goal driver. Bare `/goal` shows usage.
+It does not change permissions.
+
 In previous-message preview, `Esc` / `Left` moves to an older message,
 `Right` moves forward, and `Enter` selects the message for editing and requests
 a conversation rollback to that point. Later turns are removed after the

@@ -1,10 +1,56 @@
 //! Opaque credential references in configuration. No plaintext fallback.
+use std::collections::HashMap;
+use std::sync::{LazyLock, Mutex};
+
 use anyhow::{Context, ensure};
 use chaos_keyring::{DefaultKeyringStore, KeyringStore};
 use serde_json::Value;
 
 const PREFIX: &str = "keyring:chaos-settings/";
 const SERVICE: &str = "chaos-settings";
+
+// Process-local cache of immutable references; rotation gets a new UUID.
+// No Debug or serialization. External Keychain edits require a restart.
+static CREDENTIALS: LazyLock<CredentialCache> = LazyLock::new(CredentialCache::default);
+
+#[derive(Default)]
+struct CredentialCache {
+    values: Mutex<HashMap<String, String>>,
+}
+
+impl CredentialCache {
+    fn resolve(
+        &self,
+        account: &str,
+        load: impl FnOnce() -> anyhow::Result<String>,
+    ) -> anyhow::Result<String> {
+        let mut values = self
+            .values
+            .lock()
+            .map_err(|_| anyhow::anyhow!("credential cache unavailable"))?;
+        if let Some(value) = values.get(account) {
+            return Ok(value.clone());
+        }
+        // Serialize lookups; cache successes only.
+        let value = load()?;
+        values.insert(account.to_owned(), value.clone());
+        Ok(value)
+    }
+
+    fn remove(
+        &self,
+        account: &str,
+        delete: impl FnOnce() -> anyhow::Result<()>,
+    ) -> anyhow::Result<()> {
+        let mut values = self
+            .values
+            .lock()
+            .map_err(|_| anyhow::anyhow!("credential cache unavailable"))?;
+        // Evict even if deletion fails; exclude concurrent loads.
+        values.remove(account);
+        delete()
+    }
+}
 
 #[cfg(test)]
 #[path = "secrets_tests.rs"]
@@ -14,14 +60,17 @@ pub fn is_reference(value: &str) -> bool {
     value.starts_with(PREFIX)
 }
 
+/// Resolve a reference once per process; successful values stay in memory only.
 pub fn resolve(value: &str) -> anyhow::Result<String> {
     let Some(account) = value.strip_prefix(PREFIX) else {
         return Ok(value.into());
     };
     uuid::Uuid::parse_str(account).context("invalid credential reference")?;
-    DefaultKeyringStore
-        .load(SERVICE, account)?
-        .context("configuration credential is unavailable in the secure store")
+    CREDENTIALS.resolve(account, || {
+        DefaultKeyringStore
+            .load(SERVICE, account)?
+            .context("configuration credential is unavailable in the secure store")
+    })
 }
 
 pub fn externalize(value: &str) -> anyhow::Result<String> {
@@ -31,11 +80,15 @@ pub fn externalize(value: &str) -> anyhow::Result<String> {
         return Ok(value.into());
     }
     let id = uuid::Uuid::new_v4().to_string();
-    DefaultKeyringStore.save(SERVICE, &id, value)?;
-    ensure!(
-        DefaultKeyringStore.load(SERVICE, &id)?.as_deref() == Some(value),
-        "secure credential store failed read-back verification"
-    );
+    CREDENTIALS.resolve(&id, || {
+        DefaultKeyringStore.save(SERVICE, &id, value)?;
+        // Verification must read the actual store, not the cache.
+        ensure!(
+            DefaultKeyringStore.load(SERVICE, &id)?.as_deref() == Some(value),
+            "secure credential store failed read-back verification"
+        );
+        Ok(value.to_owned())
+    })?;
     Ok(format!("{PREFIX}{id}"))
 }
 
@@ -45,8 +98,10 @@ pub fn remove(reference: &str) -> anyhow::Result<()> {
         .strip_prefix(PREFIX)
         .context("expected a secure credential reference")?;
     uuid::Uuid::parse_str(account).context("invalid credential reference")?;
-    DefaultKeyringStore.delete(SERVICE, account)?;
-    Ok(())
+    CREDENTIALS.remove(account, || {
+        DefaultKeyringStore.delete(SERVICE, account)?;
+        Ok(())
+    })
 }
 
 pub fn has_literals(value: &Value) -> bool {

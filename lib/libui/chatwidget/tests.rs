@@ -5626,6 +5626,66 @@ async fn plan_slash_command_with_args_submits_prompt_in_plan_mode() {
     assert_eq!(chat.active_collaboration_mode_kind(), ModeKind::Plan);
 }
 
+#[tokio::test]
+async fn goal_submission_routing() {
+    goal_slash_command_preserves_mode_attachments_and_element_offsets().await;
+    bare_goal_shows_usage_without_submitting_or_switching_mode().await;
+}
+
+#[cfg(test)]
+async fn goal_slash_command_preserves_mode_attachments_and_element_offsets() {
+    let (mut chat, _rx, mut op_rx) = make_chatwidget_manual(None).await;
+    chat.process_id = Some(ProcessId::new());
+    let mode = chat.active_collaboration_mode_kind();
+    let placeholder = "[Image #1]";
+    let request = format!("{placeholder} fix the regression");
+    let path = PathBuf::from("/tmp/goal-input.png");
+    let prefix = "/goal\n";
+    chat.bottom_pane.set_composer_text(
+        format!("{prefix}{request}"),
+        vec![TextElement::new(
+            (prefix.len()..prefix.len() + placeholder.len()).into(),
+            Some(placeholder.into()),
+        )],
+        vec![path.clone()],
+    );
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    let Op::UserTurn { items, .. } = next_submit_op(&mut op_rx) else {
+        panic!("expected a normal user turn");
+    };
+    assert!(items.contains(&UserInput::LocalImage { path }));
+    let (text, elements) = items
+        .iter()
+        .find_map(|item| match item {
+            UserInput::Text {
+                text,
+                text_elements,
+            } => Some((text, text_elements)),
+            _ => None,
+        })
+        .unwrap();
+    assert!(text.starts_with(&request));
+    assert!(text.contains("call start_goal"));
+    assert!(text.contains("call check_goal"));
+    assert!(!text.starts_with("/goal"));
+    assert_eq!(elements[0].placeholder(text), Some(placeholder));
+    assert_eq!(chat.active_collaboration_mode_kind(), mode);
+}
+
+#[cfg(test)]
+async fn bare_goal_shows_usage_without_submitting_or_switching_mode() {
+    let (mut chat, mut rx, mut op_rx) = make_chatwidget_manual(None).await;
+    let mode = chat.active_collaboration_mode_kind();
+    chat.dispatch_command(SlashCommand::Goal);
+    assert_no_submit_op(&mut op_rx);
+    assert_eq!(chat.active_collaboration_mode_kind(), mode);
+    let lines = drain_insert_history(&mut rx);
+    assert!(
+        lines
+            .iter()
+            .any(|lines| lines_to_single_string(lines).contains("Usage: /goal <request>"))
+    );
+}
 #[cfg(test)]
 async fn collaboration_modes_defaults_to_code_on_startup() {
     let chaos_home = tempdir().expect("tempdir");

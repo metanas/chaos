@@ -127,6 +127,8 @@ async fn emit_resource_update(
 
 /// Handler that bridges mcp-guest callbacks to the core event system.
 pub(super) struct ChaosClientHandler {
+    pub(super) connection: u64,
+    pub(super) goal_protocol: Arc<std::sync::atomic::AtomicBool>,
     pub(super) server_name: String,
     pub(super) endpoint: String,
     pub(super) tx_event: Sender<Event>,
@@ -180,9 +182,40 @@ impl ClientHandler for ChaosClientHandler {
     fn on_custom_request(
         &self,
         method: String,
-        _params: Option<serde_json::Value>,
+        params: Option<serde_json::Value>,
     ) -> ClientHandlerResultFuture<'_, serde_json::Value> {
         Box::pin(async move {
+            if method == chaos_mcp_protocol::goals::METHOD {
+                let tx = self
+                    .notification_tx
+                    .as_ref()
+                    .ok_or_else(|| mcp_guest::GuestError::MethodNotSupported(method.clone()))?;
+                let params = params.ok_or_else(|| {
+                    mcp_guest::GuestError::InvalidParams("missing goal request".into())
+                })?;
+                chaos_mcp_protocol::goals::Request::parse(params.clone())
+                    .map_err(|error| mcp_guest::GuestError::InvalidParams(error.into()))?;
+                self.goal_protocol
+                    .store(true, std::sync::atomic::Ordering::Release);
+                let (reply, result) = async_channel::bounded(1);
+                tx.try_send(McpServerNotification::GoalRequest {
+                    server: self.server_name.clone(),
+                    endpoint: self.endpoint.clone(),
+                    connection: self.connection,
+                    params,
+                    reply,
+                })
+                .map_err(|_| {
+                    mcp_guest::GuestError::InvalidParams("goal bridge unavailable".into())
+                })?;
+                return tokio::time::timeout(Duration::from_secs(45), result.recv())
+                    .await
+                    .map_err(|_| {
+                        mcp_guest::GuestError::InvalidParams("goal bridge timeout".into())
+                    })?
+                    .map_err(|_| mcp_guest::GuestError::Disconnected)?
+                    .map_err(mcp_guest::GuestError::InvalidParams);
+            }
             if method != FLEET_HOST_INFO_REQUEST {
                 return Err(mcp_guest::GuestError::MethodNotSupported(method));
             }

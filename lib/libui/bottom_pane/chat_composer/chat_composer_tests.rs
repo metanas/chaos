@@ -2186,6 +2186,22 @@ fn slash_plan_args_preserve_text_elements() {
     }
 }
 
+#[test]
+fn goal_multiline_and_large_paste_are_prepared_as_arguments() {
+    let mut composer = ChatComposer::new(true, make_app_event_sender(), false, "Ask".into(), true);
+    composer.set_text_content("/goal\n".into(), Vec::new(), Vec::new());
+    composer.move_cursor_to_end();
+    let pasted = "fix λ\n".repeat(LARGE_PASTE_CHAR_THRESHOLD);
+    composer.handle_paste(pasted.clone());
+    assert!(composer.try_dispatch_bare_slash_command().is_none());
+    assert!(matches!(
+        composer.try_dispatch_slash_command_with_args(),
+        Some(InputResult::CommandWithArgs(SlashCommand::Goal, ..))
+    ));
+    let (args, elements) = composer.prepare_inline_args_submission(true).unwrap();
+    assert_eq!(args, pasted.trim());
+    assert!(elements.is_empty());
+}
 fn file_completion_preserves_large_paste_placeholder_elements() {
     use crossterm::event::KeyCode;
     use crossterm::event::KeyEvent;

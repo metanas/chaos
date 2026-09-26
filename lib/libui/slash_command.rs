@@ -24,6 +24,7 @@ pub enum SlashCommand {
     Fork,
     Compact,
     Plan,
+    Goal,
     Collab,
     Agent,
     Diff,
@@ -77,6 +78,7 @@ impl SlashCommand {
                 "allow or disallow model-controlled effort changes".into()
             }
             SlashCommand::Plan => "switch to Plan mode".into(),
+            SlashCommand::Goal => "submit a task with a completion goal".into(),
             SlashCommand::Collab => "change collaboration mode (experimental)".into(),
             SlashCommand::Agent | SlashCommand::MultiAgents => {
                 "switch the active agent thread".into()
@@ -108,6 +110,7 @@ impl SlashCommand {
             SlashCommand::Review
                 | SlashCommand::Rename
                 | SlashCommand::Plan
+                | SlashCommand::Goal
                 | SlashCommand::ContextWindow
                 | SlashCommand::DynamicEffort
                 | SlashCommand::Clamp
@@ -127,6 +130,7 @@ impl SlashCommand {
             | SlashCommand::DynamicEffort
             | SlashCommand::Review
             | SlashCommand::Plan
+            | SlashCommand::Goal
             | SlashCommand::Clear
             | SlashCommand::Accounts
             | SlashCommand::Reflex

@@ -260,8 +260,8 @@ impl ChatComposer {
         if !self.slash_commands_enabled() {
             return None;
         }
-        let first_line = self.textarea.text().lines().next().unwrap_or("");
-        if let Some((name, rest, _rest_offset)) = parse_slash_name(first_line)
+        let text = self.textarea.text();
+        if let Some((name, rest, _rest_offset)) = parse_slash_name(text)
             && rest.is_empty()
             && let Some(cmd) =
                 slash_commands::find_builtin_command(name, self.builtin_command_flags())

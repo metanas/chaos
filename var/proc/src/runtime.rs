@@ -2067,6 +2067,7 @@ fn extract_dynamic_tools(items: &[RolloutItem]) -> Option<Option<Vec<DynamicTool
     items.iter().find_map(|item| match item {
         RolloutItem::SessionMeta(meta_line) => Some(meta_line.meta.dynamic_tools.clone()),
         RolloutItem::ResponseItem(_)
+        | RolloutItem::GoalCheckpoint(_)
         | RolloutItem::Compacted(_)
         | RolloutItem::BackgroundTask(_)
         | RolloutItem::CompactionControl(_)
@@ -2079,6 +2080,7 @@ fn extract_memory_mode(items: &[RolloutItem]) -> Option<String> {
     items.iter().rev().find_map(|item| match item {
         RolloutItem::SessionMeta(meta_line) => meta_line.meta.memory_mode.clone(),
         RolloutItem::ResponseItem(_)
+        | RolloutItem::GoalCheckpoint(_)
         | RolloutItem::Compacted(_)
         | RolloutItem::BackgroundTask(_)
         | RolloutItem::CompactionControl(_)

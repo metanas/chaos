@@ -607,6 +607,17 @@ impl Session {
             sess.send_event_raw(event).await;
         }
 
+        if let InitialHistory::Resumed(_) = &initial_history {
+            if sess.services.rollout.lock().await.is_some() {
+                initial_history =
+                    RolloutRecorder::get_rollout_history_for_process(conversation_id).await?;
+            }
+            crate::goal::recover(&sess, &initial_history.get_rollout_items())
+                .await
+                .map_err(anyhow::Error::msg)?;
+        }
+        let (mcp_replay_ready, mcp_replay_rx) = tokio::sync::oneshot::channel();
+        sess.start_mcp_notification_listener(mcp_notification_rx, mcp_replay_rx);
         sess.start_file_watcher_listener();
         let sandbox_state = SandboxState {
             vfs_policy: session_configuration.vfs_policy.clone(),
@@ -706,12 +717,6 @@ impl Session {
         };
 
         if let InitialHistory::Resumed(_) = &initial_history {
-            // The writer has now been claimed. Re-read under that ownership so
-            // a last append by the previous owner cannot be missed.
-            if sess.services.rollout.lock().await.is_some() {
-                initial_history =
-                    RolloutRecorder::get_rollout_history_for_process(conversation_id).await?;
-            }
             if config.unattended_recovery
                 && let Err(error) = crate::background_recovery::validate_claimed(
                     &config,
@@ -732,7 +737,7 @@ impl Session {
             .instrument(info_span!("session_init.initial_history"))
             .await;
         // Restore wake dedup/delivery markers before accepting reconnect hints.
-        sess.start_mcp_notification_listener(mcp_notification_rx);
+        let _ = mcp_replay_ready.send(());
         {
             let mut state = sess.state.lock().await;
             state.set_pending_session_start_source(Some(session_start_source));

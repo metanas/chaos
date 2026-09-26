@@ -52,6 +52,7 @@ mod exec_policy;
 mod file_watcher;
 mod flags;
 pub mod git_info;
+mod goal;
 mod machine_recovery;
 pub mod machine_status;
 mod machine_warnings;

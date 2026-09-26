@@ -89,6 +89,32 @@ fn assert_item(actual: &RolloutItem, expected: &RolloutItem) {
 }
 
 #[tokio::test]
+async fn goal_checkpoint_round_trips_through_durable_sqlite_journal() {
+    let journal = TestJournal::new().await;
+    let mut writer = journal.writer().await;
+    let checkpoint = RolloutItem::GoalCheckpoint(chaos_ipc::protocol::GoalCheckpointItem {
+        conversation_id: writer.process_id,
+        server: "driver".into(),
+        endpoint: "stdio:test".into(),
+        version: 2,
+        snapshot: serde_json::json!({"id":"goal","revision":2,"checks":1,"status":"checking"}),
+        verdict: None,
+    });
+    writer
+        .append_items(std::slice::from_ref(&checkpoint))
+        .await
+        .unwrap();
+    let loaded = journal
+        .client
+        .load_journal(writer.process_id)
+        .await
+        .unwrap();
+    assert_eq!(loaded.items.len(), 1);
+    assert_item(&loaded.items[0].item, &checkpoint);
+    writer.release_lease().await.unwrap();
+}
+
+#[tokio::test]
 async fn expired_idle_lease_is_reacquired_without_fencing() {
     let journal = TestJournal::new().await;
     let mut writer = journal.writer().await;

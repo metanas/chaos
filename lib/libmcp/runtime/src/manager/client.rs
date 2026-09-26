@@ -289,6 +289,7 @@ fn guest_tool_to_tool_info(server_name: &str, guest_tool: super::McpToolInfo) ->
 
 #[derive(Clone)]
 pub(super) struct ManagedClient {
+    pub(super) goal_protocol: Arc<std::sync::atomic::AtomicBool>,
     pub(super) session: McpSession,
     pub(super) tools: Arc<StdRwLock<Vec<ToolInfo>>>,
     pub(super) tool_filter: ToolFilter,
@@ -581,7 +582,11 @@ pub(super) async fn make_managed_client(
         Arc::new(tokio::sync::RwLock::new(None));
     let cwd_arc = cwd;
 
+    static NEXT_CONNECTION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let goal_protocol = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let handler = ChaosClientHandler {
+        connection: NEXT_CONNECTION.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        goal_protocol: Arc::clone(&goal_protocol),
         server_name: server_name.clone(),
         endpoint: crate::task_observer::endpoint_identity(&config.transport),
         tx_event,
@@ -688,6 +693,7 @@ pub(super) async fn make_managed_client(
     store_managed_tools(&tool_filter, &tools_arc, tools);
 
     Ok(ManagedClient {
+        goal_protocol,
         session,
         tools: tools_arc,
         tool_timeout: Some(tool_timeout),

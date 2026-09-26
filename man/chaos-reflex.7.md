@@ -24,6 +24,13 @@ in-flight turns keep their snapshot. No file edits or exported keys are needed.
 
 - **Storage:** settings go to the database; new keys go to the OS keyring.
   Database credentials are references, with no plaintext fallback.
+- **Keychain prompts:** successfully resolved saved keys are cached in host
+  memory for the process lifetime, shared by MCP safety checks and goal checks.
+  Concurrent reads share one lookup; failures are not cached. Saving a replacement
+  creates a new reference; deleting a reference through ChaOS evicts its cached
+  value. After editing or deleting a key directly in the OS keyring (or from
+  another process), restart the harness to discard cached values. First access
+  after a restart may still require OS authorization.
 - **Key entry:** never put keys after a slash command or in an endpoint URL.
   Leave the key blank to preserve it; enter a replacement to rotate it.
 - **Account reuse:** an API-key account from `/accounts` must share the endpoint's
@@ -148,6 +155,9 @@ check still does not replace normal permissions or sandbox enforcement.
 These signals are not a safety guarantee.
 
 ## PRIVACY
+
+Opt-in goal checks send bounded requests, criteria, claims, and tool evidence
+to the same Jev backend, without remote fallback. Tool text may contain secrets.
 
 Action-risk checks send recent conversation, instructions, and tool arguments
 to the configured backend endpoint. Conversation JSON is capped at 96,000 UTF-8

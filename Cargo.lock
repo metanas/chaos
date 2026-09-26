@@ -1544,6 +1544,7 @@ dependencies = [
  "chaos-locate",
  "chaos-lsd",
  "chaos-machine",
+ "chaos-mcp-protocol",
  "chaos-mcp-runtime",
  "chaos-minions",
  "chaos-model-catalog",

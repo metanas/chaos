@@ -3,6 +3,14 @@ use std::str::FromStr;
 
 use super::SlashCommand;
 
+#[test]
+fn goal_submits_a_request_but_is_not_available_during_work_or_logout() {
+    assert_eq!(SlashCommand::from_str("goal"), Ok(SlashCommand::Goal));
+    assert!(SlashCommand::Goal.supports_inline_args());
+    assert!(!SlashCommand::Goal.available_during_task());
+    assert!(!SlashCommand::Goal.available_when_logged_out());
+}
+
 pub(crate) fn slash_command_suite() {
     stop_command_is_canonical_name();
     clean_alias_parses_to_stop_command();

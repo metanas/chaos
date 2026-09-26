@@ -49,6 +49,7 @@ pub(crate) fn initial_replay_event_msgs(
             RolloutItem::SessionMeta(_)
             | RolloutItem::TurnContext(_)
             | RolloutItem::BackgroundTask(_)
+            | RolloutItem::GoalCheckpoint(_)
             | RolloutItem::CompactionControl(_)
             | RolloutItem::Compacted(_) => {}
         }

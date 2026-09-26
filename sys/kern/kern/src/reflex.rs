@@ -56,28 +56,51 @@ pub(crate) fn from_config(
     Ok(Some(Reflex::new(vec![backend])))
 }
 
+/// Use the same configured Jev origin and credential resolution as action risk.
+pub(crate) fn goal_client(
+    config: &Config,
+    auth: Option<&crate::AuthManager>,
+) -> Result<chaos_reflex::jev::JevClient, &'static str> {
+    let (_, settings) = action_risk_settings(config).ok_or("jev_not_configured")?;
+    let key = configuration::resolve_api_key(config, settings, auth)
+        .map_err(|_| "credentials_or_configuration")?
+        .ok_or("credentials_or_configuration")?;
+    Ok(build_jev_client(settings, build_http_client(), key)
+        .with_retry(1, std::time::Duration::ZERO))
+}
+
+fn build_jev_client(
+    settings: &ReflexBackendSettings,
+    http: chaos_client::ChaosHttpClient,
+    api_key: String,
+) -> chaos_reflex::jev::JevClient {
+    let mut client = chaos_reflex::jev::JevClient::new(
+        http,
+        settings
+            .base_url
+            .as_deref()
+            .unwrap_or(chaos_reflex::jev::DEFAULT_BASE_URL),
+        api_key,
+    )
+    .with_model(settings.model())
+    .with_timeout(settings.timeout());
+    if let Some(path) = settings.path.as_deref() {
+        client = client.with_path(path);
+    }
+    client
+}
+
 fn build_backend(
     name: &str,
     settings: &ReflexBackendSettings,
     http: chaos_client::ChaosHttpClient,
     api_key: Option<String>,
 ) -> Option<Box<dyn ReflexBackend>> {
-    let timeout = settings.timeout();
     match settings.kind {
-        ReflexKind::Jev => {
-            let api_key = api_key?;
-            let base_url = settings
-                .base_url
-                .as_deref()
-                .unwrap_or(chaos_reflex::jev::DEFAULT_BASE_URL);
-            let mut client = chaos_reflex::jev::JevClient::new(http, base_url, api_key)
-                .with_model(settings.model())
-                .with_timeout(timeout);
-            if let Some(path) = settings.path.as_deref() {
-                client = client.with_path(path);
-            }
-            Some(Box::new(JevBackend::new(name, client)))
-        }
+        ReflexKind::Jev => Some(Box::new(JevBackend::new(
+            name,
+            build_jev_client(settings, http, api_key?),
+        ))),
         ReflexKind::Minicheck => Some(Box::new(MiniCheckBackend::new(
             name,
             build_local_chat(name, settings, http, api_key)?,

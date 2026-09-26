@@ -10,6 +10,8 @@ use serde::Serialize;
 use serde_json::Value;
 use serde_json::json;
 
+pub mod goals;
+
 /// Inbox wake notification method.
 pub const FLEET_INBOX_NOTIFICATION: &str = "notifications/chaos/fleet/inbox";
 
@@ -119,10 +121,13 @@ impl FleetHostInfo {
 
 /// Client `experimental` map advertising this protocol.
 pub fn client_experimental_capabilities() -> HashMap<String, Value> {
-    HashMap::from([(
-        FLEET_EXPERIMENTAL_CAPABILITY.to_string(),
-        Value::Object(Default::default()),
-    )])
+    HashMap::from([
+        (
+            FLEET_EXPERIMENTAL_CAPABILITY.to_string(),
+            Value::Object(Default::default()),
+        ),
+        (goals::CAPABILITY.to_string(), goals::capability()),
+    ])
 }
 
 #[cfg(test)]

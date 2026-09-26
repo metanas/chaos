@@ -6,6 +6,10 @@ fn initialize_advertises_chaos_fleet_experimental_capability() {
     let capabilities = client_capabilities();
     let experimental = capabilities.experimental.expect("experimental");
     assert!(experimental.contains_key(chaos_mcp_protocol::FLEET_EXPERIMENTAL_CAPABILITY));
+    assert_eq!(
+        experimental.get(chaos_mcp_protocol::goals::CAPABILITY),
+        Some(&chaos_mcp_protocol::goals::capability()),
+    );
 }
 
 #[test]

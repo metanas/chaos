@@ -118,10 +118,29 @@ pub(crate) async fn handle_mcp_tool_call(
         (Err(message), Duration::ZERO)
     } else {
         let start = Instant::now();
+        let goal_token = if metadata.as_ref().is_some_and(|meta| meta.goal_protocol) {
+            Some(
+                crate::goal::authorize(
+                    &sess,
+                    turn_context,
+                    &server,
+                    &tool_name,
+                    arguments_value
+                        .clone()
+                        .unwrap_or_else(|| serde_json::json!({})),
+                )
+                .await,
+            )
+        } else {
+            None
+        };
         let result = sess
-            .call_tool(&server, &tool_name, arguments_value, request_meta)
+            .call_tool(&server, &tool_name, arguments_value.clone(), request_meta)
             .await
             .map_err(|e| format!("tool call error: {e:?}"));
+        if let Some(token) = goal_token {
+            crate::goal::finish_call(&sess, turn_context, &server, &tool_name, &token).await;
+        }
         let result = sanitize_mcp_tool_result_for_model(
             turn_context
                 .model_info
@@ -241,6 +260,7 @@ impl McpToolApprovalDecision {
 }
 
 pub(crate) struct McpToolApprovalMetadata {
+    goal_protocol: bool,
     annotations: Option<ToolAnnotations>,
     connector_id: Option<String>,
     connector_name: Option<String>,
@@ -817,6 +837,12 @@ pub(crate) async fn lookup_mcp_tool_metadata(
     let connector_description = tool_info.connector_description.clone();
 
     Some(McpToolApprovalMetadata {
+        goal_protocol: tool_info
+            .tool
+            .meta
+            .as_ref()
+            .and_then(|meta| meta.get(chaos_mcp_protocol::goals::CAPABILITY))
+            == Some(&serde_json::json!({"version":2})),
         annotations: tool_info.tool.annotations,
         connector_id: tool_info.connector_id,
         connector_name: tool_info.connector_name,

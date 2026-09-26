@@ -15,6 +15,94 @@ fn auth(config: &Config) -> crate::AuthManager {
 
 #[tokio::test]
 #[serial]
+async fn goal_and_safety_clients_share_settings_but_keep_distinct_retry_budgets() {
+    let _keyring = chaos_keyring::tests::MockKeyringStore::default();
+    let server = MockServer::start().await;
+    let (_, context) = make_session_and_context().await;
+    let mut config = (*context.config).clone();
+    config.reflex = jev_settings(&server);
+    let reference = secrets::externalize("shared-test-key").unwrap();
+    let settings = config.reflex.get_mut("jev").unwrap();
+    settings.env_key = None;
+    settings.api_key = Some(reference.clone());
+    settings.model = Some("custom-jev".into());
+    settings.path = Some("/custom/decisions".into());
+    for (goal, attempts) in [(true, 1), (false, 3)] {
+        server.reset().await;
+        Mock::given(method("POST"))
+            .and(path("/custom/decisions"))
+            .and(header("authorization", "Bearer shared-test-key"))
+            .and(body_partial_json(json!({"model":"custom-jev"})))
+            .respond_with(ResponseTemplate::new(503))
+            .expect(attempts)
+            .mount(&server)
+            .await;
+        if goal {
+            assert!(
+                goal_client(&config, None)
+                    .unwrap()
+                    .evaluate(
+                        json!({}),
+                        BTreeMap::from([(
+                            "done".into(),
+                            chaos_reflex::jev::Question::noul("Is the task complete?"),
+                        )]),
+                    )
+                    .await
+                    .is_err()
+            );
+        } else {
+            assert!(
+                from_config(&config, None)
+                    .unwrap()
+                    .unwrap()
+                    .judge(Judgment::ActionRisk {
+                        conversation: json!([]),
+                        action: json!({}),
+                        instructions: None,
+                    })
+                    .await
+                    .is_err()
+            );
+        }
+        server.verify().await;
+    }
+    secrets::remove(&reference).unwrap();
+}
+
+#[tokio::test]
+#[serial]
+async fn mcp_safety_and_goal_clients_share_the_saved_credential_cache() {
+    use chaos_keyring::{DefaultKeyringStore, KeyringStore};
+
+    let _keyring = chaos_keyring::tests::MockKeyringStore::default();
+    let (_, context) = make_session_and_context().await;
+    let mut config = (*context.config).clone();
+    let (_, mut settings) = presets().into_iter().next().unwrap();
+    let reference = secrets::externalize("test-shared-jev-key").unwrap();
+    settings.api_key = Some(reference.clone());
+    config.reflex.insert("jev".into(), settings);
+
+    // Remove the mock-store entry without evicting the cache.
+    // Both clients must reuse it without OS or network access.
+    DefaultKeyringStore
+        .delete(
+            "chaos-settings",
+            reference.strip_prefix("keyring:chaos-settings/").unwrap(),
+        )
+        .unwrap();
+    for _ in 0..3 {
+        assert!(from_config(&config, None).unwrap().is_some());
+        assert!(goal_client(&config, None).is_ok());
+    }
+
+    secrets::remove(&reference).unwrap();
+    assert!(from_config(&config, None).is_err());
+    assert!(goal_client(&config, None).is_err());
+}
+
+#[tokio::test]
+#[serial]
 async fn setup_stores_only_a_reference_and_resolves_without_environment() {
     let _keyring = chaos_keyring::tests::MockKeyringStore::default();
     let home = tempfile::tempdir().unwrap();

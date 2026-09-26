@@ -15,20 +15,75 @@ impl Session {
     pub(super) fn start_mcp_notification_listener(
         self: &Arc<Self>,
         notification_rx: Receiver<McpServerNotification>,
+        mut replay_ready: tokio::sync::oneshot::Receiver<()>,
     ) {
         let weak_session = Arc::downgrade(self);
         tokio::spawn(async move {
-            while let Ok(notification) = notification_rx.recv().await {
+            let goal_slots = Arc::new(tokio::sync::Semaphore::new(16));
+            let mut ready = false;
+            let mut pending = std::collections::VecDeque::new();
+            loop {
+                let notification = if ready {
+                    if let Some(notification) = pending.pop_front() {
+                        notification
+                    } else {
+                        let Ok(notification) = notification_rx.recv().await else {
+                            break;
+                        };
+                        notification
+                    }
+                } else {
+                    tokio::select! {
+                        result = &mut replay_ready => {
+                            if result.is_err() { break; }
+                            ready = true;
+                            continue;
+                        }
+                        result = notification_rx.recv() => {
+                            let Ok(notification) = result else { break };
+                            notification
+                        }
+                    }
+                };
                 let Some(session) = weak_session.upgrade() else {
                     break;
                 };
-                session.handle_mcp_server_notification(notification).await;
+                if let McpServerNotification::GoalRequest {
+                    server,
+                    endpoint,
+                    connection,
+                    params,
+                    reply,
+                } = notification
+                {
+                    let Ok(slot) = Arc::clone(&goal_slots).try_acquire_owned() else {
+                        let _ = reply.try_send(Err("goal bridge busy".into()));
+                        continue;
+                    };
+                    // A callback must not re-enter the MCP server actor.
+                    tokio::spawn(async move {
+                        let _slot = slot;
+                        let result =
+                            crate::goal::request(&session, server, endpoint, connection, params)
+                                .await;
+                        let _ = reply.send(result).await;
+                    });
+                } else {
+                    if ready {
+                        session.handle_mcp_server_notification(notification).await;
+                    } else if pending.len() < 256 {
+                        pending.push_back(notification);
+                    } else {
+                        tracing::warn!("MCP replay notification queue full; hint not acknowledged");
+                    }
+                }
             }
         });
     }
 
     async fn handle_mcp_server_notification(&self, notification: McpServerNotification) {
         let text = match notification {
+            McpServerNotification::GoalRequest { .. } => return,
             McpServerNotification::FleetInbox {
                 server,
                 uri,

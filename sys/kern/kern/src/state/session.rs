@@ -33,6 +33,7 @@ pub(crate) struct SessionState {
     pub(crate) pressure: Window,
     pub(crate) session_title_reflex: SessionTitleReflex,
     pub(crate) machine_recovery: crate::machine_recovery::Recovery,
+    pub(crate) goal: crate::goal::GoalGate,
 }
 
 impl SessionState {
@@ -51,6 +52,7 @@ impl SessionState {
             pressure: Window::new(),
             session_title_reflex: SessionTitleReflex::default(),
             machine_recovery: Default::default(),
+            goal: Default::default(),
         }
     }
 
@@ -60,7 +62,9 @@ impl SessionState {
         I: IntoIterator,
         I::Item: std::ops::Deref<Target = ResponseItem>,
     {
-        self.history.record_items(items, policy);
+        let goal = &mut self.goal;
+        self.history
+            .record_items(items.into_iter().inspect(|item| goal.record(item)), policy);
     }
 
     pub(crate) fn previous_turn_settings(&self) -> Option<PreviousTurnSettings> {

@@ -315,6 +315,11 @@ impl Session {
             *active = None;
         }
         drop(active);
+        self.state
+            .lock()
+            .await
+            .goal
+            .end_turn(&turn_context.sub_id, "turn_ended");
         self.permission_actor
             .remove_turn(turn_context.sub_id.clone())
             .await
@@ -468,6 +473,7 @@ impl Session {
 
     async fn handle_task_abort(self: &Arc<Self>, task: RunningTask, reason: TurnAbortReason) {
         let sub_id = task.turn_context.sub_id.clone();
+        self.state.lock().await.goal.end_turn(&sub_id, "cancelled");
         if task.cancellation_token.is_cancelled() {
             self.permission_actor
                 .remove_turn(sub_id)

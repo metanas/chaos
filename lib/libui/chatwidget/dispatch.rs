@@ -86,6 +86,9 @@ impl ChatWidget {
                     );
                 }
             }
+            SlashCommand::Goal => {
+                self.add_info_message("Usage: /goal <request>".into(), None);
+            }
             SlashCommand::Collab => {
                 if !self.collaboration_modes_enabled() {
                     self.add_info_message(
@@ -242,17 +245,29 @@ impl ChatWidget {
                     .send(AppEvent::ChaosOp(Op::SetProcessName { name }));
                 self.bottom_pane.drain_pending_submission_state();
             }
-            SlashCommand::Plan if !trimmed.is_empty() => {
-                self.dispatch_command(cmd);
-                if self.active_mode_kind() != ModeKind::Plan {
-                    return;
+            SlashCommand::Plan | SlashCommand::Goal if !trimmed.is_empty() => {
+                if cmd == SlashCommand::Plan {
+                    self.dispatch_command(cmd);
+                    if self.active_mode_kind() != ModeKind::Plan {
+                        return;
+                    }
                 }
-                let Some((prepared_args, prepared_elements)) = self
+                let Some((mut prepared_args, prepared_elements)) = self
                     .bottom_pane
                     .prepare_inline_args_submission(/*record_history*/ true)
                 else {
                     return;
                 };
+                if cmd == SlashCommand::Goal {
+                    // Append instructions so attachment and mention offsets stay unchanged.
+                    prepared_args.push_str(
+                        "\n\nUse a completion goal for the request above. Preserve its scope, \
+                         rephrase the objective and derive observable acceptance criteria, then \
+                         call start_goal. Do the work and call check_goal before your final \
+                         response. If the goal tools are unavailable or work is blocked, report \
+                         that; do not claim verified completion. This grants no new permissions.",
+                    );
+                }
                 let local_images = self
                     .bottom_pane
                     .take_recent_submission_images_with_placeholders();
