@@ -1,0 +1,95 @@
+name: linux-build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    paths:
+      - .github/workflows/linux-build.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Preserve every master build; cancel only superseded PR builds.
+concurrency:
+  group: linux-build-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    container: rust:1.98-bookworm
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_BUILD_JOBS: '2'
+      RUSTC_WRAPPER: ''
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends clang pkg-config libcap-dev libdbus-1-dev protobuf-compiler
+      - name: Trust checkout in container
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: Swatinem/rust-cache@v2.9.1
+        with:
+          key: linux-bookworm-release
+      - name: Test clamp and build portable runtime binaries
+        run: |
+          cargo test --locked --release -p chaos-clamp --lib
+          cargo build --locked --release --bin chaos --bin chaos_journald --bin alcatraz --bin chaos-forkve-wrapper
+      - name: Package and smoke-test
+        run: |
+          set -euo pipefail
+          mkdir dist bundle
+          for bin in chaos chaos_journald alcatraz chaos-forkve-wrapper; do
+            install -m 0755 "target/release/$bin" "bundle/$bin"
+            # Fail on unresolved shared libraries, not just a successful link.
+            ldd "bundle/$bin" > "dist/$bin.ldd"
+            if grep -q 'not found' "dist/$bin.ldd"; then cat "dist/$bin.ldd"; exit 1; fi
+          done
+          bundle/chaos --version
+          git rev-parse HEAD > bundle/SOURCE_REVISION
+          cp scripts/dist-install.sh bundle/install.sh
+          artifact="chaos-linux-x86_64-${GITHUB_SHA}.tar.gz"
+          tar -czf "dist/$artifact" -C bundle .
+          (cd dist && sha256sum "$artifact" > "$artifact.sha256")
+      - uses: actions/upload-artifact@v7
+        with:
+          name: chaos-linux-x86_64-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: build
+    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: chaos-linux-x86_64-${{ github.sha }}
+          path: dist
+      - name: Publish commit-pinned prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag="build-${GITHUB_SHA}"
+          # Successful published builds are immutable; reruns never overwrite assets.
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Build already published: $tag"
+            exit 0
+          fi
+          gh release create "$tag" dist/*.tar.gz dist/*.sha256 \
+            --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title "Linux build ${GITHUB_SHA}" \
+            --notes "Automated Linux x86_64 build of ${GITHUB_SHA}. Built on Debian bookworm (glibc 2.36); requires libdbus-1-3. Clamp tests and executable smoke check passed; consult rust-ci separately for full test results. Not a stable release."
