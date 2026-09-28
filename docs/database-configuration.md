@@ -53,6 +53,9 @@ environment/default SQLite behavior.
   Legacy `sqlite_home` is accepted during migration.
 - Preferences, profiles, providers, notices, trust decisions, MCP registrations,
   and remembered approvals are database-backed.
+- Global hooks remain in `$CHAOS_HOME/hooks.json`; moving user settings into the
+  database does not disable SessionStart, BeforeTurn, or Stop hooks. Project
+  `.chaos/hooks.json` files still require project trust.
 - Project defaults, instructions, `.mcp.json`, standalone `agents/` documents,
   and administrator policy remain files.
 - Project configuration cannot redirect bootstrap or grant security authority.

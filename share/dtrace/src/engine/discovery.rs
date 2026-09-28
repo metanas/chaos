@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::Path;
 
+use chaos_ipc::api::ConfigLayerSource;
 use chaos_sysctl::ConfigLayerStack;
 use chaos_sysctl::ConfigLayerStackOrdering;
 use regex::Regex;
@@ -30,7 +31,13 @@ pub(crate) fn discover_handlers(config_layer_stack: Option<&ConfigLayerStack>) -
         ConfigLayerStackOrdering::LowestPrecedenceFirst,
         /*include_disabled*/ false,
     ) {
-        let Some(folder) = layer.config_folder() else {
+        // Settings moved to the database, but global hooks remain in CHAOS_HOME.
+        // Resolve that folder here without making bootstrap a general config folder.
+        let folder = match &layer.name {
+            ConfigLayerSource::Bootstrap { file } => file.parent(),
+            _ => layer.config_folder(),
+        };
+        let Some(folder) = folder else {
             continue;
         };
         let source_path = folder.join("hooks.json");
@@ -164,3 +171,6 @@ fn append_group_handlers(
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
