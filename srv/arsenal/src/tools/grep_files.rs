@@ -2,12 +2,13 @@
 
 use std::path::Path;
 
+use fff_search::AiGrepConfig;
+use fff_search::Casing;
 use fff_search::FFFMode;
 use fff_search::FilePicker;
 use fff_search::FilePickerOptions;
 use fff_search::GrepMode;
 use fff_search::GrepSearchOptions;
-use fff_search::AiGrepConfig;
 use fff_search::QueryParser;
 use mcp_host::prelude::*;
 use schemars::JsonSchema;
@@ -43,6 +44,11 @@ pub struct GrepFilesParams {
     /// Maximum number of matching file paths to return.
     #[serde(default = "default_limit")]
     limit: usize,
+
+    /// Case-sensitive matching when true, case-insensitive when false.
+    /// Omit for smart case (case-insensitive unless the pattern contains uppercase).
+    #[serde(default)]
+    case_sensitive: Option<bool>,
 }
 
 impl ChaosServer {
@@ -117,7 +123,13 @@ async fn execute_params_structured(params: GrepFilesParams) -> Result<serde_json
     let include = include.map(String::from);
 
     let results = tokio::task::spawn_blocking(move || {
-        run_grep_search(&pattern, include.as_deref(), &search_path, limit)
+        run_grep_search(
+            &pattern,
+            include.as_deref(),
+            &search_path,
+            limit,
+            params.case_sensitive,
+        )
     })
     .await
     .map_err(|e| format!("search task failed: {e}"))??;
@@ -142,11 +154,13 @@ async fn verify_path_exists(path: &Path) -> Result<(), String> {
 /// Walks the directory respecting .gitignore, applies an optional glob filter,
 /// searches each file for the pattern, collects matching file paths sorted by
 /// modification time (newest first), and returns up to `limit` results.
+/// `case_sensitive` overrides smart-case matching when provided.
 pub fn run_grep_search(
     pattern: &str,
     include: Option<&str>,
     search_path: &Path,
     limit: usize,
+    case_sensitive: Option<bool>,
 ) -> Result<Vec<String>, String> {
     regex::bytes::Regex::new(pattern).map_err(|e| format!("invalid regex pattern: {e}"))?;
 
@@ -173,6 +187,11 @@ pub fn run_grep_search(
             max_matches_per_file: 1,
             page_limit: limit,
             mode: GrepMode::Regex,
+            casing: Some(match case_sensitive {
+                Some(true) => Casing::Sensitive,
+                Some(false) => Casing::Insensitive,
+                None => Casing::Smart,
+            }),
             ..Default::default()
         },
     );

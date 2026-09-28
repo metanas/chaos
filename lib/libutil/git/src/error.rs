@@ -22,8 +22,14 @@ pub enum GitError {
     Cancelled,
 }
 
-impl From<gix::reference::find::existing::Error> for GitError {
-    fn from(e: gix::reference::find::existing::Error) -> Self {
-        GitError::RefNotFound(e.to_string())
+impl From<gix::Error> for GitError {
+    fn from(error: gix::Error) -> Self {
+        if error.is_not_found() {
+            Self::RefNotFound(error.to_string())
+        } else if error.is_validation() {
+            Self::InvalidInput(error.to_string())
+        } else {
+            Self::Operation(error.to_string())
+        }
     }
 }

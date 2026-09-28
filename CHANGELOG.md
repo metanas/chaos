@@ -9,6 +9,18 @@ should. There is no patch level; the build timestamp is the patch.
 
 ## [Unreleased]
 
+## [47.7.1] - 2026-09-28
+
+### Added
+- Optional `case_sensitive` control for `grep_files`, using fff-search 0.11's
+  explicit case modes while preserving smart-case matching by default.
+
+### Changed
+- Upgrade gix to 0.88 and use structured error classification to distinguish
+  missing references, invalid inputs, and other Git failures.
+- Refresh Cargo dependencies, including bonsai-bt 0.14, mcp-host 0.5.3, and
+  usage-rs 6.12.
+
 ## [47.7.0] - 2026-09-28
 
 ### Added
@@ -41,6 +53,7 @@ See the Drivers section of `man/chaos-install.7.md`.
   access for the model now comes from skipper.
 - `git://branches` resource template.
 
-[Unreleased]: https://github.com/seuros/chaos/compare/v47.7.0...HEAD
+[Unreleased]: https://github.com/seuros/chaos/compare/v47.7.1...HEAD
+[47.7.1]: https://github.com/seuros/chaos/compare/v47.7.0...v47.7.1
 [47.7.0]: https://github.com/seuros/chaos/compare/v47.6.0...v47.7.0
 [47.6.0]: https://github.com/seuros/chaos/releases/tag/v47.6.0

@@ -192,6 +192,19 @@ Add FreeChaOS to another MCP client's config:
 The older split between `chaos` and `chaos-reply` has been replaced by this
 single unified `chaos` tool.
 
+### File content search
+
+The built-in `grep_files` tool accepts an optional `case_sensitive` boolean:
+
+- Omitted: smart case, ignoring case unless the regex contains uppercase.
+- `true`: case-sensitive matching.
+- `false`: case-insensitive matching, including uppercase patterns.
+
+For example, `{"pattern":"TODO","include":"*.rs","case_sensitive":false}`
+finds Rust files containing `TODO`, `todo`, or other case variants. Inline
+regex flags such as `(?i)` and `(?-i)` can override the selected case mode.
+The tool still returns matching file paths, not matching lines.
+
 ### Scheduled shell commands
 
 Pass `schedule` as a JSON object, not a JSON-encoded string. For example,

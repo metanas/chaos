@@ -30,7 +30,7 @@ pub fn log(
     let start = match branch {
         Some(spec) => repo
             .rev_parse_single(spec)
-            .map_err(|e| GitError::RefNotFound(format!("{spec}: {e}")))?
+            .map_err(GitError::from)?
             .detach(),
         None => repo.head_id().git_op()?.detach(),
     };

@@ -29,6 +29,42 @@ fn init_repo(dir: &Path) {
 }
 
 #[test]
+fn git_errors_use_upstream_classification() {
+    let missing = gix::Error::from_error(gix::error::not_found("missing reference"));
+    assert!(matches!(GitError::from(missing), GitError::RefNotFound(_)));
+
+    let invalid = gix::Error::from_error(gix::error::validation("invalid revision"));
+    assert!(matches!(GitError::from(invalid), GitError::InvalidInput(_)));
+
+    let corrupt = gix::Error::from_error(gix::error::corruption("damaged object"));
+    let error = GitError::from(corrupt);
+    assert!(matches!(error, GitError::Operation(_)));
+    assert!(error.to_string().contains("damaged object"));
+}
+
+#[test]
+fn revision_lookup_reports_missing_references() {
+    let temp = tempdir().expect("tempdir");
+    let dir = temp.path();
+    init_repo(dir);
+
+    let error =
+        crate::log(dir, Some(1), Some("refs/heads/missing")).expect_err("missing log reference");
+    assert!(matches!(error, GitError::RefNotFound(_)), "{error}");
+
+    let error = diff_report(
+        dir,
+        DiffScope::Staged,
+        DiffFormat::NameOnly,
+        Some("refs/heads/missing"),
+        None,
+        false,
+    )
+    .expect_err("missing diff reference");
+    assert!(matches!(error, GitError::RefNotFound(_)), "{error}");
+}
+
+#[test]
 fn diff_report_returns_scoped_formats_and_whitespace_checks() {
     let temp = tempdir().expect("tempdir");
     let dir = temp.path();

@@ -262,7 +262,7 @@ fn resolve_base_tree<'repo>(
     }
 
     repo.rev_parse_single(base_spec)
-        .map_err(|e| GitError::RefNotFound(format!("{base_spec}: {e}")))?
+        .map_err(GitError::from)?
         .object()
         .git_op()?
         .peel_to_tree()
@@ -297,7 +297,7 @@ fn collect_tree_index_paths(
             }
             limit_exceeded = changed_paths.len() > MAX_CHANGED_FILES;
             let stop = limit_exceeded || cancel.load(Ordering::Acquire);
-            Ok::<_, std::convert::Infallible>(if stop {
+            Ok(if stop {
                 ControlFlow::Break(())
             } else {
                 ControlFlow::Continue(())

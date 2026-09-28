@@ -10,7 +10,7 @@ fn search_returns_matching_files() {
     std::fs::write(dir.join("match_two.txt"), "alpha delta").unwrap();
     std::fs::write(dir.join("other.txt"), "omega").unwrap();
 
-    let results = run_grep_search("alpha", None, dir, 10).expect("search failed");
+    let results = run_grep_search("alpha", None, dir, 10, None).expect("search failed");
     assert_eq!(results.len(), 2);
     assert!(results.iter().any(|p| p.ends_with("match_one.txt")));
     assert!(results.iter().any(|p| p.ends_with("match_two.txt")));
@@ -23,7 +23,7 @@ fn search_with_glob_filter() {
     std::fs::write(dir.join("match_one.rs"), "alpha beta gamma").unwrap();
     std::fs::write(dir.join("match_two.txt"), "alpha delta").unwrap();
 
-    let results = run_grep_search("alpha", Some("*.rs"), dir, 10).expect("search failed");
+    let results = run_grep_search("alpha", Some("*.rs"), dir, 10, None).expect("search failed");
     assert_eq!(results.len(), 1);
     assert!(results[0].ends_with("match_one.rs"));
 }
@@ -36,7 +36,7 @@ fn search_respects_limit() {
     std::fs::write(dir.join("two.txt"), "alpha two").unwrap();
     std::fs::write(dir.join("three.txt"), "alpha three").unwrap();
 
-    let results = run_grep_search("alpha", None, dir, 2).expect("search failed");
+    let results = run_grep_search("alpha", None, dir, 2, None).expect("search failed");
     assert_eq!(results.len(), 2);
 }
 
@@ -46,14 +46,14 @@ fn search_handles_no_matches() {
     let dir = temp.path();
     std::fs::write(dir.join("one.txt"), "omega").unwrap();
 
-    let results = run_grep_search("alpha", None, dir, 5).expect("search failed");
+    let results = run_grep_search("alpha", None, dir, 5, None).expect("search failed");
     assert!(results.is_empty());
 }
 
 #[test]
 fn search_rejects_invalid_regex() {
     let temp = tempfile::tempdir().expect("create temp dir");
-    let err = run_grep_search("[invalid", None, temp.path(), 10).unwrap_err();
+    let err = run_grep_search("[invalid", None, temp.path(), 10, None).unwrap_err();
     assert!(err.contains("invalid regex"));
 }
 
@@ -67,7 +67,7 @@ fn search_matches_non_utf8_files() {
     )
     .unwrap();
 
-    let results = run_grep_search("alpha", None, dir, 10).expect("search failed");
+    let results = run_grep_search("alpha", None, dir, 10, None).expect("search failed");
     assert_eq!(results.len(), 1);
     assert!(results[0].ends_with("latin1.txt"));
 }
@@ -81,9 +81,50 @@ fn search_only_reads_regular_files() {
     std::fs::write(&real, "alpha beta gamma").unwrap();
     symlink(&real, &alias).expect("create symlink");
 
-    let results = run_grep_search("alpha", None, dir, 10).expect("search failed");
+    let results = run_grep_search("alpha", None, dir, 10, None).expect("search failed");
     assert_eq!(results.len(), 1);
     assert!(results[0].ends_with("match.txt"));
+}
+
+#[tokio::test]
+async fn search_case_mode_is_optional_and_can_override_smart_case() {
+    let temp = tempfile::tempdir().expect("create temp dir");
+    let dir = temp.path();
+    std::fs::write(dir.join("lower.txt"), "alpha").unwrap();
+    std::fs::write(dir.join("upper.txt"), "ALPHA").unwrap();
+
+    for (pattern, case_sensitive, expected) in [
+        ("alpha", None, vec!["lower.txt", "upper.txt"]),
+        ("ALPHA", None, vec!["upper.txt"]),
+        ("alpha", Some(true), vec!["lower.txt"]),
+        ("ALPHA", Some(false), vec!["lower.txt", "upper.txt"]),
+        ("^ALPHA$", Some(false), vec!["lower.txt", "upper.txt"]),
+        ("(?i)^ALPHA$", Some(true), vec!["lower.txt", "upper.txt"]),
+        ("(?-i)^alpha$", Some(false), vec!["lower.txt"]),
+    ] {
+        let mut arguments = serde_json::json!({
+            "pattern": pattern,
+            "path": dir,
+        });
+        if let Some(case_sensitive) = case_sensitive {
+            arguments["case_sensitive"] = serde_json::json!(case_sensitive);
+        }
+        let result = execute_structured(&arguments).await.expect("search failed");
+        let mut names = result["matches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|path| {
+                Path::new(path.as_str().unwrap())
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        names.sort_unstable();
+        assert_eq!(names, expected, "{arguments}");
+    }
 }
 
 #[tokio::test]
