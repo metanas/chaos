@@ -133,6 +133,7 @@ pub(crate) use crate::unified_exec::UnifiedExecProcessManager;
 #[cfg(test)]
 pub(crate) use chaos_dtrace::Hooks;
 #[cfg(test)]
+#[cfg(test)]
 pub(crate) use chaos_dtrace::HooksConfig;
 #[cfg(test)]
 pub(crate) use chaos_ipc::config_types::CollaborationMode;

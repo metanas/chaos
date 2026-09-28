@@ -24,6 +24,7 @@ usage = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+tempfile = { workspace = true }
 pretty_assertions = { workspace = true }
 
 [lints]

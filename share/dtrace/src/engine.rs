@@ -7,8 +7,8 @@ pub(crate) mod schema_loader;
 
 use std::path::PathBuf;
 
+use chaos_ipc::hooks::HookRegistration;
 use chaos_ipc::protocol::HookRunSummary;
-use chaos_sysctl::ConfigLayerStack;
 
 use crate::events::before_turn::BeforeTurnOutcome;
 use crate::events::before_turn::BeforeTurnRequest;
@@ -17,10 +17,11 @@ use crate::events::session_start::SessionStartRequest;
 use crate::events::stop::StopOutcome;
 use crate::events::stop::StopRequest;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) struct CommandShell {
     pub program: String,
     pub args: Vec<String>,
+    pub builder: Option<std::sync::Arc<crate::registry::HookCommandBuilder>>,
 }
 
 #[derive(Debug, Clone)]
@@ -36,20 +37,7 @@ pub(crate) struct ConfiguredHandler {
 
 impl ConfiguredHandler {
     pub fn run_id(&self) -> String {
-        format!(
-            "{}:{}:{}",
-            self.event_name_label(),
-            self.display_order,
-            self.source_path.display()
-        )
-    }
-
-    fn event_name_label(&self) -> &'static str {
-        match self.event_name {
-            chaos_ipc::protocol::HookEventName::SessionStart => "session-start",
-            chaos_ipc::protocol::HookEventName::BeforeTurn => "before-turn",
-            chaos_ipc::protocol::HookEventName::Stop => "stop",
-        }
+        self.source_path.to_string_lossy().into_owned()
     }
 }
 
@@ -61,9 +49,9 @@ pub(crate) struct ClaudeHooksEngine {
 }
 
 impl ClaudeHooksEngine {
-    pub(crate) fn new(config_layer_stack: Option<&ConfigLayerStack>, shell: CommandShell) -> Self {
+    pub(crate) fn new(registrations: &[HookRegistration], shell: CommandShell) -> Self {
         let _ = schema_loader::generated_hook_schemas();
-        let discovered = discovery::discover_handlers(config_layer_stack);
+        let discovered = discovery::discover_handlers(registrations);
         Self {
             handlers: discovered.handlers,
             warnings: discovered.warnings,

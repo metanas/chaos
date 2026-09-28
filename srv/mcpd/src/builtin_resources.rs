@@ -35,6 +35,10 @@ struct McpHostBuiltinResourceBackend<'a> {
 }
 
 impl builtin_mcp_resources::ChaosBuiltinResourceBackend for McpHostBuiltinResourceBackend<'_> {
+    async fn hooks_json(&self, id: Option<&str>) -> Result<String, String> {
+        let config = load_config_for_resource("hooks").await?;
+        chaos_kern::hooks::resource_json(&config.chaos_home, &config.cwd, id).await
+    }
     async fn machine_json(&self) -> Result<String, String> {
         // There is no unique child session for a server-level resource read.
         let config = load_config_for_resource("machine observations").await?;
@@ -197,6 +201,32 @@ fn mcp_list_handler<'a>(
     read_static_resource_handler(server, builtin_mcp_resources::CHAOS_MCP_URI)
 }
 
+fn hooks_list_handler<'a>(
+    server: &'a ChaosMcpServer,
+    _ctx: ExecutionContext<'a>,
+) -> ResourceReadFuture<'a> {
+    read_static_resource_handler(server, builtin_mcp_resources::CHAOS_HOOKS_URI)
+}
+
+fn hook_detail_handler<'a>(
+    server: &'a ChaosMcpServer,
+    ctx: ExecutionContext<'a>,
+) -> ResourceReadFuture<'a> {
+    Box::pin(async move {
+        let id = ctx
+            .uri_params
+            .get("id")
+            .ok_or_else(|| ResourceError::InvalidUri("missing hook id".into()))?;
+        let uri = format!("chaos://hooks/{id}");
+        let content = read_builtin_resource(server, &uri).await?;
+        Ok(vec![text_resource_with_mime(
+            uri,
+            content.text,
+            content.mime_type,
+        )])
+    })
+}
+
 fn manual_list_handler<'a>(
     server: &'a ChaosMcpServer,
     ctx: ExecutionContext<'a>,
@@ -296,6 +326,7 @@ pub(crate) fn resource_router() -> McpResourceRouter<ChaosMcpServer> {
             builtin_mcp_resources::ChaosBuiltinResourceKind::Models => models_list_handler,
             builtin_mcp_resources::ChaosBuiltinResourceKind::Modes => modes_list_handler,
             builtin_mcp_resources::ChaosBuiltinResourceKind::Mcp => mcp_list_handler,
+            builtin_mcp_resources::ChaosBuiltinResourceKind::Hooks => hooks_list_handler,
             builtin_mcp_resources::ChaosBuiltinResourceKind::Manual => manual_list_handler,
             builtin_mcp_resources::ChaosBuiltinResourceKind::Machine => machine_handler,
         };
@@ -310,6 +341,9 @@ pub(crate) fn resource_template_router() -> McpResourceTemplateRouter<ChaosMcpSe
         let handler = match spec.kind {
             builtin_mcp_resources::ChaosBuiltinResourceTemplateKind::SessionDetail => {
                 session_detail_handler
+            }
+            builtin_mcp_resources::ChaosBuiltinResourceTemplateKind::HookDetail => {
+                hook_detail_handler
             }
             builtin_mcp_resources::ChaosBuiltinResourceTemplateKind::ManualPage => {
                 manual_page_handler

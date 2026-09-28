@@ -870,7 +870,16 @@ fn test_full_toolset_specs_for_codex_style_unified_exec_web_search_model() {
     for spec in [
         create_exec_command_tool(true, true),
         create_write_stdin_tool(),
+        super::tool_builders::create_list_mcp_resources_tool(),
+        super::tool_builders::create_list_mcp_resource_templates_tool(),
+        super::tool_builders::create_read_mcp_resource_tool(),
+        super::tool_builders::create_set_mcp_resource_subscription_tool(),
         super::tool_builders::create_refresh_models_tool(),
+        super::tool_builders::create_hook_tool("hooks_create"),
+        super::tool_builders::create_hook_tool("hooks_update"),
+        super::tool_builders::create_hook_tool("hooks_set_enabled"),
+        super::tool_builders::create_hook_tool("hooks_delete"),
+        super::tool_builders::create_hook_tool("hooks_preview"),
         PLAN_TOOL.clone(),
         create_read_session_history_tool(),
         create_search_session_history_tool(),
@@ -1441,7 +1450,16 @@ impl ModelToolTail {
 }
 
 const MODEL_TOOL_TAIL_PREFIX: &[&str] = &[
+    "list_mcp_resources",
+    "list_mcp_resource_templates",
+    "read_mcp_resource",
+    "set_mcp_resource_subscription",
     "refresh_models",
+    "hooks_create",
+    "hooks_update",
+    "hooks_set_enabled",
+    "hooks_delete",
+    "hooks_preview",
     "update_plan",
     "read_session_history",
     "search_session_history",
@@ -1651,7 +1669,7 @@ fn web_search_tool_type_text_and_image_sets_search_content_types() {
 }
 
 #[test]
-fn mcp_resource_tools_are_hidden_without_mcp_servers() {
+fn internal_resource_tools_are_available_without_mcp_servers() {
     let config = test_config();
     let model_info = ModelsManager::construct_model_info_offline_for_tests(TEST_MODEL, &config);
     let available_models = Vec::new();
@@ -1667,16 +1685,14 @@ fn mcp_resource_tools_are_hidden_without_mcp_servers() {
     });
     let (tools, _) = build_specs(&tools_config, None, None, &[]).build();
 
-    assert!(
-        !tools.iter().any(|tool| matches!(
-            tool.spec.name(),
-            "list_mcp_resources"
-                | "list_mcp_resource_templates"
-                | "read_mcp_resource"
-                | "set_mcp_resource_subscription"
-        )),
-        "MCP resource tools should be omitted when no MCP servers are configured"
-    );
+    for name in [
+        "list_mcp_resources",
+        "list_mcp_resource_templates",
+        "read_mcp_resource",
+        "set_mcp_resource_subscription",
+    ] {
+        assert!(tools.iter().any(|tool| tool.spec.name() == name));
+    }
 }
 
 #[test]

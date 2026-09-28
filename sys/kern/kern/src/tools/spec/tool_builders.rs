@@ -103,6 +103,70 @@ pub(crate) fn create_refresh_models_tool() -> ToolSpec {
     })
 }
 
+pub(crate) fn create_hook_tool(name: &str) -> ToolSpec {
+    let string = |description: &str| JsonSchema::String {
+        description: Some(description.into()),
+    };
+    let integer = |description: &str| JsonSchema::Integer {
+        description: Some(description.into()),
+    };
+    let mut properties = BTreeMap::from([(
+        "id".into(),
+        string("Stable hook name: 1..64 ASCII letters, digits, '.', '_' or '-'."),
+    )]);
+    let mut required = vec!["id".into()];
+    if name != "hooks_create" {
+        properties.insert(
+            "expected_revision".into(),
+            integer("Current hook revision from chaos://hooks; required for existing hooks."),
+        );
+        if name != "hooks_preview" {
+            required.push("expected_revision".into());
+        }
+    }
+    if matches!(name, "hooks_create" | "hooks_update" | "hooks_preview") {
+        properties.insert("definition".into(), JsonSchema::Object {
+            properties: BTreeMap::from([
+                ("event".into(), string("session_start, before_turn, or stop.")),
+                ("command".into(), string("Shell command. Use environment references, not embedded secrets.")),
+                ("project".into(), string("Omit for global; use '.' for the current project. Project trust is also required.")),
+                ("matcher".into(), string("Optional event matcher regex; not supported for stop.")),
+                ("timeout_sec".into(), integer("Timeout in seconds, 1..600; default 30.")),
+                ("order".into(), integer("Display/result order within scope; default 0.")),
+                ("status_message".into(), string("Optional status label.")),
+            ]),
+            required: Some(vec!["event".into(), "command".into()]),
+            additional_properties: Some(false.into()),
+        });
+        if name != "hooks_preview" {
+            required.push("definition".into());
+        }
+    }
+    if name != "hooks_delete" {
+        properties.insert("enabled".into(), JsonSchema::Boolean {
+            description: Some("Request recurring execution authorization. Creation defaults to disabled; updates preserve current state.".into()),
+        });
+        if name == "hooks_set_enabled" {
+            required.push("enabled".into());
+        }
+    }
+    if name == "hooks_preview" {
+        properties.insert("action".into(), string("Proposed action: create, update, enable, disable, or delete. Preview never executes or writes."));
+        required.push("action".into());
+    }
+    ToolSpec::Function(ResponsesApiTool {
+        name: name.into(),
+        description: if name == "hooks_preview" {
+            "Validate and preview a database hook change without executing, saving, or approving it. Read chaos://hooks for current definitions."
+        } else {
+            "Propose a database hook change. ALWAYS requires human form elicitation, including disable/delete. No change on decline, cancellation, timeout, or unavailable elicitation. Read chaos://hooks first; never bypass approval using shell/SQL. Commands run under the session sandbox at the next hook event."
+        }.into(),
+        strict: false, defer_loading: None,
+        parameters: JsonSchema::Object { properties, required: Some(required), additional_properties: Some(false.into()) },
+        output_schema: None,
+    })
+}
+
 pub(crate) fn create_compaction_control_tool() -> ToolSpec {
     let properties = BTreeMap::from([
         (

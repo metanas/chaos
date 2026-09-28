@@ -1,14 +1,12 @@
 use std::path::Path;
 use std::process::Stdio;
-use std::time::Duration;
-use std::time::Instant;
+use std::time::{Duration, Instant};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
+use tokio::process::{Child, Command};
 
-use tokio::io::AsyncWriteExt;
-use tokio::process::Command;
-use tokio::time::timeout;
+use super::{CommandShell, ConfiguredHandler};
 
-use super::CommandShell;
-use super::ConfiguredHandler;
+const OUTPUT_LIMIT: u64 = 128 * 1024;
 
 #[derive(Debug)]
 pub(crate) struct CommandRunResult {
@@ -21,6 +19,27 @@ pub(crate) struct CommandRunResult {
     pub error: Option<String>,
 }
 
+struct HookChild(Child, Option<u32>);
+impl Drop for HookChild {
+    fn drop(&mut self) {
+        if let Some(group) = self.1 {
+            let _ = chaos_pty::process_group::kill_process_group(group);
+        }
+    }
+}
+
+async fn read_output(stream: impl AsyncRead + Unpin) -> std::io::Result<String> {
+    let mut bytes = Vec::new();
+    stream
+        .take(OUTPUT_LIMIT + 1)
+        .read_to_end(&mut bytes)
+        .await?;
+    if bytes.len() as u64 > OUTPUT_LIMIT {
+        return Err(std::io::Error::other("hook output exceeds 128 KiB"));
+    }
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
 pub(crate) async fn run_command(
     shell: &CommandShell,
     handler: &ConfiguredHandler,
@@ -29,96 +48,127 @@ pub(crate) async fn run_command(
 ) -> CommandRunResult {
     let started_at = jiff::Timestamp::now().as_second();
     let started = Instant::now();
-
-    let mut command = build_command(shell, handler);
-    command
-        .current_dir(cwd)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-
-    let mut child = match command.spawn() {
-        Ok(child) => child,
-        Err(err) => {
-            return CommandRunResult {
-                started_at,
-                completed_at: jiff::Timestamp::now().as_second(),
-                duration_ms: started.elapsed().as_millis().try_into().unwrap_or(i64::MAX),
-                exit_code: None,
-                stdout: String::new(),
-                stderr: String::new(),
-                error: Some(err.to_string()),
-            };
+    let operation = async {
+        let mut command = build_command(shell, handler, cwd)?;
+        command
+            .current_dir(cwd)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            command.as_std_mut().process_group(0);
         }
-    };
-
-    if let Some(mut stdin) = child.stdin.take()
-        && let Err(err) = stdin.write_all(input_json.as_bytes()).await
-    {
-        let _ = child.kill().await;
-        return CommandRunResult {
-            started_at,
-            completed_at: jiff::Timestamp::now().as_second(),
-            duration_ms: started.elapsed().as_millis().try_into().unwrap_or(i64::MAX),
-            exit_code: None,
-            stdout: String::new(),
-            stderr: String::new(),
-            error: Some(format!("failed to write hook stdin: {err}")),
+        let child = command.spawn()?;
+        let group = child.id();
+        let mut child = HookChild(child, group);
+        let mut stdin = child
+            .0
+            .stdin
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("missing hook stdin"))?;
+        let stdout = child
+            .0
+            .stdout
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("missing hook stdout"))?;
+        let stderr = child
+            .0
+            .stderr
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("missing hook stderr"))?;
+        // Drain outputs while writing input, with one timeout covering every pipe.
+        let write = async {
+            stdin.write_all(input_json.as_bytes()).await?;
+            drop(stdin);
+            Ok::<_, std::io::Error>(())
         };
-    }
-
-    let timeout_duration = Duration::from_secs(handler.timeout_sec);
-    match timeout(timeout_duration, child.wait_with_output()).await {
-        Ok(Ok(output)) => CommandRunResult {
-            started_at,
-            completed_at: jiff::Timestamp::now().as_second(),
-            duration_ms: started.elapsed().as_millis().try_into().unwrap_or(i64::MAX),
-            exit_code: output.status.code(),
-            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
-            error: None,
-        },
-        Ok(Err(err)) => CommandRunResult {
-            started_at,
-            completed_at: jiff::Timestamp::now().as_second(),
-            duration_ms: started.elapsed().as_millis().try_into().unwrap_or(i64::MAX),
-            exit_code: None,
-            stdout: String::new(),
-            stderr: String::new(),
-            error: Some(err.to_string()),
-        },
-        Err(_) => CommandRunResult {
-            started_at,
-            completed_at: jiff::Timestamp::now().as_second(),
-            duration_ms: started.elapsed().as_millis().try_into().unwrap_or(i64::MAX),
-            exit_code: None,
-            stdout: String::new(),
-            stderr: String::new(),
-            error: Some(format!("hook timed out after {}s", handler.timeout_sec)),
-        },
-    }
-}
-
-fn build_command(shell: &CommandShell, handler: &ConfiguredHandler) -> Command {
-    let mut command = if shell.program.is_empty() {
-        default_shell_command()
-    } else {
-        Command::new(&shell.program)
+        let (_, stdout, stderr, status) = tokio::try_join!(
+            write,
+            read_output(stdout),
+            read_output(stderr),
+            child.0.wait(),
+        )?;
+        Ok::<_, anyhow::Error>((stdout, stderr, status.code()))
     };
-    if shell.program.is_empty() {
-        command.arg(&handler.command);
-        command
-    } else {
-        command.args(&shell.args);
-        command.arg(&handler.command);
-        command
+    let result = tokio::time::timeout(Duration::from_secs(handler.timeout_sec), operation).await;
+    let (stdout, stderr, exit_code, error) = match result {
+        Ok(Ok((stdout, stderr, code))) => (stdout, stderr, code, None),
+        Ok(Err(error)) => (String::new(), String::new(), None, Some(error.to_string())),
+        Err(_) => (
+            String::new(),
+            String::new(),
+            None,
+            Some(format!("hook timed out after {}s", handler.timeout_sec)),
+        ),
+    };
+    CommandRunResult {
+        started_at,
+        completed_at: jiff::Timestamp::now().as_second(),
+        duration_ms: started.elapsed().as_millis().try_into().unwrap_or(i64::MAX),
+        exit_code,
+        stdout,
+        stderr,
+        error,
     }
 }
 
-fn default_shell_command() -> Command {
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-    let mut command = Command::new(shell);
-    command.arg("-lc");
-    command
+fn build_command(
+    shell: &CommandShell,
+    handler: &ConfiguredHandler,
+    cwd: &Path,
+) -> anyhow::Result<Command> {
+    let mut argv = if shell.program.is_empty() {
+        vec!["/bin/sh".into(), "-c".into()]
+    } else {
+        let mut argv = vec![shell.program.clone()];
+        argv.extend(shell.args.clone());
+        argv
+    };
+    argv.push(handler.command.clone());
+    if let Some(builder) = &shell.builder {
+        return builder(argv, cwd);
+    }
+    let mut command = Command::new(&argv[0]);
+    command.args(&argv[1..]);
+    Ok(command)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[tokio::test]
+    async fn bounds_output_and_times_out_blocked_stdin() {
+        let shell = CommandShell {
+            program: "/bin/sh".into(),
+            args: vec!["-c".into()],
+            builder: None,
+        };
+        let mut handler = ConfiguredHandler {
+            event_name: chaos_ipc::protocol::HookEventName::BeforeTurn,
+            command: "cat >/dev/null; yes output".into(),
+            matcher: None,
+            timeout_sec: 1,
+            status_message: None,
+            source_path: "chaos://hooks/test".into(),
+            display_order: 0,
+        };
+        let result = run_command(&shell, &handler, "{}", &std::env::temp_dir()).await;
+        assert!(result.error.unwrap().contains("128 KiB"));
+        handler.command = "sleep 30".into();
+        let result = tokio::time::timeout(
+            Duration::from_secs(3),
+            run_command(
+                &shell,
+                &handler,
+                &"x".repeat(1024 * 1024),
+                &std::env::temp_dir(),
+            ),
+        )
+        .await
+        .unwrap();
+        assert!(result.error.unwrap().contains("timed out"));
+    }
 }

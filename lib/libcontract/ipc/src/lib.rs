@@ -9,6 +9,7 @@ pub mod config_types;
 pub mod custom_prompts;
 pub mod dynamic_tools;
 mod git_pointer;
+pub mod hooks;
 pub mod items;
 pub mod mcp;
 pub mod message_history;

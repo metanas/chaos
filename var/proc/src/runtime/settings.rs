@@ -39,7 +39,7 @@ pub struct RememberedApproval {
     pub payload: Value,
 }
 
-fn now() -> anyhow::Result<i64> {
+pub(super) fn now() -> anyhow::Result<i64> {
     Ok(std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
         .as_secs()
@@ -47,7 +47,7 @@ fn now() -> anyhow::Result<i64> {
 }
 
 impl PostgresRuntime {
-    fn pool(&self) -> &PgPool {
+    pub(super) fn pool(&self) -> &PgPool {
         &self.pool
     }
 }

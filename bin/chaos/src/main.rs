@@ -35,6 +35,7 @@ use supports_color::Stream;
 
 mod config_cmd;
 mod debug_logging;
+mod hooks_cmd;
 mod mcp_cmd;
 mod models_cmd;
 mod reflex_cmd;
@@ -124,6 +125,8 @@ impl MultitoolCli {
 enum Subcommand {
     /// Manage database user settings and bootstrap recovery.
     Config(config_cmd::ConfigCommand),
+    /// Manage database lifecycle hooks.
+    Hooks(hooks_cmd::HooksCommand),
     /// Inspect or revoke installation-local remembered approvals.
     Approvals(config_cmd::ApprovalsCommand),
     /// Diagnose configured reflex backends without sending session contents.
@@ -432,6 +435,7 @@ async fn cli_main(arg0_paths: Arg0DispatchPaths) -> anyhow::Result<()> {
 
     match subcommand {
         Some(Subcommand::Config(command)) => config_cmd::run(command).await?,
+        Some(Subcommand::Hooks(command)) => hooks_cmd::run(command).await?,
         Some(Subcommand::Approvals(command)) => config_cmd::approvals(command).await?,
         Some(Subcommand::Reflex(command)) => {
             reflex_cmd::run(command, root_config_overrides, models_profile).await?

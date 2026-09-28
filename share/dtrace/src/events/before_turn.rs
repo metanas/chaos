@@ -199,6 +199,7 @@ mod integration_tests {
 
     fn shell() -> CommandShell {
         CommandShell {
+            builder: None,
             program: "/bin/sh".to_string(),
             args: vec!["-c".to_string()],
         }

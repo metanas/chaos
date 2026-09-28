@@ -244,9 +244,21 @@ unchanged.
 | `chaos://models` | List available model presets |
 | `chaos://modes` | List the caller-visible collaboration mode catalog |
 | `chaos://mcp` | List configured MCP servers with auth and startup status |
+| `chaos://hooks` | List database lifecycle hooks visible to the caller, revisions, and activation status |
+| `chaos://hooks/{id}` | Read one visible hook definition |
 | `chaos://machine` | Read fresh host profile, power, thermals, and relevant filesystem space |
 | `chaos://man` | List embedded manual pages and their resource URIs |
 | `chaos://man/{page}` | Read an embedded manual page without its frontmatter |
+
+Hook definitions live in SQLite/PostgreSQL, never runtime `hooks.json` files.
+Enable the `session` tool group to use `hooks_create`, `hooks_update`,
+`hooks_set_enabled`, `hooks_delete`, and read-only `hooks_preview`. Every mutation,
+including disabling or deleting a hook, requires human form elicitation.
+Acceptance must include `approve: true`; cancellation, timeout, missing client
+support, or headless mode leaves hooks unchanged. Existing hooks require
+`expected_revision` from the resource. Enabling authorizes recurring execution
+only on the approving installation, under the session sandbox; project hooks
+also require project trust. `chaos hooks` provides interactive CLI management.
 
 These built-in resources are read-on-demand snapshots. The standalone
 `chaos mcp serve` endpoint does not support subscriptions to them; read them
@@ -467,6 +479,7 @@ restarted if they crash.
 ## SEE ALSO
 
 - [chaos-install.7](./chaos-install.7.md)
+- [chaos-hooks.7](./chaos-hooks.7.md)
 - [chaos-modes.7](./chaos-modes.7.md)
 - [chaos-providers.7](./chaos-providers.7.md)
 - [chaos-httpd.8](./chaos-httpd.8.md)

@@ -232,7 +232,8 @@ pub(crate) fn build_specs_with_discoverable_tools(
         builder.register_handler("shell_command", shell_command_handler);
     }
 
-    if mcp_tools.is_some() {
+    // Internal resources (including chaos://hooks) exist without external servers.
+    {
         push_tool_spec(
             &mut builder,
             create_list_mcp_resources_tool(),
@@ -257,7 +258,8 @@ pub(crate) fn build_specs_with_discoverable_tools(
         builder.register_handler("list_mcp_resource_templates", mcp_resource_handler.clone());
         builder.register_handler("read_mcp_resource", mcp_resource_handler.clone());
         builder.register_handler("set_mcp_resource_subscription", mcp_resource_handler);
-
+    }
+    if mcp_tools.is_some() {
         push_tool_spec(
             &mut builder,
             create_call_mcp_tool_async_tool(),
@@ -278,6 +280,20 @@ pub(crate) fn build_specs_with_discoverable_tools(
         /*supports_parallel_tool_calls*/ false,
     );
     builder.register_handler("refresh_models", Arc::new(RefreshModelsHandler));
+    for name in [
+        "hooks_create",
+        "hooks_update",
+        "hooks_set_enabled",
+        "hooks_delete",
+        "hooks_preview",
+    ] {
+        push_tool_spec(
+            &mut builder,
+            super::tool_builders::create_hook_tool(name),
+            false,
+        );
+        builder.register_handler(name, Arc::new(crate::tools::handlers::HooksHandler));
+    }
 
     if config.mode_allow_update_plan {
         push_tool_spec(

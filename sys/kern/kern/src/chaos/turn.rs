@@ -378,7 +378,27 @@ pub(crate) async fn run_turn(
         if sess.machine_recovery_parked().await {
             break;
         }
-        if let Some(session_start_source) = sess.take_pending_session_start_source().await {
+        let pending_session_start = sess.take_pending_session_start_source().await;
+        let hooks = if pending_session_start.is_none() && before_turn_request.is_none() {
+            chaos_dtrace::Hooks::default()
+        } else {
+            match crate::hooks::for_turn(&sess, &turn_context).await {
+                Ok(hooks) => hooks,
+                Err(error) => {
+                    sess.send_event(
+                        &turn_context,
+                        EventMsg::Warning(WarningEvent {
+                            message: format!(
+                                "Cannot load authoritative hooks; turn stopped: {error}"
+                            ),
+                        }),
+                    )
+                    .await;
+                    break;
+                }
+            }
+        };
+        if let Some(session_start_source) = pending_session_start {
             let session_start_request = chaos_dtrace::SessionStartRequest {
                 session_id: sess.conversation_id,
                 cwd: turn_context.cwd.clone(),
@@ -389,10 +409,9 @@ pub(crate) async fn run_turn(
                 source: session_start_source,
                 agent_context: agent_context.clone(),
             };
-            let previews = sess.hooks().preview_session_start(&session_start_request);
+            let previews = hooks.preview_session_start(&session_start_request);
             emit_hook_started_events(&sess, &turn_context, previews).await;
-            let outcome = sess
-                .hooks()
+            let outcome = hooks
                 .run_session_start(session_start_request, Some(turn_context.sub_id.clone()))
                 .await;
             if finalize_context_hook(&sess, &turn_context, outcome.into()).await {
@@ -401,9 +420,9 @@ pub(crate) async fn run_turn(
         }
 
         if let Some(before_turn_request) = before_turn_request.take() {
-            let previews = sess.hooks().preview_before_turn(&before_turn_request);
+            let previews = hooks.preview_before_turn(&before_turn_request);
             emit_hook_started_events(&sess, &turn_context, previews).await;
-            let outcome = sess.hooks().run_before_turn(before_turn_request).await;
+            let outcome = hooks.run_before_turn(before_turn_request).await;
             if finalize_context_hook(&sess, &turn_context, outcome.into()).await {
                 break;
             }
@@ -579,7 +598,23 @@ pub(crate) async fn run_turn(
                         last_assistant_message: last_agent_message.clone(),
                         agent_context: agent_context.clone(),
                     };
-                    let stop_previews = sess.hooks().preview_stop(&stop_request);
+                    let hooks = match crate::hooks::for_turn(&sess, &turn_context).await {
+                        Ok(hooks) => hooks,
+                        Err(error) => {
+                            sess.send_event(
+                                &turn_context,
+                                EventMsg::Warning(WarningEvent {
+                                    message: format!(
+                                        "Cannot load Stop hooks; completion withheld: {error}"
+                                    ),
+                                }),
+                            )
+                            .await;
+                            last_agent_message = None;
+                            break;
+                        }
+                    };
+                    let stop_previews = hooks.preview_stop(&stop_request);
                     let stop_transcript_snapshot = if stop_previews.is_empty() {
                         None
                     } else {
@@ -609,7 +644,7 @@ pub(crate) async fn run_turn(
                         )
                         .await;
                     }
-                    let stop_outcome = sess.hooks().run_stop(stop_request).await;
+                    let stop_outcome = hooks.run_stop(stop_request).await;
                     // The path is intentionally valid only while Stop handlers
                     // execute. A background hook must copy it before returning.
                     drop(stop_transcript_snapshot);

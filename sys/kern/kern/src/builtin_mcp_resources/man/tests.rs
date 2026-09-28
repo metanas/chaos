@@ -46,7 +46,12 @@ fn index_lists_discovered_pages_with_resource_uris() {
             && entry["title"] == page.title
             && entry["summary"] == page.summary));
     }
-    for id in ["chaos-appearance.7", "chaos-httpd.8", "chaos-install.7"] {
+    for id in [
+        "chaos-appearance.7",
+        "chaos-hooks.7",
+        "chaos-httpd.8",
+        "chaos-install.7",
+    ] {
         assert!(pages.iter().any(|page| page["id"] == id));
     }
 }
@@ -62,6 +67,7 @@ fn rendered_page_preserves_see_also_links() {
     assert!(rendered.contains("[chaos-modes.7](chaos://man/chaos-modes.7)"));
     assert_eq!(rendered.matches("chaos://man/chaos-modes.7").count(), 1);
     assert!(rendered.contains("[chaos-install.7](chaos://man/chaos-install.7)"));
+    assert!(rendered.contains("[chaos-hooks.7](chaos://man/chaos-hooks.7)"));
     assert!(rendered.contains("## SEE ALSO"));
     assert!(!rendered.contains("+++"));
     assert!(!rendered.contains("](./"));

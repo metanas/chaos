@@ -1,4 +1,4 @@
-use chaos_sysctl::ConfigLayerStack;
+use chaos_ipc::hooks::HookRegistration;
 use tokio::process::Command;
 
 use crate::engine::ClaudeHooksEngine;
@@ -16,10 +16,14 @@ use crate::types::HookResponse;
 
 #[derive(Default, Clone)]
 pub struct HooksConfig {
-    pub config_layer_stack: Option<ConfigLayerStack>,
+    pub registrations: Vec<HookRegistration>,
     pub shell_program: Option<String>,
     pub shell_args: Vec<String>,
+    pub command_builder: Option<std::sync::Arc<HookCommandBuilder>>,
 }
+
+pub type HookCommandBuilder =
+    dyn Fn(Vec<String>, &std::path::Path) -> anyhow::Result<Command> + Send + Sync;
 
 #[derive(Clone)]
 pub struct Hooks {
@@ -37,10 +41,11 @@ impl Default for Hooks {
 impl Hooks {
     pub fn new(config: HooksConfig) -> Self {
         let engine = ClaudeHooksEngine::new(
-            config.config_layer_stack.as_ref(),
+            &config.registrations,
             CommandShell {
                 program: config.shell_program.unwrap_or_default(),
                 args: config.shell_args,
+                builder: config.command_builder,
             },
         );
         Self {

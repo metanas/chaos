@@ -51,6 +51,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use uuid::Uuid;
 mod backfill;
+mod hooks;
 mod logs;
 mod memories;
 mod message_history;

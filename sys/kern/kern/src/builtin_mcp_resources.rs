@@ -25,6 +25,8 @@ pub const CHAOS_SPOOL_URI: &str = "chaos://spool";
 pub const CHAOS_MODELS_URI: &str = "chaos://models";
 pub const CHAOS_MODES_URI: &str = "chaos://modes";
 pub const CHAOS_MCP_URI: &str = "chaos://mcp";
+pub const CHAOS_HOOKS_URI: &str = "chaos://hooks";
+pub const CHAOS_HOOKS_URI_TEMPLATE: &str = "chaos://hooks/{id}";
 pub const CHAOS_MACHINE_URI: &str = "chaos://machine";
 pub use man::MANUAL_INDEX_URI as CHAOS_MANUAL_URI;
 pub use man::MANUAL_PAGE_URI_TEMPLATE as CHAOS_MANUAL_URI_TEMPLATE;
@@ -38,6 +40,7 @@ pub enum ChaosBuiltinResourceKind {
     Models,
     Modes,
     Mcp,
+    Hooks,
     Manual,
     Machine,
 }
@@ -45,6 +48,7 @@ pub enum ChaosBuiltinResourceKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChaosBuiltinResourceTemplateKind {
     SessionDetail,
+    HookDetail,
     ManualPage,
 }
 
@@ -66,7 +70,7 @@ pub struct ChaosBuiltinResourceTemplateSpec {
     pub mime_type: &'static str,
 }
 
-const RESOURCE_SPECS: [ChaosBuiltinResourceSpec; 8] = [
+const RESOURCE_SPECS: [ChaosBuiltinResourceSpec; 9] = [
     ChaosBuiltinResourceSpec {
         kind: ChaosBuiltinResourceKind::Sessions,
         uri: CHAOS_SESSIONS_URI,
@@ -123,9 +127,16 @@ const RESOURCE_SPECS: [ChaosBuiltinResourceSpec; 8] = [
         description: "Fresh host profile, power, thermals, and relevant filesystem space; not a safety verdict or live monitor",
         mime_type: JSON_MIME_TYPE,
     },
+    ChaosBuiltinResourceSpec {
+        kind: ChaosBuiltinResourceKind::Hooks,
+        uri: CHAOS_HOOKS_URI,
+        name: "hooks",
+        description: "Database lifecycle hooks in caller scope, revisions and activation status. Use hooks_* tools to propose changes; human elicitation is required.",
+        mime_type: JSON_MIME_TYPE,
+    },
 ];
 
-const RESOURCE_TEMPLATE_SPECS: [ChaosBuiltinResourceTemplateSpec; 2] = [
+const RESOURCE_TEMPLATE_SPECS: [ChaosBuiltinResourceTemplateSpec; 3] = [
     ChaosBuiltinResourceTemplateSpec {
         kind: ChaosBuiltinResourceTemplateKind::SessionDetail,
         uri_template: CHAOS_SESSIONS_URI_TEMPLATE,
@@ -140,6 +151,13 @@ const RESOURCE_TEMPLATE_SPECS: [ChaosBuiltinResourceTemplateSpec; 2] = [
         description: "Read an embedded ChaOS manual page by canonical page id",
         mime_type: MARKDOWN_MIME_TYPE,
     },
+    ChaosBuiltinResourceTemplateSpec {
+        kind: ChaosBuiltinResourceTemplateKind::HookDetail,
+        uri_template: CHAOS_HOOKS_URI_TEMPLATE,
+        name: "hook_detail",
+        description: "Read one database hook visible in caller scope.",
+        mime_type: JSON_MIME_TYPE,
+    },
 ];
 
 pub fn resource_specs() -> &'static [ChaosBuiltinResourceSpec] {
@@ -152,6 +170,8 @@ pub fn resource_template_specs() -> &'static [ChaosBuiltinResourceTemplateSpec] 
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResolvedChaosBuiltinResource {
+    Hooks,
+    HookDetail { id: String },
     Sessions,
     SessionDetail { process_id: ProcessId },
     Crons,
@@ -165,6 +185,19 @@ pub enum ResolvedChaosBuiltinResource {
 }
 
 pub fn resolve_resource_uri(uri: &str) -> Result<Option<ResolvedChaosBuiltinResource>, String> {
+    if let Some(id) = uri.strip_prefix("chaos://hooks/") {
+        if id.is_empty()
+            || id.len() > 64
+            || !id
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || b"-_.".contains(&c))
+        {
+            return Err("invalid hook id".into());
+        }
+        return Ok(Some(ResolvedChaosBuiltinResource::HookDetail {
+            id: id.into(),
+        }));
+    }
     if let Some(id) = uri.strip_prefix("chaos://sessions/") {
         if id.is_empty() {
             return Err("missing process_id in resource URI".to_string());
@@ -177,6 +210,7 @@ pub fn resolve_resource_uri(uri: &str) -> Result<Option<ResolvedChaosBuiltinReso
     }
 
     match uri {
+        CHAOS_HOOKS_URI => Ok(Some(ResolvedChaosBuiltinResource::Hooks)),
         CHAOS_SESSIONS_URI => Ok(Some(ResolvedChaosBuiltinResource::Sessions)),
         CHAOS_CRONS_URI => Ok(Some(ResolvedChaosBuiltinResource::Crons)),
         CHAOS_SPOOL_URI => Ok(Some(ResolvedChaosBuiltinResource::Spool)),
@@ -469,6 +503,7 @@ pub async fn spool_json() -> Result<String, String> {
 
 #[allow(async_fn_in_trait)]
 pub trait ChaosBuiltinResourceBackend {
+    async fn hooks_json(&self, id: Option<&str>) -> Result<String, String>;
     async fn sessions_json(&self) -> Result<String, String>;
     async fn session_detail_json(&self, process_id: ProcessId) -> Result<String, String>;
     async fn crons_json(&self) -> Result<String, String>;
@@ -484,6 +519,14 @@ pub async fn read_resource<B: ChaosBuiltinResourceBackend + Sync>(
     uri: &str,
 ) -> Result<Option<ChaosBuiltinResourceContent>, String> {
     match resolve_resource_uri(uri)? {
+        Some(ResolvedChaosBuiltinResource::Hooks) => {
+            backend.hooks_json(None).await.map(json_resource).map(Some)
+        }
+        Some(ResolvedChaosBuiltinResource::HookDetail { id }) => backend
+            .hooks_json(Some(&id))
+            .await
+            .map(json_resource)
+            .map(Some),
         Some(ResolvedChaosBuiltinResource::Sessions) => {
             backend.sessions_json().await.map(json_resource).map(Some)
         }

@@ -377,6 +377,9 @@ struct KernelBuiltinResourceBackend<'a> {
 }
 
 impl builtin_mcp_resources::ChaosBuiltinResourceBackend for KernelBuiltinResourceBackend<'_> {
+    async fn hooks_json(&self, id: Option<&str>) -> Result<String, String> {
+        crate::hooks::resource_json(&self.turn.config.chaos_home, &self.turn.cwd, id).await
+    }
     async fn machine_json(&self) -> Result<String, String> {
         let mut resource = match self.session.refresh_machine_recovery().await {
             Ok(status) => serde_json::to_value(status).map_err(|error| error.to_string())?,

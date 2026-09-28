@@ -9,6 +9,22 @@ should. There is no patch level; the build timestamp is the patch.
 
 ## [Unreleased]
 
+## [47.7.0] - 2026-09-28
+
+### Added
+- Database-backed lifecycle hooks for `session_start`, `before_turn`, and `stop`,
+  with global and project scopes in SQLite/PostgreSQL. See
+  [chaos-hooks(7)](man/chaos-hooks.7.md).
+- Interactive `chaos hooks` management and optional atomic file import with
+  hooks disabled by default.
+- `chaos://hooks` resources and revision-checked `hooks_*` tools requiring human
+  elicitation for every mutation, including disable and delete.
+- Installation-local execution approvals, lifecycle refresh, sandbox enforcement,
+  bounded output, and process-group cleanup on timeout or cancellation.
+
+### Changed
+- Built-in resource tools are available without external MCP servers.
+
 ## [47.6.0] - 2026-09-23
 
 Upgrading: the model loses its git tools until skipper is installed and
@@ -25,5 +41,6 @@ See the Drivers section of `man/chaos-install.7.md`.
   access for the model now comes from skipper.
 - `git://branches` resource template.
 
-[Unreleased]: https://github.com/seuros/chaos/compare/v47.6.0...HEAD
+[Unreleased]: https://github.com/seuros/chaos/compare/v47.7.0...HEAD
+[47.7.0]: https://github.com/seuros/chaos/compare/v47.6.0...v47.7.0
 [47.6.0]: https://github.com/seuros/chaos/releases/tag/v47.6.0

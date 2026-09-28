@@ -1,12 +1,14 @@
 use serde::Deserialize;
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct HooksFile {
     #[serde(default)]
     pub hooks: HookEvents,
 }
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct HookEvents {
     #[serde(rename = "SessionStart", default)]
     pub session_start: Vec<MatcherGroup>,
@@ -17,6 +19,7 @@ pub(crate) struct HookEvents {
 }
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct MatcherGroup {
     #[serde(default)]
     pub matcher: Option<String>,
@@ -25,7 +28,7 @@ pub(crate) struct MatcherGroup {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", deny_unknown_fields)]
 pub(crate) enum HookHandlerConfig {
     #[serde(rename = "command")]
     Command {

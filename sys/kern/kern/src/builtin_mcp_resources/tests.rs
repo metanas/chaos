@@ -3,6 +3,15 @@ use super::*;
 #[test]
 fn resolves_builtin_resource_uris() {
     assert_eq!(
+        resolve_resource_uri("chaos://hooks").unwrap(),
+        Some(ResolvedChaosBuiltinResource::Hooks)
+    );
+    assert_eq!(
+        resolve_resource_uri("chaos://hooks/test").unwrap(),
+        Some(ResolvedChaosBuiltinResource::HookDetail { id: "test".into() })
+    );
+    assert!(resolve_resource_uri("chaos://hooks/../other").is_err());
+    assert_eq!(
         resolve_resource_uri(CHAOS_MACHINE_URI).expect("resolve machine"),
         Some(ResolvedChaosBuiltinResource::Machine)
     );
