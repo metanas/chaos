@@ -112,6 +112,27 @@ fn test_server_capabilities_accepts_legacy_completion_field() {
     .unwrap();
 
     assert!(capabilities.completions.is_some());
+    assert!(capabilities.extra.is_empty());
+    assert_eq!(
+        serde_json::to_value(capabilities).unwrap(),
+        serde_json::json!({"completions": {}})
+    );
+}
+
+#[test]
+fn test_server_capabilities_preserve_extensions() {
+    let value = serde_json::json!({
+        "resources": {"subscribe": true, "listChanged": false},
+        "experimental": {
+            "vendor/feature": {"version": "2", "modes": ["push", "pull"]},
+            "vendor/disabled": false
+        },
+        "vendor/extra": {"enabled": false, "version": 3}
+    });
+    let capabilities: ServerCapabilities = serde_json::from_value(value.clone()).unwrap();
+
+    assert_eq!(capabilities.extra["vendor/extra"], value["vendor/extra"]);
+    assert_eq!(serde_json::to_value(capabilities).unwrap(), value);
 }
 
 #[test]

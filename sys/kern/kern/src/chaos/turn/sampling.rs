@@ -37,7 +37,9 @@ fn append_mcp_server_instructions(
     let xml = McpInstructionsDocument::new(server_instructions).to_xml()?;
     base_instructions.text.push_str(
         "\n\nThe following instructions were provided by configured MCP servers. \
-         Apply each section when using that server's tools or resources.\n\n",
+         Apply each section when using that server's tools or resources. \
+         Each capabilities attribute is JSON containing server-advertised declarations, \
+         not client-negotiated features, custom metadata contracts, or current tool visibility.\n\n",
     );
     base_instructions.text.push_str(&xml);
     Ok(())

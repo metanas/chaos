@@ -151,6 +151,138 @@ fn mcp_client_implementation_version_is_not_placeholder() {
 }
 
 #[test]
+fn server_instructions_include_initialization_metadata() {
+    let capabilities = serde_json::json!({
+        "tools": {},
+        "tasks": {},
+        "resources": {},
+        "prompts": {},
+        "logging": {},
+        "experimental": {"custom": {}},
+        "completions": {}
+    });
+    let server_info = mcp_guest::protocol::ServerInfo {
+        server_info: mcp_guest::protocol::Implementation::new("implementation-name", "1.2.3"),
+        protocol_version: "2025-11-25".to_string(),
+        capabilities: serde_json::from_value(capabilities.clone()).unwrap(),
+        instructions: Some(" \nUse the server.\n  ".to_string()),
+    };
+
+    assert_eq!(
+        McpServerInstructions::from_server_info("configured-name".to_string(), server_info),
+        Some(McpServerInstructions {
+            server_name: "configured-name".to_string(),
+            server_version: "1.2.3".to_string(),
+            capabilities,
+            instructions: "Use the server.".to_string(),
+        })
+    );
+}
+
+#[test]
+fn server_instructions_only_include_advertised_capabilities() {
+    let mut server_info = mcp_guest::protocol::ServerInfo {
+        server_info: mcp_guest::protocol::Implementation::new("test", "1.0.0"),
+        protocol_version: "2025-11-25".to_string(),
+        capabilities: mcp_guest::protocol::ServerCapabilities::default(),
+        instructions: Some("Use resources.".to_string()),
+    };
+    assert_eq!(
+        McpServerInstructions::from_server_info("test".to_string(), server_info.clone())
+            .unwrap()
+            .capabilities,
+        serde_json::json!({})
+    );
+
+    server_info.capabilities.resources = Some(mcp_guest::protocol::ResourcesCapability {
+        subscribe: Some(false),
+        list_changed: Some(false),
+    });
+    assert_eq!(
+        McpServerInstructions::from_server_info("test".to_string(), server_info)
+            .unwrap()
+            .capabilities,
+        serde_json::json!({"resources": {"subscribe": false, "listChanged": false}})
+    );
+}
+
+#[test]
+fn server_instructions_preserve_skynet_flags_without_inventing_negotiated_features() {
+    // Skynet's builder advertises these flags. Fleet callbacks and operator
+    // elicitation depend on client capabilities, not this server declaration.
+    let capabilities = serde_json::json!({
+        "logging": {},
+        "prompts": {"listChanged": false},
+        "resources": {"listChanged": false, "subscribe": true},
+        "tools": {"listChanged": true}
+    });
+    let server_info = mcp_guest::protocol::ServerInfo {
+        server_info: mcp_guest::protocol::Implementation::new("skynet", "0.9.0"),
+        protocol_version: "2025-11-25".to_string(),
+        capabilities: serde_json::from_value(capabilities.clone()).unwrap(),
+        instructions: Some("Read skynet://attention.".to_string()),
+    };
+    let instructions =
+        McpServerInstructions::from_server_info("skynet".to_string(), server_info).unwrap();
+
+    assert_eq!(instructions.capabilities, capabilities);
+    assert!(instructions.capabilities.get("experimental").is_none());
+    assert!(instructions.capabilities.get("elicitation").is_none());
+    assert!(
+        instructions
+            .capabilities
+            .get("chaos/reviewProvenance")
+            .is_none()
+    );
+}
+
+#[test]
+fn server_instructions_preserve_task_features_and_named_extensions() {
+    let capabilities = serde_json::json!({
+        "tasks": {
+            "list": {},
+            "cancel": {},
+            "requests": {
+                "tools": {"call": {}},
+                "sampling": {"createMessage": {}},
+                "elicitation": {"create": {}}
+            }
+        },
+        "experimental": {
+            "vendor/feature": {"version": "2", "enabled": false, "modes": ["pull", "push"]},
+            "vendor/other": {}
+        },
+        "vendor/extra": {"enabled": true}
+    });
+    let server_info = mcp_guest::protocol::ServerInfo {
+        server_info: mcp_guest::protocol::Implementation::new("test", "1.0.0"),
+        protocol_version: "2025-11-25".to_string(),
+        capabilities: serde_json::from_value(capabilities.clone()).unwrap(),
+        instructions: Some("Use the server.".to_string()),
+    };
+
+    assert_eq!(
+        McpServerInstructions::from_server_info("test".to_string(), server_info)
+            .unwrap()
+            .capabilities,
+        capabilities
+    );
+}
+
+#[test]
+fn server_instructions_skip_missing_or_blank_instructions() {
+    for instructions in [None, Some(String::new()), Some(" \n\t ".to_string())] {
+        let server_info = mcp_guest::protocol::ServerInfo {
+            server_info: mcp_guest::protocol::Implementation::new("test", "1.0.0"),
+            protocol_version: "2025-11-25".to_string(),
+            capabilities: mcp_guest::protocol::ServerCapabilities::default(),
+            instructions,
+        };
+        assert!(McpServerInstructions::from_server_info("test".to_string(), server_info).is_none());
+    }
+}
+
+#[test]
 fn resource_subscription_support_must_be_explicitly_advertised() {
     let mut capabilities = mcp_guest::protocol::ServerCapabilities::default();
     assert!(!resource_subscriptions_supported(&capabilities));

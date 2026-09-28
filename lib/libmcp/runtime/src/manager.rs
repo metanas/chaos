@@ -311,7 +311,31 @@ pub struct ToolInfo {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct McpServerInstructions {
     pub server_name: String,
+    /// Server implementation version, not the negotiated MCP protocol version.
+    pub server_version: String,
+    /// Server-advertised capability object, including nested flags and extensions.
+    /// This does not include client capabilities or inferred runtime support.
+    pub capabilities: serde_json::Value,
     pub instructions: String,
+}
+
+impl McpServerInstructions {
+    fn from_server_info(
+        server_name: String,
+        server_info: mcp_guest::protocol::ServerInfo,
+    ) -> Option<Self> {
+        let instructions = server_info.instructions.as_deref()?.trim();
+        if instructions.is_empty() {
+            return None;
+        }
+
+        Some(Self {
+            server_name,
+            server_version: server_info.server_info.version,
+            capabilities: serde_json::json!(server_info.capabilities),
+            instructions: instructions.to_string(),
+        })
+    }
 }
 
 /// Structured server notifications consumed by the kernel.
@@ -737,7 +761,8 @@ impl McpConnectionManager {
         }
     }
 
-    /// Returns non-empty instructions advertised by initialized MCP servers.
+    /// Returns non-empty instructions with implementation versions and advertised
+    /// capability objects from initialized MCP servers.
     ///
     /// Results are sorted by configured server name so model instructions are
     /// stable across requests despite the manager's `HashMap` storage.
@@ -754,18 +779,12 @@ impl McpConnectionManager {
             let Ok(managed_client) = async_managed_client.client().await else {
                 continue;
             };
-            let server_info = managed_client.session.server_info();
-            let Some(server_instructions) = server_info.instructions else {
-                continue;
-            };
-            let server_instructions = server_instructions.trim();
-            if server_instructions.is_empty() {
-                continue;
-            }
-            instructions.push(McpServerInstructions {
+            if let Some(server_instructions) = McpServerInstructions::from_server_info(
                 server_name,
-                instructions: server_instructions.to_string(),
-            });
+                managed_client.session.server_info(),
+            ) {
+                instructions.push(server_instructions);
+            }
         }
         instructions
     }

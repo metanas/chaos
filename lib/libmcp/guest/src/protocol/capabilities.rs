@@ -159,4 +159,8 @@ pub struct ServerCapabilities {
     pub tools: Option<ToolsCapability>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tasks: Option<TasksCapability>,
+    /// Preserve additional server declarations without treating them as supported
+    /// client features or granting them runtime behavior.
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
 }

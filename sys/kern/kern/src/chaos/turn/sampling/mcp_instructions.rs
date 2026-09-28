@@ -14,16 +14,23 @@ impl<'a> McpInstructionsDocument<'a> {
         Self { servers }
     }
 
-    /// Named server elements with instruction text preserved in CDATA.
+    /// Server identity/capability attributes with instruction text preserved in CDATA.
     pub(super) fn to_xml(&self) -> io::Result<String> {
         let mut writer = Writer::new_with_indent(Vec::new(), b' ', 2);
         writer
             .create_element("mcp_server_instructions")
             .write_inner_content(|writer| {
                 for server in self.servers {
+                    // Experimental payloads can contain maps in arbitrary order.
+                    // Keep the prompt stable even with serde_json/preserve_order.
+                    let mut capabilities = server.capabilities.clone();
+                    capabilities.sort_all_objects();
+                    let capabilities = capabilities.to_string();
                     writer
                         .create_element("server")
                         .with_attribute(("name", server.server_name.as_str()))
+                        .with_attribute(("version", server.server_version.as_str()))
+                        .with_attribute(("capabilities", capabilities.as_str()))
                         .write_inner_content(|writer| {
                             writer.create_element("instructions").write_inner_content(
                                 |writer| {
