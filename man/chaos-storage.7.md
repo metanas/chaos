@@ -128,17 +128,12 @@ decrypted snapshot. Writes are locked across processes and atomically replaced.
 `auto` no longer falls back to plaintext. The provider `file` mode (the existing
 default) and `ephemeral` mode are unchanged.
 
-After upgrading, stop other ChaOS processes and run:
-
-```sh
-chaos config migrate-secrets
-```
-
-This explicitly imports the old Keychain items and may prompt once for each.
-It preserves references and approval identities, retains source items for
-recovery, and never overwrites a live or deleted vault record on retry. Normal
-operation never consults those source items. Back up both the encrypted vault
-and its unlock key; older binaries cannot write vault schema v2.
+Legacy Keychain credential import and `chaos config migrate-secrets` were removed
+in 47.9.0. For unmigrated credentials, stop ChaOS and run that command with 47.8.x
+before upgrading, or re-enter the credentials in the current version.
+Already-migrated vaults need no further migration. No legacy Keychain items are
+read or imported by 47.9.0. Back up both the encrypted vault and its unlock key;
+pre-47.8 binaries cannot write vault schema v2.
 
 macOS may still authorize the initial unlock after restart or a binary change.
 Locking Keychain does not revoke a key already held in process memory; restart

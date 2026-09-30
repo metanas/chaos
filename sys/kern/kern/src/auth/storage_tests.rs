@@ -429,7 +429,7 @@ fn keyring_auth_storage_delete_removes_keyring_and_file() -> anyhow::Result<()> 
 }
 
 #[test]
-fn secure_auth_never_reads_legacy_keychain_or_plaintext_implicitly() -> anyhow::Result<()> {
+fn secure_auth_never_reads_legacy_keychain_or_plaintext() -> anyhow::Result<()> {
     let chaos_home = tempdir()?;
     let mock_keyring = MockKeyringStore::default();
     FileAuthStorage::new(chaos_home.path().into()).save(&auth_with_prefix("file"))?;
@@ -489,7 +489,7 @@ fn secure_auth_never_writes_plaintext_when_keychain_is_denied() -> anyhow::Resul
 }
 
 #[test]
-fn explicit_auth_migration_preserves_rotation_and_logout() -> anyhow::Result<()> {
+fn vault_auth_rotation_and_logout_ignore_legacy_keychain() -> anyhow::Result<()> {
     let home = tempdir()?;
     let keyring = Arc::new(MockKeyringStore::default());
     let storage = VaultAuthStorage::new(home.path().into(), keyring.clone());
@@ -498,7 +498,7 @@ fn explicit_auth_migration_preserves_rotation_and_logout() -> anyhow::Result<()>
     let serialized = serde_json::to_string(&legacy)?;
     keyring.save(KEYRING_SERVICE, &key, &serialized)?;
     assert!(storage.load()?.is_none());
-    import_keyring_auth(home.path(), &storage.vault, keyring.as_ref())?;
+    storage.save(&legacy)?;
     assert_eq!(storage.load()?, Some(legacy));
     assert_eq!(
         keyring.saved_value(&key).as_deref(),
@@ -507,10 +507,14 @@ fn explicit_auth_migration_preserves_rotation_and_logout() -> anyhow::Result<()>
 
     let rotated = normalized(&auth_with_prefix("rotated"));
     storage.save(&rotated)?;
-    import_keyring_auth(home.path(), &storage.vault, keyring.as_ref())?;
     assert_eq!(storage.load()?, Some(rotated));
     storage.delete()?;
-    import_keyring_auth(home.path(), &storage.vault, keyring.as_ref())?;
     assert!(storage.load()?.is_none());
+    let reopened = VaultAuthStorage::new(home.path().into(), keyring.clone());
+    assert!(reopened.load()?.is_none());
+    assert_eq!(
+        keyring.saved_value(&key).as_deref(),
+        Some(serialized.as_str())
+    );
     Ok(())
 }

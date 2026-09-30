@@ -1,9 +1,7 @@
 //! Opaque credential references in configuration. No plaintext fallback.
-use std::collections::BTreeMap;
 use std::path::Path;
 
 use anyhow::Context;
-use chaos_keyring::{DefaultKeyringStore, KeyringStore};
 use chaos_vault::LocalSecretsBackend;
 use serde_json::Value;
 
@@ -30,7 +28,7 @@ pub fn resolve(home: &Path, value: &str) -> anyhow::Result<String> {
     uuid::Uuid::parse_str(account).context("invalid credential reference")?;
     LocalSecretsBackend::shared(home.to_path_buf())
         .load_credential(&credential_key(account))?
-        .context("configuration credential is unavailable in the vault; for existing Keychain credentials run `chaos config migrate-secrets`")
+        .context("configuration credential is unavailable in the vault; re-enter it or restore the vault and its unlock key")
 }
 
 pub fn externalize(home: &Path, value: &str) -> anyhow::Result<String> {
@@ -51,70 +49,6 @@ pub fn remove(home: &Path, reference: &str) -> anyhow::Result<()> {
         .context("expected a secure credential reference")?;
     uuid::Uuid::parse_str(account).context("invalid credential reference")?;
     LocalSecretsBackend::shared(home.to_path_buf()).delete_credential(&credential_key(account))?;
-    Ok(())
-}
-
-/// Explicit migration only. References remain stable, preserving approval identity.
-/// Sources are retained for recovery; a retry never replaces a vault credential.
-pub fn migrate_references(home: &Path, value: &Value) -> anyhow::Result<()> {
-    fn reference(
-        value: &Value,
-        accounts: &mut std::collections::BTreeSet<String>,
-    ) -> anyhow::Result<()> {
-        if let Some(account) = value.as_str().and_then(|value| value.strip_prefix(PREFIX)) {
-            uuid::Uuid::parse_str(account).context("invalid credential reference")?;
-            accounts.insert(account.to_owned());
-        }
-        Ok(())
-    }
-    fn collect(
-        value: &Value,
-        accounts: &mut std::collections::BTreeSet<String>,
-    ) -> anyhow::Result<()> {
-        if let Some(values) = value.as_array() {
-            for value in values {
-                collect(value, accounts)?;
-            }
-        } else if let Some(values) = value.as_object() {
-            for (key, value) in values {
-                if matches!(
-                    key.as_str(),
-                    "api_key"
-                        | "bearer_token"
-                        | "experimental_bearer_token"
-                        | "storage_url"
-                        | "egress_url"
-                ) {
-                    reference(value, accounts)?;
-                } else if matches!(key.as_str(), "env" | "http_headers" | "headers") {
-                    if let Some(values) = value.as_object() {
-                        for value in values.values() {
-                            reference(value, accounts)?;
-                        }
-                    }
-                } else {
-                    collect(value, accounts)?;
-                }
-            }
-        }
-        Ok(())
-    }
-    let mut accounts = Default::default();
-    collect(value, &mut accounts)?;
-    let vault = LocalSecretsBackend::shared(home.to_path_buf());
-    let mut values = BTreeMap::new();
-    for account in accounts {
-        let key = credential_key(&account);
-        if !vault.has_credential_record(&key)? {
-            let value = DefaultKeyringStore
-                .load(SERVICE, &account)?
-                .context("legacy settings credential is missing; migration aborted")?;
-            values.insert(key, value);
-        }
-    }
-    if !values.is_empty() {
-        vault.import_credentials(&values)?;
-    }
     Ok(())
 }
 

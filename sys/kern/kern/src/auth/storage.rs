@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 use crate::token_data::TokenData;
 use chaos_ipc::api::AuthMode;
-use chaos_keyring::DefaultKeyringStore;
+#[cfg(test)]
 use chaos_keyring::KeyringStore;
 use std::sync::LazyLock;
 
@@ -242,37 +242,6 @@ impl AuthStorageBackend for VaultAuthStorage {
         let file_removed = delete_file_if_exists(&self.chaos_home)?;
         Ok(keyring_removed || file_removed)
     }
-}
-
-/// Import the old provider bundle only when explicitly requested by the operator.
-pub(crate) fn migrate_keyring_auth(home: &Path) -> anyhow::Result<()> {
-    import_keyring_auth(
-        home,
-        &chaos_vault::LocalSecretsBackend::shared(home.to_path_buf()),
-        &DefaultKeyringStore,
-    )
-}
-
-fn import_keyring_auth(
-    home: &Path,
-    vault: &chaos_vault::LocalSecretsBackend,
-    keyring: &dyn KeyringStore,
-) -> anyhow::Result<()> {
-    let key = compute_store_key(home);
-    let credential = format!("{KEYRING_SERVICE}/{key}");
-    if !vault.has_credential_record(&credential)?
-        && let Some(serialized) = keyring.load(KEYRING_SERVICE, &key)?
-    {
-        let auth: AuthDotJson = serde_json::from_str(&serialized).map_err(|_| {
-            anyhow::anyhow!("invalid legacy provider credentials; migration aborted")
-        })?;
-        vault.import_credentials(
-            &[(credential, serde_json::to_string(&auth.normalized())?)]
-                .into_iter()
-                .collect(),
-        )?;
-    }
-    Ok(())
 }
 
 // A global in-memory store for mapping chaos_home -> AuthDotJson.

@@ -136,7 +136,7 @@ impl KeyringStore for CountingKeyring {
 }
 
 #[test]
-fn unlock_once_observe_rotation_and_do_not_resurrect_deleted_credentials() -> Result<()> {
+fn unlock_once_observe_rotation_and_deletion() -> Result<()> {
     let home = tempfile::tempdir()?;
     let keyring = Arc::new(CountingKeyring::default());
     let writer = LocalSecretsBackend::new(home.path().into(), keyring.clone());
@@ -160,8 +160,7 @@ fn unlock_once_observe_rotation_and_do_not_resurrect_deleted_credentials() -> Re
     assert_eq!(reader.load_credential("auth")?.as_deref(), Some("rotated"));
     writer.delete_credential("auth")?;
     assert_eq!(reader.load_credential("auth")?, None);
-    reader.import_credentials(&[("auth".into(), "old".into())].into_iter().collect())?;
-    assert_eq!(reader.load_credential("auth")?, None);
+    assert!(!reader.delete_credential("auth")?);
     let name = SecretName::new("TEST")?;
     reader.set(&SecretScope::Global, &name, "named-secret")?;
     assert_eq!(

@@ -177,33 +177,32 @@ installing, use `just chaos`. For a local release run, use
 `just bigbang`. See [man/chaos-install.7.md](./man/chaos-install.7.md)
 for system requirements and logging controls.
 
-### Upgrading to 47.8.0
+### Upgrading to 47.9.0
 
-Settings, MCP credentials, named secrets, and provider auth in `keyring`/`auto`
-mode now share one encrypted vault per ChaOS home. Normal operation loads its
-OS-held unlock key once per home/process, rather than accessing Keychain for
-each credential.
+`chaos config migrate-secrets` and legacy Keychain credential import have been
+removed. Already-migrated vaults need no further migration.
 
-Stop older ChaOS processes, install the new binary, then import existing
-Keychain credentials before restarting:
+If credentials still live in the pre-47.8 per-item Keychain store, stop ChaOS
+and run this command **with 47.8.x before installing 47.9.0**:
 
 ```sh
 chaos config migrate-secrets
 ```
 
-`chaos config migrate-secrets` will be removed in **47.9.0**. Migrate existing
-Keychain credentials with **47.8.x** before upgrading to 47.9.0 or later.
+Otherwise, re-enter the credentials in the new version. There is no legacy-store
+fallback or import command in 47.9.0. The separate `chaos config migrate` command
+for user settings remains available.
 
-This one-time import may prompt for each legacy item. It is safe to retry:
-existing credentials and deletions are preserved, as are credential references
-and MCP approval identities. Legacy items remain for recovery, but normal
-operation never falls back to them.
+Settings, MCP credentials, named secrets, and provider auth in `keyring`/`auto`
+mode share one encrypted vault per ChaOS home. Normal operation loads its
+OS-held unlock key once per home/process, rather than accessing Keychain for
+each credential.
 
 Provider `auto` mode no longer falls back to plaintext `auth.json`. If you relied
 on that behavior, explicitly select `file` mode or reconnect into the vault.
 The existing default `file` mode and `ephemeral` mode are unchanged.
 
-Do not run older binaries against the upgraded vault. Back up both
+Do not run pre-47.8 binaries against the vault. Back up both
 `$CHAOS_HOME/secrets/local.age` **and** its OS-held unlock key. macOS may still
 prompt after a restart or binary-signature change. See
 [credential vault migration](docs/database-configuration.md#credential-vault-and-macos-prompts)

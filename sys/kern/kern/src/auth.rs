@@ -25,7 +25,6 @@ use crate::auth::storage::AuthStorageBackend;
 pub use crate::auth::storage::CredentialSubjectFingerprint;
 pub use crate::auth::storage::ProviderAuthRecord;
 use crate::auth::storage::create_auth_storage;
-pub(crate) use crate::auth::storage::migrate_keyring_auth;
 use crate::error::RefreshTokenFailedError;
 use crate::error::RefreshTokenFailedReason;
 use crate::token_data::KnownPlan as InternalKnownPlan;

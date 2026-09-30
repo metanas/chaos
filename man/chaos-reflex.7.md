@@ -30,7 +30,8 @@ in-flight turns keep their snapshot. No file edits or exported keys are needed.
   replacement creates a new reference; changes and deletions in the vault are
   observed on subsequent reads. External changes to the OS-held unlock key
   require a restart. First access after restart may require OS authorization.
-  Import old per-item keys explicitly with `chaos config migrate-secrets`.
+  Legacy per-item Keychain import was removed in 47.9.0; re-enter unmigrated
+  keys, or import them using 47.8.x before upgrading.
 - **Key entry:** never put keys after a slash command or in an endpoint URL.
   Leave the key blank to preserve it; enter a replacement to rotate it.
 - **Account reuse:** an API-key account from `/accounts` must share the endpoint's

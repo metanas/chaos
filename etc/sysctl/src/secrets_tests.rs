@@ -1,4 +1,5 @@
 use super::*;
+use chaos_keyring::{DefaultKeyringStore, KeyringStore};
 
 // Keep native mock registration and shared-vault checks in one test: the
 // keyring-core default store is process-global.
@@ -26,7 +27,6 @@ fn credential_vault_lifecycle() -> anyhow::Result<()> {
         assert!(!encoded.contains(secret));
     }
     let references = stored.clone();
-    migrate_references(home, &references)?; // Never interpret instructions as references.
     transform(home, &mut stored, true)?;
     assert_eq!(stored, references);
     transform(home, &mut stored, false)?;
@@ -45,46 +45,24 @@ fn credential_vault_lifecycle() -> anyhow::Result<()> {
     assert!(resolve(home, reference).is_err());
     assert!(remove(home, "not-a-reference").is_err());
 
-    // Runtime never consults a legacy item. Only explicit migration may read it.
+    // Legacy Keychain items are never read, even when the vault record is absent.
     let id = uuid::Uuid::new_v4().to_string();
     let legacy = format!("{PREFIX}{id}");
     DefaultKeyringStore.save(SERVICE, &id, "legacy-secret")?;
-    assert!(resolve(home, &legacy).is_err());
-    let config = serde_json::json!({"api_key": legacy});
-    migrate_references(home, &config)?;
-    assert_eq!(resolve(home, &legacy)?, "legacy-secret");
-    // Preserve the source for recovery, but never overwrite a rotation on retry.
+    let error = resolve(home, &legacy).unwrap_err().to_string();
+    assert!(error.contains("re-enter it or restore the vault"));
+    assert!(!error.contains("migrate-secrets"));
     assert_eq!(
         DefaultKeyringStore.load(SERVICE, &id)?.as_deref(),
         Some("legacy-secret")
     );
     LocalSecretsBackend::shared(home.to_path_buf())
         .save_credential(&credential_key(&id), "rotated")?;
-    migrate_references(home, &config)?;
     assert_eq!(resolve(home, &legacy)?, "rotated");
     remove(home, &legacy)?;
-    migrate_references(home, &config)?;
     assert!(
         resolve(home, &legacy).is_err(),
-        "migration must not resurrect a deletion"
-    );
-
-    let missing = format!("{PREFIX}{}", uuid::Uuid::new_v4());
-    let available_id = uuid::Uuid::new_v4().to_string();
-    DefaultKeyringStore.save(SERVICE, &available_id, "not-yet-imported")?;
-    let available = format!("{PREFIX}{available_id}");
-    assert!(
-        migrate_references(
-            home,
-            &serde_json::json!({
-                "api_key": available, "bearer_token": missing,
-            })
-        )
-        .is_err()
-    );
-    assert!(
-        resolve(home, &available).is_err(),
-        "failed batch must not be partially persisted"
+        "legacy Keychain credentials must not resurrect a deletion"
     );
 
     let ciphertext = std::fs::read(home.join("secrets/local.age"))?;

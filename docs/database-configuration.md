@@ -81,8 +81,10 @@ lock. They do not resolve credential references merely to save an offline edit.
 ## Migration
 
 Stop older ChaOS processes before migrating. Do not run older binaries against
-the migrated installation. If the installation already contains Keychain
-references, run `chaos config migrate-secrets` first (see below).
+the migrated installation. If credentials still use the pre-47.8 per-item
+Keychain store, import them with 47.8.x before installing 47.9.0, or re-enter them
+in the current version (see below). Settings migration does not import those
+Keychain items.
 
 ```sh
 chaos config migrate --dry-run
@@ -118,26 +120,19 @@ snapshot/reload semantics. Mutations are locked across processes and persisted
 atomically with owner-only permissions. Missing keys or corrupt ciphertext fail
 closed; an existing vault never gets a replacement unlock key.
 
-After upgrading, stop other ChaOS processes, then explicitly import existing
-per-item Keychain credentials:
-
-```sh
-chaos config migrate-secrets
-```
-
-Migration may prompt for each old Keychain item once. It imports bootstrap
-references before opening the database, then settings, MCP references and the
-provider bundle. It is retryable and never overwrites a live credential or
-resurrects a deleted one. Legacy Keychain items are retained for recovery, but
-normal runtime never reads them. Reference IDs and MCP approval identities do
-not change. Explicit `file` provider credentials are not imported. If `auto`
-previously fell back to `auth.json`, select `file` explicitly or reconnect the
-account into the vault; `auto` no longer reads plaintext.
+Legacy per-item Keychain import and `chaos config migrate-secrets` were removed
+in 47.9.0. Stop ChaOS and use 47.8.x to run that command **before** upgrading if
+credentials have not yet been imported, or re-enter them in the current version.
+Already-migrated vaults, reference IDs, and MCP approval identities are unchanged.
+47.9.0 never reads or imports legacy Keychain items. Explicit `file` provider
+credentials remain separate. If `auto` previously fell back to `auth.json`,
+select `file` explicitly or reconnect the account into the vault; `auto` no
+longer reads plaintext.
 
 The existing `keyring:chaos-settings/UUID` reference syntax is retained, but now
 addresses records inside this home-local vault. References alone are not
 portable between homes. Back up the encrypted vault **and** its OS-held key.
-Vault schema v2 is not writable by older ChaOS versions.
+Vault schema v2 is not writable by pre-47.8 ChaOS versions.
 
 Normal operation reads an existing vault's unlock key once per home/process,
 not once per MCP environment value or credential. Creating a new vault also

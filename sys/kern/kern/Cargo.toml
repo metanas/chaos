@@ -58,7 +58,6 @@ chaos-parole = { workspace = true }
 chaos-locate = { workspace = true }
 chaos-scm = { workspace = true }
 chaos-dtrace = { workspace = true }
-chaos-keyring = { workspace = true }
 chaos-pf = { workspace = true }
 chaos-snitch = { workspace = true }
 chaos-context = { workspace = true }
@@ -151,6 +150,7 @@ openssl-sys = { workspace = true, features = ["vendored"] }
 chaos-doas = { workspace = true }
 
 [dev-dependencies]
+chaos-keyring = { workspace = true }
 chaos-test-fixtures = { workspace = true }
 assert_cmd = { workspace = true }
 chaos-model-catalog = { workspace = true, features = ["test-support"] }

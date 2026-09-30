@@ -45,8 +45,7 @@ struct SecretsFile {
     version: u8,
     secrets: BTreeMap<String, String>,
     #[serde(default)]
-    // A null record is a deletion tombstone: retrying migration must not
-    // resurrect credentials removed by logout or key rotation.
+    // A null record marks a deleted credential in vault schema v2.
     credentials: BTreeMap<String, Option<String>>,
 }
 
@@ -163,11 +162,6 @@ impl LocalSecretsBackend {
         Ok(self.load_file()?.credentials.get(key).cloned().flatten())
     }
 
-    /// Includes deletion tombstones, which must not be imported again.
-    pub fn has_credential_record(&self, key: &str) -> Result<bool> {
-        Ok(self.load_file()?.credentials.contains_key(key))
-    }
-
     pub fn save_credential(&self, key: &str, value: &str) -> Result<()> {
         self.update(|file| {
             file.credentials
@@ -182,17 +176,6 @@ impl LocalSecretsBackend {
             let existed = removed.is_some();
             removed.zeroize();
             existed
-        })
-    }
-
-    /// Explicit, retryable migration. Never overwrite a live vault credential.
-    pub fn import_credentials(&self, values: &BTreeMap<String, String>) -> Result<()> {
-        self.update(|file| {
-            for (key, value) in values {
-                file.credentials
-                    .entry(key.clone())
-                    .or_insert_with(|| Some(value.clone()));
-            }
         })
     }
 

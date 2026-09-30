@@ -14,22 +14,6 @@ const BOOTSTRAP_KEYS: &[&str] = &["storage_url", "egress_url", "sqlite_home"];
 
 pub mod storage_setup;
 
-/// The only path allowed to read legacy per-credential Keychain items.
-/// Migrate bootstrap first so opening a credential-protected database uses the
-/// vault too. Each import is atomic and retryable; source records are retained.
-pub async fn migrate_secrets(home: &Path) -> anyhow::Result<()> {
-    let _lock = lock_bootstrap(home)?;
-    chaos_sysctl::secrets::migrate_references(home, &serde_json::to_value(read_toml(home)?)?)?;
-    let runtime = open(home).await?;
-    let snapshot = runtime.settings_snapshot().await?;
-    chaos_sysctl::secrets::migrate_references(home, &snapshot.settings)?;
-    for (_, config) in runtime.list_global_mcp_servers().await? {
-        chaos_sysctl::secrets::migrate_references(home, &serde_json::to_value(config)?)?;
-    }
-    crate::auth::migrate_keyring_auth(home)?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests;
 

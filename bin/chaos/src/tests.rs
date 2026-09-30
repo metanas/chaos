@@ -15,6 +15,18 @@ fn try_parse_cli<'v>(args: &[&'v str]) -> Result<MultitoolCli, usage::Error<'sta
 }
 
 #[test]
+fn config_rejects_retired_secret_migration_but_keeps_settings_migration() {
+    assert!(try_parse_cli(&["chaos", "config", "migrate-secrets"]).is_err());
+    let cli = try_parse_cli(&["chaos", "config", "migrate", "--dry-run"]).unwrap();
+    assert_matches!(
+        cli.subcommand,
+        Some(Subcommand::Config(config_cmd::ConfigCommand {
+            action: config_cmd::ConfigAction::Migrate { dry_run: true }
+        }))
+    );
+}
+
+#[test]
 fn reflex_test_is_a_local_subcommand_with_global_config_flags() {
     let cli = try_parse_cli(&[
         "chaos",

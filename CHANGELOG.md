@@ -9,6 +9,14 @@ should. There is no patch level; the build timestamp is the patch.
 
 ## [Unreleased]
 
+## [47.9.0] - 2026-09-30
+
+Upgrading: already-migrated credential vaults continue to work unchanged.
+If credentials still use the pre-47.8 per-item Keychain store, stop ChaOS and
+run `chaos config migrate-secrets` with **47.8.x before installing 47.9.0**, or
+re-enter credentials in the new version. See the
+[upgrade guide](README.md#upgrading-to-4790).
+
 ### Added
 - Explicit `chaos hooks --yes` operator provisioning without a terminal prompt,
   including disabled legacy import followed by deliberate enabling.
@@ -22,6 +30,12 @@ should. There is no patch level; the build timestamp is the patch.
 - Bound the turn task's inline future size when loading database hooks, avoiding
   worker-thread stack overflows. Keep integration-test homes and working
   directories alive for lifecycle hook resolution.
+
+### Removed
+- `chaos config migrate-secrets` and the legacy settings, MCP, and provider
+  Keychain import paths, including import-only vault APIs. No alias or runtime
+  fallback remains. The separate `chaos config migrate` settings command is
+  unchanged.
 
 ## [47.8.0] - 2026-09-29
 
@@ -37,7 +51,7 @@ older binaries against the upgraded vault. See
   items are retained for recovery; retries never overwrite live credentials or
   resurrect deleted ones. This command will be removed in **47.9.0**; migrate
   with **47.8.x** before upgrading further. See the
-  [upgrade guide](README.md#upgrading-to-4780).
+  [upgrade guide](README.md#upgrading-to-4790).
 
 ### Changed
 - Settings, MCP credentials, named secrets, and provider auth in `keyring`/`auto`
@@ -98,7 +112,8 @@ See the Drivers section of `man/chaos-install.7.md`.
   access for the model now comes from skipper.
 - `git://branches` resource template.
 
-[Unreleased]: https://github.com/seuros/chaos/compare/v47.8.0...HEAD
+[Unreleased]: https://github.com/seuros/chaos/compare/v47.9.0...HEAD
+[47.9.0]: https://github.com/seuros/chaos/compare/v47.8.0...v47.9.0
 [47.8.0]: https://github.com/seuros/chaos/compare/v47.7.1...v47.8.0
 [47.7.1]: https://github.com/seuros/chaos/compare/v47.7.0...v47.7.1
 [47.7.0]: https://github.com/seuros/chaos/compare/v47.6.0...v47.7.0
