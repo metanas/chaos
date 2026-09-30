@@ -96,7 +96,9 @@ elicitation, including headless sessions. `on-request` is the default; headless
 execution alone does **not** opt in. `hooks_preview` remains read-only. Policy
 uses the effective session configuration; changing stored settings requires a
 new session to reliably take effect. Project configuration cannot set this
-authority-bearing policy. The tools do not accept approval fields.
+authority-bearing policy. Agent roles, including trusted project roles and
+built-in personas, inherit the parent's effective hook policy and cannot override
+it. The tools do not accept approval fields.
 
 Both routes use the same validated, revision-checked writes and installation-local
 grants as interactive approval. Project scope/trust, active-mode mutation rules,

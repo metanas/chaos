@@ -188,6 +188,9 @@ mod reload {
         if preserve_current_profile {
             merged_config.profile = None;
         }
+        // Role selection is not an operator grant. Keep the live parent's hook
+        // authority, even when the role or persisted layers specify another policy.
+        merged_config.hook_approval_policy = Some(config.hook_approval_policy);
 
         let mut next_config = Config::load_config_with_layer_stack(
             merged_config,

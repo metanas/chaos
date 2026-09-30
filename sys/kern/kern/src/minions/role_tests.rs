@@ -1,8 +1,10 @@
 use super::*;
 use crate::config::CONFIG_TOML_FILE;
 use crate::config::ConfigBuilder;
+use crate::config::HookApprovalPolicy;
 use crate::config_loader::ConfigLayerStackOrdering;
 use chaos_ipc::config_types::ReasoningSummary;
+use chaos_ipc::config_types::TrustLevel;
 use chaos_ipc::config_types::Verbosity;
 use chaos_ipc::openai_models::ReasoningEffort;
 use pretty_assertions::assert_eq;
@@ -79,6 +81,72 @@ async fn apply_role_rejects_incomplete_standalone_files() {
             .expect_err("incomplete role must not apply");
         assert_eq!(err, AGENT_TYPE_UNAVAILABLE_ERROR);
         assert_eq!(config, before);
+    }
+}
+
+#[tokio::test]
+async fn project_roles_cannot_override_parent_hook_approval_policy() -> anyhow::Result<()> {
+    for extension in ["toml", "md"] {
+        let home = TempDir::new()?;
+        let project = TempDir::new()?;
+        fs::create_dir(project.path().join(".git"))?;
+        let agents = project.path().join(".chaos/agents");
+        fs::create_dir_all(&agents)?;
+        let role_path = agents.join(format!("custom.{extension}"));
+        let write_role = |policy: Option<&str>| {
+            let mut contents = String::from(
+                "name = 'custom'\ndescription = 'Project role'\n\
+                 developer_instructions = 'Stay focused'\nmodel = 'role-model'\n",
+            );
+            if let Some(policy) = policy {
+                contents.push_str(&format!("hook_approval_policy = '{policy}'\n"));
+            }
+            if extension == "md" {
+                contents = format!("---\n{contents}---\n");
+            }
+            fs::write(&role_path, contents)
+        };
+        write_role(Some("automatic"))?;
+        crate::config::set_project_trust_level(home.path(), project.path(), TrustLevel::Trusted)?;
+        let config = ConfigBuilder::default()
+            .chaos_home(home.path().to_path_buf())
+            .fallback_cwd(Some(project.path().to_path_buf()))
+            .build()
+            .await?;
+        assert!(config.agent_roles.contains_key("custom"));
+        assert_eq!(config.hook_approval_policy, HookApprovalPolicy::OnRequest);
+
+        for parent_policy in [HookApprovalPolicy::OnRequest, HookApprovalPolicy::Automatic] {
+            for role_policy in [Some("automatic"), Some("on-request"), None] {
+                // Re-read at application time, including edits made after discovery.
+                write_role(role_policy)?;
+                let mut child = config.clone();
+                child.hook_approval_policy = parent_policy;
+                for _ in 0..2 {
+                    // Nested role application must retain the live parent's policy,
+                    // not the role's value or the original persisted config.
+                    apply_role_to_config(&mut child, Some("custom"))
+                        .await
+                        .expect("apply project role");
+                    assert_eq!(child.hook_approval_policy, parent_policy);
+                    assert_eq!(child.model.as_deref(), Some("role-model"));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn builtin_personas_preserve_parent_hook_approval_policy() {
+    let (_home, config) = test_config_with_cli_overrides(Vec::new()).await;
+    for policy in [HookApprovalPolicy::OnRequest, HookApprovalPolicy::Automatic] {
+        let mut reviewer = config.clone();
+        reviewer.hook_approval_policy = policy;
+        apply_builtin_persona_to_config(&mut reviewer, "gopher")
+            .await
+            .expect("apply reviewer persona");
+        assert_eq!(reviewer.hook_approval_policy, policy);
     }
 }
 

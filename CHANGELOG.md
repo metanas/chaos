@@ -17,6 +17,8 @@ should. There is no patch level; the build timestamp is the patch.
   installation-local grants, project trust, and execution sandboxing are unchanged.
 
 ### Fixed
+- Agent-role application preserves the parent's hook approval policy, preventing
+  trusted project roles from enabling automatic hook authorization.
 - Bound the turn task's inline future size when loading database hooks, avoiding
   worker-thread stack overflows. Keep integration-test homes and working
   directories alive for lifecycle hook resolution.

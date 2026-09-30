@@ -33,6 +33,10 @@ Other role-local config settings, such as `model` and
 `model_reasoning_effort`, can be set in the same file. Relative config paths
 resolve against that file's directory.
 
+Hook-management authorization is inherited from the parent's effective
+`hook_approval_policy`. Role files and built-in personas cannot override it;
+selecting a role never opts a session into automatic hook authorization.
+
 Higher-precedence config layers select the role file for a repeated name and
 inherit omitted metadata from lower layers. A non-blank description is required
 after this merge. Duplicate names within one layer and malformed files generate
