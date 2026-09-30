@@ -125,15 +125,6 @@ impl AnthropicAdapter {
 impl ModelAdapter for AnthropicAdapter {
     fn stream(&self, request: TurnRequest) -> AdapterFuture<'_> {
         Box::pin(async move {
-            if request.output_schema.is_some() {
-                return Err(AbiError::InvalidRequest {
-                    message: "structured output (output_schema) is not yet supported for \
-                              Anthropic Messages — remove output_schema or use a Responses \
-                              provider"
-                        .to_string(),
-                });
-            }
-
             let url = self.messages_url();
             let model = self.model_for_request(&request.model)?;
             let body = build_request_body(
@@ -310,8 +301,17 @@ pub(crate) fn build_request_body(
         );
     }
 
-    // output_schema is guarded at the adapter level — reject before we get here.
-    // The previous synthetic _structured_output tool was not production-safe.
+    if let Some(schema) = &request.output_schema {
+        obj.insert(
+            "output_config".to_string(),
+            serde_json::json!({
+                "format": {
+                    "type": "json_schema",
+                    "schema": schema,
+                },
+            }),
+        );
+    }
 
     Ok(body)
 }

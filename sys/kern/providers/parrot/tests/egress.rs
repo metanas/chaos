@@ -164,6 +164,15 @@ async fn every_wire_format_sends_vendor_authenticated_requests_through_egress() 
     ];
     for (adapter, upstream, endpoint, auth_header) in cases {
         gateway.reset().await;
+        let mut request = turn();
+        if upstream == "https://api.anthropic.com" {
+            request.output_schema = Some(json!({
+                "type": "object",
+                "properties": {"answer": {"type": "string"}},
+                "required": ["answer"],
+                "additionalProperties": false,
+            }));
+        }
         let credential = if auth_header == "authorization" {
             "Bearer vendor-token"
         } else {
@@ -179,7 +188,7 @@ async fn every_wire_format_sends_vendor_authenticated_requests_through_egress() 
             .expect(1)
             .mount(&gateway)
             .await;
-        let error = match adapter.stream(turn()).await {
+        let error = match adapter.stream(request.clone()).await {
             Err(error) => error,
             Ok(mut stream) => loop {
                 match stream.rx_event.recv().await.expect("an error event") {
@@ -196,6 +205,13 @@ async fn every_wire_format_sends_vendor_authenticated_requests_through_egress() 
         let requests = gateway.received_requests().await.unwrap();
         assert_eq!(requests.len(), 1, "{upstream}");
         assert!(!requests[0].headers.contains_key("content-encoding"));
+        if let Some(schema) = request.output_schema {
+            let body: serde_json::Value = requests[0].body_json().unwrap();
+            assert_eq!(
+                body["output_config"],
+                json!({"format": {"type": "json_schema", "schema": schema}})
+            );
+        }
     }
 }
 

@@ -226,6 +226,7 @@ fn prompt_get_formatted_input_reserializes_shell_outputs_without_apply_patch_too
         ..Default::default()
     };
 
+    assert_eq!(prompt.base_instructions.text, BASE_INSTRUCTIONS);
     let input = prompt.get_formatted_input();
     assert_eq!(
         input,

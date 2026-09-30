@@ -327,7 +327,7 @@ async fn attach_rollout_recorder(session: &Arc<Session>) -> ProcessId {
             process_id,
             None,
             SessionSource::Exec,
-            BaseInstructions::default(),
+            session.get_base_instructions().await,
             Vec::new(),
             EventPersistenceMode::Limited,
         ),

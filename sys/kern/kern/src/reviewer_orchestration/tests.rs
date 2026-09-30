@@ -562,6 +562,10 @@ async fn owner_can_cancel_its_pending_attempt() {
 
 #[test]
 fn verdict_submission_maps_strict_review_output_and_reuses_exact_key() {
+    assert_eq!(
+        crate::tasks::review_output_schema()["properties"]["overall_correctness"]["enum"],
+        json!(["patch is correct", "patch is incorrect"])
+    );
     let submission =
         prepare_submission(REVIEW_VERDICT_TOOL, "stable-verdict-key", &valid_output()).unwrap();
 

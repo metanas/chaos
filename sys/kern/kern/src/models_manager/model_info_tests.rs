@@ -25,6 +25,7 @@ fn with_config_overrides_never_yields_empty_base_instructions() {
 
     // After kern finalization the sentinel is replaced.
     let finalized = with_config_overrides(model, &test_config());
+    assert_eq!(finalized.base_instructions, BASE_INSTRUCTIONS);
     assert!(!finalized.base_instructions.is_empty());
 }
 

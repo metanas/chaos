@@ -8,6 +8,8 @@ use chaos_ipc::models::ContentItem;
 use chaos_ipc::models::ResponseItem;
 use chaos_ipc::protocol::AgentMessageContentDeltaEvent;
 use chaos_ipc::protocol::ApprovalPolicy;
+use chaos_ipc::protocol::ChaosErrorInfo;
+use chaos_ipc::protocol::ErrorEvent;
 use chaos_ipc::protocol::Event;
 use chaos_ipc::protocol::EventMsg;
 use chaos_ipc::protocol::ExitedReviewModeEvent;
@@ -20,8 +22,10 @@ use crate::chaos::Session;
 use crate::chaos::TurnContext;
 use crate::chaos_delegate::run_chaos_process_one_shot;
 use crate::config::Constrained;
+use crate::error::ChaosErr;
 use crate::review_format::format_review_findings_block;
 use crate::review_format::render_review_output_text;
+use crate::reviewer_orchestration::parse_strict_review_output;
 use crate::state::TaskKind;
 use chaos_ipc::user_input::UserInput;
 
@@ -68,10 +72,19 @@ impl SessionTask for ReviewTask {
             )
             .await
             {
-                Some(receiver) => {
-                    process_review_events(session.clone(), ctx.clone(), receiver).await
+                Ok(receiver) => process_review_events(session.clone(), ctx.clone(), receiver).await,
+                Err(error) => {
+                    session
+                        .clone_session()
+                        .send_event(
+                            ctx.as_ref(),
+                            EventMsg::Error(
+                                error.to_error_event(Some("Failed to start review".to_string())),
+                            ),
+                        )
+                        .await;
+                    None
                 }
-                None => None,
             };
             if !cancellation_token.is_cancelled() {
                 exit_review_mode(session.clone_session(), output.clone(), ctx.clone()).await;
@@ -96,7 +109,7 @@ async fn start_review_conversation(
     ctx: Arc<TurnContext>,
     input: Vec<UserInput>,
     cancellation_token: CancellationToken,
-) -> Option<async_channel::Receiver<Event>> {
+) -> Result<async_channel::Receiver<Event>, ChaosErr> {
     let config = ctx.config.clone();
     let mut sub_agent_config = config.as_ref().clone();
     // Carry over review-only tool restrictions so the delegate cannot
@@ -127,15 +140,7 @@ async fn start_review_conversation(
         .clone()
         .unwrap_or_else(|| ctx.model_info.slug.clone());
     sub_agent_config.model = Some(model);
-    // Anthropic Messages API rejects requests with output_schema; fall back to
-    // the prompt-embedded JSON contract (RESPONSE FORMAT in review_prompt.md).
-    let output_schema =
-        if crate::model_provider_info::is_anthropic_wire(ctx.provider.base_url.as_deref()) {
-            None
-        } else {
-            Some(review_output_schema())
-        };
-    (run_chaos_process_one_shot(
+    run_chaos_process_one_shot(
         sub_agent_config,
         session.auth_manager(),
         session.models_manager(),
@@ -144,12 +149,11 @@ async fn start_review_conversation(
         ctx.clone(),
         cancellation_token,
         SubAgentSource::Review,
-        output_schema,
+        Some(review_output_schema()),
         /*initial_history*/ None,
     )
-    .await)
-        .ok()
-        .map(|io| io.rx_event)
+    .await
+    .map(|io| io.rx_event)
 }
 
 async fn process_review_events(
@@ -177,12 +181,27 @@ async fn process_review_events(
             })
             | EventMsg::AgentMessageContentDelta(AgentMessageContentDeltaEvent { .. }) => {}
             EventMsg::TurnComplete(task_complete) => {
-                // Parse review output from the last agent message (if present).
-                let out = task_complete
+                let output = task_complete
                     .last_agent_message
                     .as_deref()
-                    .map(parse_review_output_event);
-                return out;
+                    .ok_or_else(|| anyhow::anyhow!("reviewer returned no structured output"))
+                    .and_then(parse_strict_review_output);
+                match output {
+                    Ok(output) => return Some(output),
+                    Err(error) => {
+                        session
+                            .clone_session()
+                            .send_event(
+                                ctx.as_ref(),
+                                EventMsg::Error(ErrorEvent {
+                                    message: format!("Review failed: {error}"),
+                                    chaos_error_info: Some(ChaosErrorInfo::Other),
+                                }),
+                            )
+                            .await;
+                        return None;
+                    }
+                }
             }
             EventMsg::TurnAborted(_) => {
                 // Cancellation or abort: consumer will finalize with None.
@@ -198,28 +217,6 @@ async fn process_review_events(
     }
     // Channel closed without TurnComplete: treat as interrupted.
     None
-}
-
-/// Parse a ReviewOutputEvent from a text blob returned by the reviewer model.
-/// If the text is valid JSON matching ReviewOutputEvent, deserialize it.
-/// Otherwise, attempt to extract the first JSON object substring and parse it.
-/// If parsing still fails, return a structured fallback carrying the plain text
-/// in `overall_explanation`.
-fn parse_review_output_event(text: &str) -> ReviewOutputEvent {
-    if let Ok(ev) = serde_json::from_str::<ReviewOutputEvent>(text) {
-        return ev;
-    }
-    if let (Some(start), Some(end)) = (text.find('{'), text.rfind('}'))
-        && start < end
-        && let Some(slice) = text.get(start..=end)
-        && let Ok(ev) = serde_json::from_str::<ReviewOutputEvent>(slice)
-    {
-        return ev;
-    }
-    ReviewOutputEvent {
-        overall_explanation: text.to_string(),
-        ..Default::default()
-    }
 }
 
 /// Emits an ExitedReviewMode Event with optional ReviewOutput,
@@ -248,7 +245,7 @@ pub(crate) async fn exit_review_mode(
     } else {
         let rendered = crate::client_common::REVIEW_EXIT_INTERRUPTED_TMPL.to_string();
         let assistant_message =
-            "Review was interrupted. Please re-run /review and wait for it to complete."
+            "Review did not complete. Please re-run /review and wait for it to complete."
                 .to_string();
         (rendered, assistant_message)
     };
@@ -296,6 +293,8 @@ pub(crate) async fn exit_review_mode(
 pub(crate) fn review_output_schema() -> serde_json::Value {
     let mut schema = mcp_host::macros::schema_for::<chaos_ipc::protocol::ReviewOutputEvent>();
     strip_unsupported_schema_keywords(&mut schema);
+    schema["properties"]["overall_correctness"]["enum"] =
+        serde_json::json!(["patch is correct", "patch is incorrect"]);
     schema
 }
 

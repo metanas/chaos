@@ -614,7 +614,7 @@ struct StrictReviewLineRange {
     end: u32,
 }
 
-fn parse_strict_review_output(raw_output: &str) -> anyhow::Result<Value> {
+pub(crate) fn parse_strict_review_output(raw_output: &str) -> anyhow::Result<ReviewOutputEvent> {
     let strict: StrictReviewOutput = serde_json::from_str(raw_output).map_err(|error| {
         // Serde's Display may quote private field names or values. Expose only
         // content-free format/error categories to the orchestration supervisor.
@@ -636,9 +636,8 @@ fn parse_strict_review_output(raw_output: &str) -> anyhow::Result<Value> {
     // Convert through the protocol type as a compatibility assertion: the
     // persisted payload is exactly what current ChaOS review consumers accept.
     let value = serde_json::to_value(strict)?;
-    serde_json::from_value::<ReviewOutputEvent>(value.clone())
-        .map_err(|_| anyhow::anyhow!("review output does not match the protocol schema"))?;
-    Ok(value)
+    serde_json::from_value(value)
+        .map_err(|_| anyhow::anyhow!("review output does not match the protocol schema"))
 }
 
 fn prepare_submission(
@@ -648,16 +647,15 @@ fn prepare_submission(
 ) -> anyhow::Result<Value> {
     let output = parse_strict_review_output(raw_output)?;
     if mcp_tool != REVIEW_VERDICT_TOOL {
-        return Ok(output);
+        return Ok(serde_json::to_value(output)?);
     }
 
-    let strict: StrictReviewOutput = serde_json::from_value(output)?;
-    let verdict = match strict.overall_correctness.trim() {
+    let verdict = match output.overall_correctness.trim() {
         "patch is correct" => "approve",
         "patch is incorrect" => "changes_requested",
         _ => bail!("overall_correctness must be `patch is correct` or `patch is incorrect`"),
     };
-    let summary = strict.overall_explanation.trim();
+    let summary = output.overall_explanation.trim();
     if summary.is_empty() {
         bail!("overall_explanation cannot be empty");
     }
@@ -667,8 +665,8 @@ fn prepare_submission(
         "summary": summary,
         "findings": {
             "format": "chaos.review_output.v1",
-            "items": strict.findings,
-            "overall_confidence_score": strict.overall_confidence_score
+            "items": output.findings,
+            "overall_confidence_score": output.overall_confidence_score
         },
         "idempotency_key": idempotency_key
     }))
@@ -961,13 +959,6 @@ impl ReviewerBoundary for SessionReviewerBoundary {
         crate::minions::tools::apply_spawn_agent_overrides(&mut config, child_depth);
         config.collab_enabled = false;
         config.minion_jobs_allowed = false;
-        let final_output_json_schema = config
-            .model_providers
-            .get(&binding.provider_id)
-            .filter(|provider| {
-                !crate::model_provider_info::is_anthropic_wire(provider.base_url.as_deref())
-            })
-            .map(|_| crate::tasks::review_output_schema());
         config
             .permissions
             .approval_policy
@@ -1007,7 +998,7 @@ impl ReviewerBoundary for SessionReviewerBoundary {
         });
         let options = crate::minions::control::SpawnAgentOptions {
             suppress_parent_completion_notification: true,
-            final_output_json_schema,
+            final_output_json_schema: Some(crate::tasks::review_output_schema()),
             ..Default::default()
         };
         let spawned = if let Some(process_id) = persisted_process_id {
