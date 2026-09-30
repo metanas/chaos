@@ -79,6 +79,7 @@ where
     pub(super) pending_marker_line: bool,
     pub(super) in_paragraph: bool,
     pub(super) in_code_block: bool,
+    pub(super) in_metadata_block: bool,
     pub(super) code_block_lang: Option<String>,
     pub(super) code_block_buffer: String,
     pub(super) wrap_width: Option<usize>,
@@ -115,6 +116,7 @@ where
             pending_marker_line: false,
             in_paragraph: false,
             in_code_block: false,
+            in_metadata_block: false,
             code_block_lang: None,
             code_block_buffer: String::new(),
             wrap_width,
@@ -196,7 +198,7 @@ where
     pub(super) fn flush_current_line(&mut self) {
         if let Some(line) = self.current_line_content.take() {
             let style = self.current_line_style;
-            // Keep code whitespace and pre-laid-out table borders intact.
+            // Keep literal code/metadata whitespace and pre-laid-out table borders intact.
             if !self.current_line_preformatted
                 && let Some(width) = self.wrap_width
             {
@@ -237,7 +239,7 @@ where
         self.current_subsequent_indent = self.prefix_spans(/*pending_marker_line*/ false);
         self.current_line_style = style;
         self.current_line_content = Some(line);
-        self.current_line_preformatted = self.in_code_block;
+        self.current_line_preformatted = self.in_code_block || self.in_metadata_block;
         self.line_ends_with_local_link_target = false;
 
         self.pending_marker_line = false;

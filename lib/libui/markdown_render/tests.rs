@@ -15,6 +15,7 @@ fn lines_to_strings(text: &Text<'_>) -> Vec<String> {
 }
 
 pub(crate) fn markdown_render_suite() {
+    super::literal_tests::literal_block_suite();
     super::backport_tests::backport_suite();
     super::markdown_render_tests::markdown_render_suite();
 

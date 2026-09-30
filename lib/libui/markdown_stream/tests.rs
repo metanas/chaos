@@ -18,6 +18,7 @@ async fn no_commit_until_newline() {
 }
 
 pub(crate) async fn markdown_stream_suite() {
+    super::metadata_tests::metadata_streaming_suite();
     super::reference_tests::reference_streaming_suite();
     extensions_stream_like_full_render();
     Box::pin(no_commit_until_newline()).await;

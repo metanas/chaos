@@ -74,21 +74,9 @@ where
             return;
         }
 
-        if self.in_code_block && !self.needs_newline {
-            let has_content = self
-                .current_line_content
-                .as_ref()
-                .map(|line| !line.spans.is_empty())
-                .unwrap_or_else(|| {
-                    self.text
-                        .lines
-                        .last()
-                        .map(|line| !line.spans.is_empty())
-                        .unwrap_or(false)
-                });
-            if has_content {
-                self.push_line(Line::default());
-            }
+        if self.in_code_block || self.in_metadata_block {
+            self.literal_text(&text);
+            return;
         }
         for (i, line) in text.lines().enumerate() {
             if self.needs_newline {
@@ -106,6 +94,26 @@ where
             self.push_span(span);
         }
         self.needs_newline = false;
+    }
+
+    /// Parser text events are fragments, not logical lines. CRLF normalization
+    /// and synthesized indentation can split a line into several events. Carry
+    /// its newline state across events instead of guessing from existing spans.
+    fn literal_text(&mut self, text: &str) {
+        for part in text.split_inclusive('\n') {
+            let new_line = self.needs_newline || self.current_line_content.is_none();
+            if new_line {
+                self.push_line(Line::default());
+            }
+            let content = part.strip_suffix('\n').unwrap_or(part);
+            // A standalone newline ends the current line; it is not an extra
+            // blank line unless the preceding fragment already ended a line.
+            if new_line || !content.is_empty() {
+                let style = self.inline_styles.last().copied().unwrap_or_default();
+                self.push_span(Span::styled(content.to_owned(), style));
+            }
+            self.needs_newline = part.ends_with('\n');
+        }
     }
 
     pub(super) fn code(&mut self, code: CowStr<'a>) {

@@ -48,6 +48,8 @@ impl MarkdownStreamCollector {
     /// its rows end in newlines: the renderer sizes columns from every row it
     /// can see, so a later row can change how earlier ones should be drawn.
     /// Those rows are withheld until the table closes or the stream finalizes.
+    /// Potential metadata openers wait for a closer or a blank first body line
+    /// that makes metadata impossible, including at later block boundaries.
     /// Trailing prose/list/quote blocks are also held: a later definition-list
     /// description can turn their last paragraph into a styled term. Footnote
     /// documents wait for finalization because definitions can resolve earlier
@@ -150,3 +152,6 @@ pub(crate) mod tests;
 
 #[cfg(test)]
 mod reference_tests;
+
+#[cfg(test)]
+mod metadata_tests;

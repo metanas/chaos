@@ -100,3 +100,6 @@ pub(crate) mod tests;
 
 #[cfg(test)]
 mod backport_tests;
+
+#[cfg(test)]
+mod literal_tests;

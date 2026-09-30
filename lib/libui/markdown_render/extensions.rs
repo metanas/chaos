@@ -143,6 +143,7 @@ impl<'a, I: Iterator<Item = Event<'a>>> Writer<'a, I> {
         if self.needs_newline {
             self.push_blank_line();
         }
+        self.in_metadata_block = true;
         self.push_inline_style(Style::new().dim());
         self.push_line(Line::from(Span::styled(
             metadata_marker(kind),
@@ -157,6 +158,7 @@ impl<'a, I: Iterator<Item = Event<'a>>> Writer<'a, I> {
             Style::new().dim(),
         )));
         self.pop_inline_style();
+        self.in_metadata_block = false;
         self.needs_newline = true;
     }
 }
