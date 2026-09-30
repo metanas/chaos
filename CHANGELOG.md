@@ -9,6 +9,17 @@ should. There is no patch level; the build timestamp is the patch.
 
 ## [Unreleased]
 
+### Removed
+- Legacy `user_input` submissions; callers must send `user_turn` with turn context.
+- The single `sandbox_policy` field in `user_turn`; turn submissions now carry
+  `vfs_policy` and `socket_policy` directly, preserving fine-grained restrictions.
+- Sandbox aliases and the single `sandbox_policy` field in stored turn contexts
+  and session-configured events. Both `vfs_policy` and `socket_policy` are required.
+- Compaction records without `replacement_history`. Old records are rejected;
+  no replay fallback or automatic migration remains.
+- Deprecated raw configuration loading, automatic personality migration, PTY
+  type aliases, and the unused ConPTY support shim.
+
 ## [47.9.0] - 2026-09-30
 
 Upgrading: already-migrated credential vaults continue to work unchanged.

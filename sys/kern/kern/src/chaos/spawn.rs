@@ -423,6 +423,17 @@ impl Chaos {
         state.session_configuration.process_config_snapshot()
     }
 
+    pub(crate) async fn user_turn(
+        &self,
+        items: Vec<UserInput>,
+        final_output_json_schema: Option<serde_json::Value>,
+    ) -> chaos_ipc::protocol::Op {
+        let state = self.session.state.lock().await;
+        state
+            .session_configuration
+            .user_turn(items, final_output_json_schema)
+    }
+
     pub(crate) fn runtime_db(&self) -> Option<runtime_db::RuntimeDbHandle> {
         self.session.runtime_db()
     }

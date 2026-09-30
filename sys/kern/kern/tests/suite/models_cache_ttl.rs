@@ -6,7 +6,6 @@ use chaos_ipc::openai_models::ModelVisibility;
 use chaos_ipc::openai_models::ModelsResponse;
 use chaos_ipc::protocol::EventMsg;
 use chaos_ipc::protocol::Op;
-use chaos_ipc::protocol::SandboxPolicy;
 use chaos_ipc::user_input::UserInput;
 use chaos_kern::ChaosAuth;
 use chaos_kern::ModelProviderInfo;
@@ -91,7 +90,8 @@ async fn renews_cache_ttl_on_matching_models_etag() -> Result<()> {
             final_output_json_schema: None,
             cwd: test.cwd_path().to_path_buf(),
             approval_policy: chaos_ipc::protocol::ApprovalPolicy::Headless,
-            sandbox_policy: SandboxPolicy::RootAccess,
+            vfs_policy: chaos_ipc::permissions::VfsPolicy::unrestricted(),
+            socket_policy: chaos_ipc::permissions::SocketPolicy::Enabled,
             model: test.session_configured.model.clone(),
             effort: None,
             summary: None,

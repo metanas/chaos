@@ -18,8 +18,8 @@ use crate::exec::StreamOutput;
 use crate::exec::is_likely_sandbox_denied;
 use crate::truncate::TruncationPolicy;
 use crate::truncate::formatted_truncate_text;
-use chaos_pty::ExecCommandSession;
-use chaos_pty::SpawnedPty;
+use chaos_pty::ProcessHandle;
+use chaos_pty::SpawnedProcess;
 
 use super::UNIFIED_EXEC_OUTPUT_MAX_TOKENS;
 use super::UnifiedExecError;
@@ -56,7 +56,7 @@ pub(crate) struct OutputHandles {
 
 #[derive(Debug)]
 pub(crate) struct UnifiedExecProcess {
-    process_handle: ExecCommandSession,
+    process_handle: ProcessHandle,
     output_rx: broadcast::Receiver<Vec<u8>>,
     output_buffer: OutputBuffer,
     output_notify: Arc<Notify>,
@@ -71,7 +71,7 @@ pub(crate) struct UnifiedExecProcess {
 
 impl UnifiedExecProcess {
     pub(super) fn new(
-        process_handle: ExecCommandSession,
+        process_handle: ProcessHandle,
         initial_output_rx: tokio::sync::broadcast::Receiver<Vec<u8>>,
         sandbox_type: SandboxType,
         spawn_lifecycle: SpawnLifecycleHandle,
@@ -221,11 +221,11 @@ impl UnifiedExecProcess {
     }
 
     pub(super) async fn from_spawned(
-        spawned: SpawnedPty,
+        spawned: SpawnedProcess,
         sandbox_type: SandboxType,
         spawn_lifecycle: SpawnLifecycleHandle,
     ) -> Result<Self, UnifiedExecError> {
-        let SpawnedPty {
+        let SpawnedProcess {
             session: process_handle,
             stdout_rx,
             stderr_rx,

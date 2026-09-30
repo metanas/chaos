@@ -51,12 +51,13 @@ pub async fn set_dynamic_parent_effort(sess: &Session, sub_id: String, enabled: 
     .await;
 }
 
-pub async fn user_input_or_turn(sess: &Arc<Session>, sub_id: String, op: Op) {
+pub async fn user_turn(sess: &Arc<Session>, sub_id: String, op: Op) {
     let (items, updates) = match op {
         Op::UserTurn {
             cwd,
             approval_policy,
-            sandbox_policy,
+            vfs_policy,
+            socket_policy,
             model,
             effort,
             summary,
@@ -82,7 +83,9 @@ pub async fn user_input_or_turn(sess: &Arc<Session>, sub_id: String, op: Op) {
                     cwd: Some(cwd),
                     approval_policy: Some(approval_policy),
                     approvals_reviewer: None,
-                    sandbox_policy: Some(sandbox_policy),
+                    sandbox_policy: None,
+                    vfs_policy: Some(vfs_policy),
+                    socket_policy: Some(socket_policy),
                     collaboration_mode,
                     reasoning_summary: summary,
                     service_tier,
@@ -92,16 +95,6 @@ pub async fn user_input_or_turn(sess: &Arc<Session>, sub_id: String, op: Op) {
                 },
             )
         }
-        Op::UserInput {
-            items,
-            final_output_json_schema,
-        } => (
-            items,
-            SessionSettingsUpdate {
-                final_output_json_schema: Some(final_output_json_schema),
-                ..Default::default()
-            },
-        ),
         _ => unreachable!(),
     };
     let Ok(current_context) = sess.new_turn_with_sub_id(sub_id, updates).await else {

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use chaos_ipc::ProcessId;
-use chaos_ipc::protocol::{EventMsg, Op, Submission};
+use chaos_ipc::protocol::{EventMsg, Submission};
 use chaos_ipc::user_input::UserInput;
 use chaos_kern::Process;
 use chaos_kern::ProcessTable;
@@ -53,13 +53,15 @@ pub(crate) async fn execute(
     let process_id = started.process_id;
     let process = &started.process;
 
-    let op = Op::UserInput {
-        items: vec![UserInput::Text {
-            text: prompt,
-            text_elements: Vec::new(),
-        }],
-        final_output_json_schema: None,
-    };
+    let op = process
+        .user_turn(
+            vec![UserInput::Text {
+                text: prompt,
+                text_elements: Vec::new(),
+            }],
+            None,
+        )
+        .await;
     process
         .submit_with_id(Submission {
             id: conversation_id.to_string(),

@@ -5,8 +5,6 @@ use chaos_ipc::protocol::RolloutItem;
 use chaos_ipc::protocol::TurnContextItem;
 
 use crate::context_manager::ContextManager;
-use crate::distill;
-use crate::distill::collect_user_messages;
 
 use super::session::Session;
 use super::turn_context::PreviousTurnSettings;
@@ -155,10 +153,9 @@ impl Session {
                     ) {
                         active_segment.reference_context_item = TurnReferenceContextItem::Cleared;
                     }
-                    if active_segment.base_replacement_history.is_none()
-                        && let Some(replacement_history) = &compacted.replacement_history
-                    {
-                        active_segment.base_replacement_history = Some(replacement_history);
+                    if active_segment.base_replacement_history.is_none() {
+                        active_segment.base_replacement_history =
+                            Some(&compacted.replacement_history);
                         rollout_suffix = &rollout_items[index + 1..];
                     }
                 }
@@ -271,7 +268,6 @@ impl Session {
         }
 
         let mut history = ContextManager::new();
-        let mut saw_legacy_compaction_without_replacement_history = false;
         if let Some(base_replacement_history) = base_replacement_history {
             history.replace(base_replacement_history.to_vec());
         }
@@ -287,28 +283,7 @@ impl Session {
                     );
                 }
                 RolloutItem::Compacted(compacted) => {
-                    if let Some(replacement_history) = &compacted.replacement_history {
-                        // This should actually never happen, because the reverse loop above (to build rollout_suffix)
-                        // should stop before any compaction that has Some replacement_history
-                        history.replace(replacement_history.clone());
-                    } else {
-                        saw_legacy_compaction_without_replacement_history = true;
-                        // Legacy rollouts without `replacement_history` should rebuild the
-                        // historical TurnContext at the correct insertion point from persisted
-                        // `TurnContextItem`s. These are rare enough that we currently just clear
-                        // `reference_context_item`, reinject canonical context at the end of the
-                        // resumed conversation, and accept the temporary out-of-distribution
-                        // prompt shape.
-                        // TODO(ccunningham): if we drop support for None replacement_history compaction items,
-                        // we can get rid of this second loop entirely and just build `history` directly in the first loop.
-                        let user_messages = collect_user_messages(history.raw_items());
-                        let rebuilt = distill::build_compacted_history(
-                            Vec::new(),
-                            &user_messages,
-                            &compacted.message,
-                        );
-                        history.replace(rebuilt);
-                    }
+                    history.replace(compacted.replacement_history.clone());
                 }
                 RolloutItem::EventMsg(EventMsg::ProcessRolledBack(rollback)) => {
                     history.drop_last_n_user_turns(rollback.num_turns);
@@ -328,12 +303,6 @@ impl Session {
                 Some(*turn_reference_context_item)
             }
         };
-        let reference_context_item = if saw_legacy_compaction_without_replacement_history {
-            None
-        } else {
-            reference_context_item
-        };
-
         RolloutReconstruction {
             history: history.raw_items().to_vec(),
             previous_turn_settings,

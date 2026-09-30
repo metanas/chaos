@@ -77,7 +77,7 @@ impl TestJournal {
 fn item(text: &str) -> RolloutItem {
     RolloutItem::Compacted(chaos_ipc::protocol::CompactedItem {
         message: text.into(),
-        replacement_history: None,
+        replacement_history: Vec::new(),
     })
 }
 

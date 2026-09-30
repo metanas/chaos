@@ -14,7 +14,6 @@ use chaos_ipc::protocol::ApprovalPolicy;
 use chaos_ipc::protocol::EventMsg;
 use chaos_ipc::protocol::ExecCommandSource;
 use chaos_ipc::protocol::Op;
-use chaos_ipc::protocol::SandboxPolicy;
 use chaos_ipc::user_input::UserInput;
 use chaos_kern::ChaosAuth;
 use chaos_kern::ModelProviderInfo;
@@ -169,7 +168,8 @@ async fn remote_models_long_model_slug_is_sent_with_high_reasoning() -> Result<(
             final_output_json_schema: None,
             cwd: cwd.path().to_path_buf(),
             approval_policy: config.permissions.approval_policy.value(),
-            sandbox_policy: config.permissions.sandbox_policy.get().clone(),
+            vfs_policy: config.permissions.vfs_policy.clone(),
+            socket_policy: config.permissions.socket_policy,
             model: requested_model.to_string(),
             effort: None,
             summary: None,
@@ -296,7 +296,8 @@ async fn remote_models_remote_model_uses_unified_exec() -> Result<()> {
             final_output_json_schema: None,
             cwd: cwd.path().to_path_buf(),
             approval_policy: ApprovalPolicy::Headless,
-            sandbox_policy: SandboxPolicy::RootAccess,
+            vfs_policy: chaos_ipc::permissions::VfsPolicy::unrestricted(),
+            socket_policy: chaos_ipc::permissions::SocketPolicy::Enabled,
             model: REMOTE_MODEL_SLUG.to_string(),
             effort: None,
             summary: Some(ReasoningSummary::Auto),
@@ -484,7 +485,8 @@ async fn remote_models_apply_remote_base_instructions() -> Result<()> {
             final_output_json_schema: None,
             cwd: cwd.path().to_path_buf(),
             approval_policy: ApprovalPolicy::Headless,
-            sandbox_policy: SandboxPolicy::RootAccess,
+            vfs_policy: chaos_ipc::permissions::VfsPolicy::unrestricted(),
+            socket_policy: chaos_ipc::permissions::SocketPolicy::Enabled,
             model: model.to_string(),
             effort: None,
             summary: Some(ReasoningSummary::Auto),

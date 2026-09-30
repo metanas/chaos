@@ -86,7 +86,7 @@ async fn create_process_and_round_trip_journal() {
 
     let first_item = RolloutItem::Compacted(CompactedItem {
         message: "hello".to_string(),
-        replacement_history: None,
+        replacement_history: Vec::new(),
     });
     let append = store
         .append_batch(AppendBatchInput {
@@ -328,7 +328,7 @@ async fn rejects_append_with_wrong_expected_next_seq() {
                 recorded_at: jiff::Timestamp::now(),
                 item: RolloutItem::Compacted(CompactedItem {
                     message: "bad seq".to_string(),
-                    replacement_history: None,
+                    replacement_history: Vec::new(),
                 }),
             }],
         })
@@ -357,7 +357,7 @@ async fn initialize_process_atomically_creates_row_lease_and_entries() {
     let recorded_at = jiff::Timestamp::now();
     let item = RolloutItem::Compacted(CompactedItem {
         message: "first-batch".to_string(),
-        replacement_history: None,
+        replacement_history: Vec::new(),
     });
 
     let result = store
@@ -418,7 +418,7 @@ async fn initialize_process_atomically_creates_row_lease_and_entries() {
                 recorded_at: jiff::Timestamp::now(),
                 item: RolloutItem::Compacted(CompactedItem {
                     message: "second".to_string(),
-                    replacement_history: None,
+                    replacement_history: Vec::new(),
                 }),
             }],
         })

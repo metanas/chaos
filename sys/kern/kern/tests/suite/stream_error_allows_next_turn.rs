@@ -1,5 +1,4 @@
 use chaos_ipc::protocol::EventMsg;
-use chaos_ipc::protocol::Op;
 use chaos_ipc::user_input::UserInput;
 use chaos_kern::ModelProviderInfo;
 use chaos_kern::WireApi;
@@ -100,13 +99,17 @@ async fn continue_after_stream_error() {
         .unwrap();
 
     chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "first message".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
+        .submit(
+            chaos
+                .user_turn(
+                    vec![UserInput::Text {
+                        text: "first message".into(),
+                        text_elements: Vec::new(),
+                    }],
+                    None,
+                )
+                .await,
+        )
         .await
         .unwrap();
 
@@ -119,13 +122,17 @@ async fn continue_after_stream_error() {
     // mock server SSE stream. If the agent failed to clear the running task on
     // error above, this submission would be rejected/queued indefinitely.
     chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "follow up".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
+        .submit(
+            chaos
+                .user_turn(
+                    vec![UserInput::Text {
+                        text: "follow up".into(),
+                        text_elements: Vec::new(),
+                    }],
+                    None,
+                )
+                .await,
+        )
         .await
         .unwrap();
 

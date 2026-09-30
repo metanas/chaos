@@ -2,7 +2,6 @@
 //! delivering a `response.completed` event.
 
 use chaos_ipc::protocol::EventMsg;
-use chaos_ipc::protocol::Op;
 use chaos_ipc::user_input::UserInput;
 use chaos_kern::ModelProviderInfo;
 use chaos_kern::WireApi;
@@ -84,13 +83,17 @@ async fn retries_on_early_close() {
         .unwrap();
 
     chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
+        .submit(
+            chaos
+                .user_turn(
+                    vec![UserInput::Text {
+                        text: "hello".into(),
+                        text_elements: Vec::new(),
+                    }],
+                    None,
+                )
+                .await,
+        )
         .await
         .unwrap();
 

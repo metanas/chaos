@@ -33,7 +33,7 @@ fn compacted(seq: i64, summary: &str) -> JournalEntry {
         recorded_at: Timestamp::from_second(seq).expect("valid timestamp"),
         item: RolloutItem::Compacted(CompactedItem {
             message: summary.to_string(),
-            replacement_history: Some(Vec::new()),
+            replacement_history: Vec::new(),
         }),
     }
 }

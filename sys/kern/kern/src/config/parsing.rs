@@ -105,36 +105,3 @@ fn merge_toml_value(base: &mut TomlValue, overlay: TomlValue) {
         }
     }
 }
-
-/// Load the global config as a raw `ConfigToml` (without applying requirements).
-///
-/// DEPRECATED: Use `Config::load_with_cli_overrides()` instead because working
-/// with `ConfigToml` directly means that `ConfigRequirements` have not been
-/// applied yet, which risks failing to enforce required constraints.
-pub async fn load_config_as_toml_with_cli_overrides(
-    chaos_home: &Path,
-    cwd: &AbsolutePathBuf,
-    cli_overrides: Vec<(String, TomlValue)>,
-) -> std::io::Result<ConfigToml> {
-    use crate::config_loader::LoaderOverrides;
-    use crate::config_loader::load_config_layers_state;
-
-    let config_layer_stack = load_config_layers_state(
-        chaos_home,
-        Some(cwd.clone()),
-        &cli_overrides,
-        LoaderOverrides::default(),
-    )
-    .await?;
-
-    let mut merged_toml = config_layer_stack.effective_config();
-    if let Some(table) = merged_toml.as_table_mut() {
-        table.remove("mcp_servers");
-    }
-    let cfg = deserialize_config_toml_with_base(merged_toml, chaos_home).map_err(|e| {
-        tracing::error!("Failed to deserialize overridden config: {e}");
-        e
-    })?;
-
-    Ok(cfg)
-}

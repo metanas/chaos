@@ -15,7 +15,7 @@
 //! `Drain` joins every currently-dispatched subtask before acking.
 //! This only covers the routed body (the state mutation itself) —
 //! post-reply work in the caller (slot commit, completion-watcher
-//! spawn, initial `Op::UserInput` submission) is not covered and
+//! spawn, initial `Op::UserTurn` submission) is not covered and
 //! must be waited on separately by the turn-boundary handler.
 //!
 //! Read paths (`get_process`, `list_process_ids`, `send_op`, etc.)

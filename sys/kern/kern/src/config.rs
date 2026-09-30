@@ -353,6 +353,19 @@ pub struct Permissions {
     pub macos_seatbelt_profile_extensions: Option<MacOsSeatbeltProfileExtensions>,
 }
 
+impl Permissions {
+    pub fn set_sandbox_policy(
+        &mut self,
+        policy: SandboxPolicy,
+        cwd: &std::path::Path,
+    ) -> ConstraintResult<()> {
+        self.sandbox_policy.set(policy)?;
+        self.vfs_policy = VfsPolicy::from_sandbox_policy(self.sandbox_policy.get(), cwd);
+        self.socket_policy = SocketPolicy::from(self.sandbox_policy.get());
+        Ok(())
+    }
+}
+
 /// Application configuration loaded from disk and merged with overrides.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
@@ -1165,17 +1178,6 @@ pub(crate) fn resolve_web_search_mode_for_turn(
     }
 
     WebSearchMode::Disabled
-}
-
-/// DEPRECATED: Use [Config::load_with_cli_overrides()] instead because working
-/// with [ConfigToml] directly means that [ConfigRequirements] have not been
-/// applied yet, which risks failing to enforce required constraints.
-pub async fn load_config_as_toml_with_cli_overrides(
-    chaos_home: &std::path::Path,
-    cwd: &AbsolutePathBuf,
-    cli_overrides: Vec<(String, TomlValue)>,
-) -> std::io::Result<ConfigToml> {
-    parsing::load_config_as_toml_with_cli_overrides(chaos_home, cwd, cli_overrides).await
 }
 
 pub(crate) fn deserialize_config_toml_with_base(

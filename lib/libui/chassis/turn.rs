@@ -7,9 +7,10 @@ use chaos_ipc::config_types::Personality;
 use chaos_ipc::config_types::ReasoningSummary;
 use chaos_ipc::config_types::ServiceTier;
 use chaos_ipc::openai_models::ReasoningEffort;
+use chaos_ipc::permissions::SocketPolicy;
+use chaos_ipc::permissions::VfsPolicy;
 use chaos_ipc::protocol::ApprovalPolicy;
 use chaos_ipc::protocol::Op;
-use chaos_ipc::protocol::SandboxPolicy;
 use chaos_ipc::user_input::TextElement;
 use chaos_ipc::user_input::UserInput;
 use serde_json::Value;
@@ -18,7 +19,8 @@ use serde_json::Value;
 pub struct TurnContext {
     pub cwd: PathBuf,
     pub approval_policy: ApprovalPolicy,
-    pub sandbox_policy: SandboxPolicy,
+    pub vfs_policy: VfsPolicy,
+    pub socket_policy: SocketPolicy,
     pub model: String,
     pub effort: Option<ReasoningEffort>,
     pub summary: Option<ReasoningSummary>,
@@ -55,7 +57,8 @@ impl TurnSubmission {
             items: self.items,
             cwd: ctx.cwd,
             approval_policy: ctx.approval_policy,
-            sandbox_policy: ctx.sandbox_policy,
+            vfs_policy: ctx.vfs_policy,
+            socket_policy: ctx.socket_policy,
             model: ctx.model,
             effort: ctx.effort,
             summary: ctx.summary,

@@ -8,7 +8,6 @@ use std::time::Instant;
 use chaos_ipc::protocol::ApprovalPolicy;
 use chaos_ipc::protocol::EventMsg;
 use chaos_ipc::protocol::Op;
-use chaos_ipc::protocol::SandboxPolicy;
 use chaos_ipc::user_input::UserInput;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
@@ -42,7 +41,8 @@ async fn run_turn(test: &TestChaos, prompt: &str) -> anyhow::Result<()> {
             final_output_json_schema: None,
             cwd: test.cwd.path().to_path_buf(),
             approval_policy: ApprovalPolicy::Headless,
-            sandbox_policy: SandboxPolicy::RootAccess,
+            vfs_policy: chaos_ipc::permissions::VfsPolicy::unrestricted(),
+            socket_policy: chaos_ipc::permissions::SocketPolicy::Enabled,
             model: session_model,
             effort: None,
             summary: None,
@@ -358,7 +358,8 @@ async fn shell_tools_start_before_response_completed_when_stream_delayed() -> an
             final_output_json_schema: None,
             cwd: test.cwd.path().to_path_buf(),
             approval_policy: ApprovalPolicy::Headless,
-            sandbox_policy: SandboxPolicy::RootAccess,
+            vfs_policy: chaos_ipc::permissions::VfsPolicy::unrestricted(),
+            socket_policy: chaos_ipc::permissions::SocketPolicy::Enabled,
             model: session_model,
             effort: None,
             summary: None,

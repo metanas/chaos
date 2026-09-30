@@ -307,13 +307,15 @@ async fn send_input_submits_user_message() {
     assert!(!submission_id.is_empty());
     let expected = (
         process_id,
-        Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello from tests".to_string(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        },
+        _thread
+            .user_turn(
+                vec![UserInput::Text {
+                    text: "hello from tests".to_string(),
+                    text_elements: Vec::new(),
+                }],
+                None,
+            )
+            .await,
     );
     let captured = harness
         .manager
@@ -338,13 +340,15 @@ async fn spawn_agent_creates_process_and_sends_prompt() {
         .expect("thread should be registered");
     let expected = (
         process_id,
-        Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "spawned".to_string(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        },
+        _thread
+            .user_turn(
+                vec![UserInput::Text {
+                    text: "spawned".to_string(),
+                    text_elements: Vec::new(),
+                }],
+                None,
+            )
+            .await,
     );
     let captured = harness
         .manager
@@ -381,13 +385,19 @@ async fn spawn_agent_options_attach_the_final_output_schema_to_initial_input() {
         .process_id;
     let expected = (
         process_id,
-        Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "review".to_string(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: Some(schema),
-        },
+        harness
+            .manager
+            .get_process(process_id)
+            .await
+            .unwrap()
+            .user_turn(
+                vec![UserInput::Text {
+                    text: "review".to_string(),
+                    text_elements: Vec::new(),
+                }],
+                Some(schema),
+            )
+            .await,
     );
 
     assert!(
@@ -462,13 +472,15 @@ async fn spawn_agent_can_fork_parent_thread_history() {
 
     let expected = (
         child_process_id,
-        Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "child task".to_string(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        },
+        child_thread
+            .user_turn(
+                vec![UserInput::Text {
+                    text: "child task".to_string(),
+                    text_elements: Vec::new(),
+                }],
+                None,
+            )
+            .await,
     );
     let captured = harness
         .manager
@@ -962,7 +974,7 @@ fn sanitize_forked_history_keeps_conversation_and_spawn_call() {
         }),
         RolloutItem::Compacted(CompactedItem {
             message: "summary".to_string(),
-            replacement_history: None,
+            replacement_history: Vec::new(),
         }),
         function_call("call-spawn"),
     ];

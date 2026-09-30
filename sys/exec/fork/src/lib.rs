@@ -31,15 +31,9 @@ use chaos_kern::check_execpolicy_for_warnings;
 use chaos_kern::config::Config;
 use chaos_kern::config::ConfigBuilder;
 use chaos_kern::config::ConfigOverrides;
-use chaos_kern::config::load_config_as_toml_with_cli_overrides;
-use chaos_kern::config_loader::ConfigLoadError;
-use chaos_kern::config_loader::format_config_error_with_source;
-use chaos_kern::config_loader::format_error_chain;
 use chaos_kern::format_exec_policy_error_with_source;
 use chaos_kern::git_info::get_git_repo_root;
 use chaos_kern::models_manager::CollaborationModesConfig;
-use chaos_pwd::find_chaos_home;
-use chaos_realpath::AbsolutePathBuf;
 use chaos_snitch::set_parent_from_context;
 use chaos_snitch::traceparent_context_from_env;
 pub use cli::Cli;
@@ -283,46 +277,6 @@ pub async fn run_main(mut cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Re
     };
 
     let resolved_cwd = cwd.clone();
-    let config_cwd = match resolved_cwd.as_deref() {
-        Some(path) => AbsolutePathBuf::from_absolute_path(path.canonicalize()?)?,
-        None => AbsolutePathBuf::current_dir()?,
-    };
-
-    // we load config.toml here to determine project state.
-    #[allow(clippy::print_stderr)]
-    let chaos_home = match find_chaos_home() {
-        Ok(chaos_home) => chaos_home,
-        Err(err) => {
-            eprintln!("Error finding chaos home: {err}");
-            std::process::exit(1);
-        }
-    };
-
-    #[allow(clippy::print_stderr)]
-    let _config_toml = match load_config_as_toml_with_cli_overrides(
-        &chaos_home,
-        &config_cwd,
-        cli_kv_overrides.clone(),
-    )
-    .await
-    {
-        Ok(config_toml) => config_toml,
-        Err(err) => {
-            let config_error = err
-                .get_ref()
-                .and_then(|err| err.downcast_ref::<ConfigLoadError>())
-                .map(ConfigLoadError::config_error);
-            if let Some(config_error) = config_error {
-                eprintln!(
-                    "Error loading config.toml:\n{}",
-                    format_config_error_with_source(config_error)
-                );
-            } else {
-                eprintln!("Error loading config.toml: {}", format_error_chain(&err));
-            }
-            std::process::exit(1);
-        }
-    };
 
     // Promote `-c model_provider=<name>` (which is where `--provider` lands)
     // into the typed override, so an explicitly chosen provider does not
@@ -525,7 +479,8 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
 
     let default_cwd = config.cwd.to_path_buf();
     let default_approval_policy = config.permissions.approval_policy.value();
-    let default_sandbox_policy = config.permissions.sandbox_policy.get();
+    let default_vfs_policy = config.permissions.vfs_policy.clone();
+    let default_socket_policy = config.permissions.socket_policy;
     let default_effort = config.model_reasoning_effort;
 
     // When --yolo (headless) is set, also skip the git repo check
@@ -651,7 +606,8 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
                     items: items.into_iter().collect(),
                     cwd: default_cwd,
                     approval_policy: default_approval_policy,
-                    sandbox_policy: default_sandbox_policy.clone(),
+                    vfs_policy: default_vfs_policy,
+                    socket_policy: default_socket_policy,
                     model: session_configured.model.clone(),
                     effort: default_effort,
                     summary: None,

@@ -4,7 +4,6 @@ use chaos_ipc::protocol::ApprovalPolicy;
 use chaos_ipc::protocol::EventMsg;
 use chaos_ipc::protocol::ItemCompletedEvent;
 use chaos_ipc::protocol::Op;
-use chaos_ipc::protocol::SandboxPolicy;
 use chaos_ipc::user_input::UserInput;
 use core_test_support::responses;
 use core_test_support::skip_if_no_network;
@@ -85,7 +84,8 @@ async fn codex_returns_json_result(model: String) -> anyhow::Result<()> {
             final_output_json_schema: Some(serde_json::from_str(SCHEMA)?),
             cwd: cwd.path().to_path_buf(),
             approval_policy: ApprovalPolicy::Headless,
-            sandbox_policy: SandboxPolicy::RootAccess,
+            vfs_policy: chaos_ipc::permissions::VfsPolicy::unrestricted(),
+            socket_policy: chaos_ipc::permissions::SocketPolicy::Enabled,
             model,
             effort: None,
             summary: None,

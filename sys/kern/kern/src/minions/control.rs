@@ -211,7 +211,7 @@ impl AgentControl {
     /// `ProcessTableOp::Drain`: only the routed state mutation is
     /// awaited. Post-reply work performed by the caller after the
     /// reply lands (slot commit, process-created notification,
-    /// initial `Op::UserInput` submission, completion-watcher spawn)
+    /// initial `Op::UserTurn` submission, completion-watcher spawn)
     /// is *not* covered; turn-boundary handlers that need a stronger
     /// barrier must join that work separately.
     pub(crate) async fn drain(&self) -> ChaosResult<()> {
@@ -608,15 +608,9 @@ impl AgentControl {
         final_output_json_schema: Option<Value>,
     ) -> ChaosResult<String> {
         let state = self.upgrade()?;
-        let result = state
-            .send_op(
-                agent_id,
-                Op::UserInput {
-                    items,
-                    final_output_json_schema,
-                },
-            )
-            .await;
+        let process = state.get_process(agent_id).await?;
+        let op = process.user_turn(items, final_output_json_schema).await;
+        let result = state.send_op(agent_id, op).await;
         if matches!(result, Err(ChaosErr::InternalAgentDied)) {
             let _ = state.remove_process(&agent_id).await;
             self.state.release_spawned_thread(agent_id);

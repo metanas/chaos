@@ -62,10 +62,7 @@ async fn user_message_item_is_emitted() -> anyhow::Result<()> {
     };
 
     chaos
-        .submit(Op::UserInput {
-            items: vec![expected_input.clone()],
-            final_output_json_schema: None,
-        })
+        .submit(chaos.user_turn(vec![expected_input.clone()], None).await)
         .await?;
 
     let started_item = wait_for_event_match(&chaos, |ev| match ev {
@@ -112,13 +109,17 @@ async fn assistant_message_item_is_emitted() -> anyhow::Result<()> {
     mount_sse_once(&server, first_response).await;
 
     chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "please summarize results".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
+        .submit(
+            chaos
+                .user_turn(
+                    vec![UserInput::Text {
+                        text: "please summarize results".into(),
+                        text_elements: Vec::new(),
+                    }],
+                    None,
+                )
+                .await,
+        )
         .await?;
 
     let started = wait_for_event_match(&chaos, |ev| match ev {
@@ -175,13 +176,17 @@ async fn reasoning_item_is_emitted() -> anyhow::Result<()> {
     mount_sse_once(&server, first_response).await;
 
     chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "explain your reasoning".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
+        .submit(
+            chaos
+                .user_turn(
+                    vec![UserInput::Text {
+                        text: "explain your reasoning".into(),
+                        text_elements: Vec::new(),
+                    }],
+                    None,
+                )
+                .await,
+        )
         .await?;
 
     let started = wait_for_event_match(&chaos, |ev| match ev {
@@ -239,13 +244,17 @@ async fn web_search_item_is_emitted() -> anyhow::Result<()> {
     mount_sse_once(&server, first_response).await;
 
     chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "find the weather".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
+        .submit(
+            chaos
+                .user_turn(
+                    vec![UserInput::Text {
+                        text: "find the weather".into(),
+                        text_elements: Vec::new(),
+                    }],
+                    None,
+                )
+                .await,
+        )
         .await?;
 
     let started = wait_for_event_match(&chaos, |ev| match ev {
@@ -302,13 +311,17 @@ async fn image_generation_call_event_is_emitted() -> anyhow::Result<()> {
     mount_sse_once(&server, first_response).await;
 
     chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "generate a tiny blue square".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
+        .submit(
+            chaos
+                .user_turn(
+                    vec![UserInput::Text {
+                        text: "generate a tiny blue square".into(),
+                        text_elements: Vec::new(),
+                    }],
+                    None,
+                )
+                .await,
+        )
         .await?;
 
     let started = wait_for_event_match(&chaos, |ev| match ev {
@@ -369,13 +382,17 @@ async fn image_generation_call_event_is_emitted_when_image_save_fails() -> anyho
     mount_sse_once(&server, first_response).await;
 
     chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "generate an image".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
+        .submit(
+            chaos
+                .user_turn(
+                    vec![UserInput::Text {
+                        text: "generate an image".into(),
+                        text_elements: Vec::new(),
+                    }],
+                    None,
+                )
+                .await,
+        )
         .await?;
 
     let started = wait_for_event_match(&chaos, |ev| match ev {
@@ -430,13 +447,17 @@ async fn agent_message_content_delta_has_item_metadata() -> anyhow::Result<()> {
     mount_sse_once(&server, stream).await;
 
     chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "please stream text".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
+        .submit(
+            chaos
+                .user_turn(
+                    vec![UserInput::Text {
+                        text: "please stream text".into(),
+                        text_elements: Vec::new(),
+                    }],
+                    None,
+                )
+                .await,
+        )
         .await?;
 
     let (started_turn_id, started_item) = wait_for_event_match(&chaos, |ev| match ev {
@@ -516,7 +537,8 @@ async fn plan_mode_emits_plan_item_from_proposed_plan_block() -> anyhow::Result<
             final_output_json_schema: None,
             cwd: std::env::current_dir()?,
             approval_policy: chaos_ipc::protocol::ApprovalPolicy::Headless,
-            sandbox_policy: chaos_ipc::protocol::SandboxPolicy::RootAccess,
+            vfs_policy: chaos_ipc::permissions::VfsPolicy::unrestricted(),
+            socket_policy: chaos_ipc::permissions::SocketPolicy::Enabled,
             model: session_configured.model.clone(),
             effort: None,
             summary: None,
@@ -594,7 +616,8 @@ async fn plan_mode_strips_plan_from_agent_messages() -> anyhow::Result<()> {
             final_output_json_schema: None,
             cwd: std::env::current_dir()?,
             approval_policy: chaos_ipc::protocol::ApprovalPolicy::Headless,
-            sandbox_policy: chaos_ipc::protocol::SandboxPolicy::RootAccess,
+            vfs_policy: chaos_ipc::permissions::VfsPolicy::unrestricted(),
+            socket_policy: chaos_ipc::permissions::SocketPolicy::Enabled,
             model: session_configured.model.clone(),
             effort: None,
             summary: None,
@@ -704,7 +727,8 @@ async fn plan_mode_streaming_citations_are_stripped_across_added_deltas_and_done
             final_output_json_schema: None,
             cwd: std::env::current_dir()?,
             approval_policy: chaos_ipc::protocol::ApprovalPolicy::Headless,
-            sandbox_policy: chaos_ipc::protocol::SandboxPolicy::RootAccess,
+            vfs_policy: chaos_ipc::permissions::VfsPolicy::unrestricted(),
+            socket_policy: chaos_ipc::permissions::SocketPolicy::Enabled,
             model: session_configured.model.clone(),
             effort: None,
             summary: None,
@@ -892,7 +916,8 @@ async fn plan_mode_streaming_proposed_plan_tag_split_across_added_and_delta_is_p
             final_output_json_schema: None,
             cwd: std::env::current_dir()?,
             approval_policy: chaos_ipc::protocol::ApprovalPolicy::Headless,
-            sandbox_policy: chaos_ipc::protocol::SandboxPolicy::RootAccess,
+            vfs_policy: chaos_ipc::permissions::VfsPolicy::unrestricted(),
+            socket_policy: chaos_ipc::permissions::SocketPolicy::Enabled,
             model: session_configured.model.clone(),
             effort: None,
             summary: None,
@@ -1007,7 +1032,8 @@ async fn plan_mode_handles_missing_plan_close_tag() -> anyhow::Result<()> {
             final_output_json_schema: None,
             cwd: std::env::current_dir()?,
             approval_policy: chaos_ipc::protocol::ApprovalPolicy::Headless,
-            sandbox_policy: chaos_ipc::protocol::SandboxPolicy::RootAccess,
+            vfs_policy: chaos_ipc::permissions::VfsPolicy::unrestricted(),
+            socket_policy: chaos_ipc::permissions::SocketPolicy::Enabled,
             model: session_configured.model.clone(),
             effort: None,
             summary: None,
@@ -1081,13 +1107,17 @@ async fn reasoning_content_delta_has_item_metadata() -> anyhow::Result<()> {
     mount_sse_once(&server, stream).await;
 
     chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "reason through it".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
+        .submit(
+            chaos
+                .user_turn(
+                    vec![UserInput::Text {
+                        text: "reason through it".into(),
+                        text_elements: Vec::new(),
+                    }],
+                    None,
+                )
+                .await,
+        )
         .await?;
 
     let reasoning_item = wait_for_event_match(&chaos, |ev| match ev {
@@ -1133,13 +1163,17 @@ async fn reasoning_raw_content_delta_emitted() -> anyhow::Result<()> {
     mount_sse_once(&server, stream).await;
 
     chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "show raw reasoning".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
+        .submit(
+            chaos
+                .user_turn(
+                    vec![UserInput::Text {
+                        text: "show raw reasoning".into(),
+                        text_elements: Vec::new(),
+                    }],
+                    None,
+                )
+                .await,
+        )
         .await?;
 
     let reasoning_item = wait_for_event_match(&chaos, |ev| match ev {

@@ -5,7 +5,6 @@ use chaos_ipc::protocol::ApprovalPolicy;
 use chaos_ipc::protocol::EventMsg;
 use chaos_ipc::protocol::ModelRerouteReason;
 use chaos_ipc::protocol::Op;
-use chaos_ipc::protocol::SandboxPolicy;
 use chaos_ipc::user_input::UserInput;
 use core_test_support::responses::mount_response_once;
 use core_test_support::responses::sse;
@@ -41,7 +40,8 @@ async fn openai_model_header_mismatch_emits_warning_event_and_warning_item() -> 
             final_output_json_schema: None,
             cwd: test.cwd_path().to_path_buf(),
             approval_policy: ApprovalPolicy::Headless,
-            sandbox_policy: SandboxPolicy::RootAccess,
+            vfs_policy: chaos_ipc::permissions::VfsPolicy::unrestricted(),
+            socket_policy: chaos_ipc::permissions::SocketPolicy::Enabled,
             model: REQUESTED_MODEL.to_string(),
             effort: test.config.model_reasoning_effort,
             summary: None,
@@ -140,7 +140,8 @@ async fn response_model_field_mismatch_emits_warning_when_header_matches_request
             final_output_json_schema: None,
             cwd: test.cwd_path().to_path_buf(),
             approval_policy: ApprovalPolicy::Headless,
-            sandbox_policy: SandboxPolicy::RootAccess,
+            vfs_policy: chaos_ipc::permissions::VfsPolicy::unrestricted(),
+            socket_policy: chaos_ipc::permissions::SocketPolicy::Enabled,
             model: REQUESTED_MODEL.to_string(),
             effort: test.config.model_reasoning_effort,
             summary: None,
@@ -207,7 +208,8 @@ async fn openai_model_header_casing_only_mismatch_does_not_warn() -> Result<()> 
             final_output_json_schema: None,
             cwd: test.cwd_path().to_path_buf(),
             approval_policy: ApprovalPolicy::Headless,
-            sandbox_policy: SandboxPolicy::RootAccess,
+            vfs_policy: chaos_ipc::permissions::VfsPolicy::unrestricted(),
+            socket_policy: chaos_ipc::permissions::SocketPolicy::Enabled,
             model: REQUESTED_MODEL.to_string(),
             effort: test.config.model_reasoning_effort,
             summary: None,

@@ -1,5 +1,4 @@
 use chaos_ipc::protocol::EventMsg;
-use chaos_ipc::protocol::Op;
 use chaos_ipc::user_input::UserInput;
 use chaos_test_fixtures::TEST_MODEL;
 use core_test_support::responses;
@@ -99,13 +98,17 @@ async fn injected_user_input_triggers_follow_up_request_with_deltas() {
         .process;
 
     chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "first prompt".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
+        .submit(
+            chaos
+                .user_turn(
+                    vec![UserInput::Text {
+                        text: "first prompt".into(),
+                        text_elements: Vec::new(),
+                    }],
+                    None,
+                )
+                .await,
+        )
         .await
         .unwrap();
 
@@ -115,13 +118,17 @@ async fn injected_user_input_triggers_follow_up_request_with_deltas() {
     .await;
 
     chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "second prompt".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
+        .submit(
+            chaos
+                .user_turn(
+                    vec![UserInput::Text {
+                        text: "second prompt".into(),
+                        text_elements: Vec::new(),
+                    }],
+                    None,
+                )
+                .await,
+        )
         .await
         .unwrap();
 

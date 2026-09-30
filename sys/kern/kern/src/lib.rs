@@ -81,7 +81,6 @@ mod model_identity_registry;
 mod model_provider_info;
 pub(crate) mod modes;
 pub mod path_utils;
-pub mod personality_migration;
 mod sandbox_tags;
 pub mod sandboxing;
 mod scheduled_exec;

@@ -157,7 +157,7 @@ async fn initialize_process_round_trip_over_http() {
     });
     let transcript_item = RolloutItem::Compacted(CompactedItem {
         message: "opening turn".to_string(),
-        replacement_history: None,
+        replacement_history: Vec::new(),
     });
 
     let request_body = serde_json::to_vec(&RequestEnvelope {

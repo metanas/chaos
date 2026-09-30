@@ -5,7 +5,6 @@ use chaos_ipc::openai_models::ModelsResponse;
 use chaos_ipc::protocol::ApprovalPolicy;
 use chaos_ipc::protocol::EventMsg;
 use chaos_ipc::protocol::Op;
-use chaos_ipc::protocol::SandboxPolicy;
 use chaos_ipc::user_input::UserInput;
 use chaos_kern::ChaosAuth;
 use chaos_test_fixtures::TEST_MODEL;
@@ -101,7 +100,8 @@ async fn refresh_models_on_models_etag_mismatch_and_avoid_duplicate_models_fetch
             final_output_json_schema: None,
             cwd: cwd.path().to_path_buf(),
             approval_policy: ApprovalPolicy::Headless,
-            sandbox_policy: SandboxPolicy::RootAccess,
+            vfs_policy: chaos_ipc::permissions::VfsPolicy::unrestricted(),
+            socket_policy: chaos_ipc::permissions::SocketPolicy::Enabled,
             model: session_model,
             effort: None,
             summary: None,

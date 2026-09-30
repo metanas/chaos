@@ -105,24 +105,32 @@ async fn prefixes_context_and_instructions_once_and_consistently_across_requests
         .await?;
 
     chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello 1".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
+        .submit(
+            chaos
+                .user_turn(
+                    vec![UserInput::Text {
+                        text: "hello 1".into(),
+                        text_elements: Vec::new(),
+                    }],
+                    None,
+                )
+                .await,
+        )
         .await?;
     wait_for_event(&chaos, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello 2".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
+        .submit(
+            chaos
+                .user_turn(
+                    vec![UserInput::Text {
+                        text: "hello 2".into(),
+                        text_elements: Vec::new(),
+                    }],
+                    None,
+                )
+                .await,
+        )
         .await?;
     wait_for_event(&chaos, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
@@ -198,13 +206,17 @@ async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() -> an
 
     // First turn
     chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello 1".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
+        .submit(
+            chaos
+                .user_turn(
+                    vec![UserInput::Text {
+                        text: "hello 1".into(),
+                        text_elements: Vec::new(),
+                    }],
+                    None,
+                )
+                .await,
+        )
         .await?;
     wait_for_event(&chaos, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
@@ -232,15 +244,25 @@ async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() -> an
         })
         .await?;
 
-    // Second turn after overrides
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while chaos.config_snapshot().await.reasoning_effort != Some(ReasoningEffort::High) {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await?;
+
     chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello 2".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
+        .submit(
+            chaos
+                .user_turn(
+                    vec![UserInput::Text {
+                        text: "hello 2".into(),
+                        text_elements: Vec::new(),
+                    }],
+                    None,
+                )
+                .await,
+        )
         .await?;
     wait_for_event(&chaos, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
@@ -308,13 +330,17 @@ async fn per_turn_overrides_keep_cached_prefix_and_key_constant() -> anyhow::Res
 
     // First turn
     chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello 1".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
+        .submit(
+            chaos
+                .user_turn(
+                    vec![UserInput::Text {
+                        text: "hello 1".into(),
+                        text_elements: Vec::new(),
+                    }],
+                    None,
+                )
+                .await,
+        )
         .await?;
     wait_for_event(&chaos, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
@@ -336,7 +362,11 @@ async fn per_turn_overrides_keep_cached_prefix_and_key_constant() -> anyhow::Res
             }],
             cwd: new_cwd.path().to_path_buf(),
             approval_policy: ApprovalPolicy::Headless,
-            sandbox_policy: new_policy.clone(),
+            vfs_policy: chaos_ipc::permissions::VfsPolicy::from_sandbox_policy(
+                &new_policy,
+                new_cwd.path(),
+            ),
+            socket_policy: (&new_policy).into(),
             model: "o3".to_string(),
             effort: Some(ReasoningEffort::High),
             summary: Some(ReasoningSummary::Detailed),
@@ -437,7 +467,6 @@ async fn send_user_turn_with_no_changes_does_not_send_environment_context() -> a
 
     let default_cwd = config.cwd.clone();
     let default_approval_policy = config.permissions.approval_policy.value();
-    let default_sandbox_policy = config.permissions.sandbox_policy.get();
     let default_model = session_configured.model;
     let default_effort = config.model_reasoning_effort;
     let default_summary = config.model_reasoning_summary;
@@ -450,7 +479,8 @@ async fn send_user_turn_with_no_changes_does_not_send_environment_context() -> a
             }],
             cwd: default_cwd.clone(),
             approval_policy: default_approval_policy,
-            sandbox_policy: default_sandbox_policy.clone(),
+            vfs_policy: config.permissions.vfs_policy.clone(),
+            socket_policy: config.permissions.socket_policy,
             model: default_model.clone(),
             effort: default_effort,
             summary: Some(default_summary.unwrap_or(ReasoningSummary::Auto)),
@@ -470,7 +500,8 @@ async fn send_user_turn_with_no_changes_does_not_send_environment_context() -> a
             }],
             cwd: default_cwd.clone(),
             approval_policy: default_approval_policy,
-            sandbox_policy: default_sandbox_policy.clone(),
+            vfs_policy: config.permissions.vfs_policy.clone(),
+            socket_policy: config.permissions.socket_policy,
             model: default_model.clone(),
             effort: default_effort,
             summary: Some(default_summary.unwrap_or(ReasoningSummary::Auto)),
@@ -556,7 +587,6 @@ async fn send_user_turn_with_changes_sends_environment_context() -> anyhow::Resu
 
     let default_cwd = config.cwd.clone();
     let default_approval_policy = config.permissions.approval_policy.value();
-    let default_sandbox_policy = config.permissions.sandbox_policy.get();
     let default_model = session_configured.model;
     let default_effort = config.model_reasoning_effort;
     let default_summary = config.model_reasoning_summary;
@@ -569,7 +599,8 @@ async fn send_user_turn_with_changes_sends_environment_context() -> anyhow::Resu
             }],
             cwd: default_cwd.clone(),
             approval_policy: default_approval_policy,
-            sandbox_policy: default_sandbox_policy.clone(),
+            vfs_policy: config.permissions.vfs_policy.clone(),
+            socket_policy: config.permissions.socket_policy,
             model: default_model,
             effort: default_effort,
             summary: Some(default_summary.unwrap_or(ReasoningSummary::Auto)),
@@ -589,7 +620,8 @@ async fn send_user_turn_with_changes_sends_environment_context() -> anyhow::Resu
             }],
             cwd: default_cwd.clone(),
             approval_policy: ApprovalPolicy::Headless,
-            sandbox_policy: SandboxPolicy::RootAccess,
+            vfs_policy: (&SandboxPolicy::RootAccess).into(),
+            socket_policy: (&SandboxPolicy::RootAccess).into(),
             model: "o3".to_string(),
             effort: Some(ReasoningEffort::High),
             summary: Some(ReasoningSummary::Detailed),

@@ -152,11 +152,8 @@ pub(crate) async fn run_chaos_process_one_shot(
     .await?;
 
     // Send the initial input to kick off the one-shot turn.
-    io.submit(Op::UserInput {
-        items: input,
-        final_output_json_schema,
-    })
-    .await?;
+    io.submit(io.user_turn(input, final_output_json_schema).await)
+        .await?;
 
     // Bridge events so we can observe completion and shut down automatically.
     let (tx_bridge, rx_bridge) = async_channel::bounded(SUBMISSION_CHANNEL_CAPACITY);

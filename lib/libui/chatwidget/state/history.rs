@@ -140,7 +140,8 @@ impl ChatWidget {
             TurnContext {
                 cwd: self.config.cwd.clone(),
                 approval_policy: self.config.permissions.approval_policy.value(),
-                sandbox_policy: self.config.permissions.sandbox_policy.get().clone(),
+                vfs_policy: self.config.permissions.vfs_policy.clone(),
+                socket_policy: self.config.permissions.socket_policy,
                 model: effective_mode.model().to_string(),
                 effort: effective_mode.reasoning_effort(),
                 summary: None,

@@ -147,35 +147,12 @@ fn generic_error_affects_turn_status() {
 }
 
 #[test]
-fn user_input_serialization_omits_final_output_json_schema_when_none() -> Result<()> {
-    let op = Op::UserInput {
-        items: Vec::new(),
-        final_output_json_schema: None,
-    };
-
-    let json_op = serde_json::to_value(op)?;
-    assert_eq!(json_op, json!({ "type": "user_input", "items": [] }));
-
-    Ok(())
+fn retired_user_input_operation_is_rejected() {
+    assert!(serde_json::from_value::<Op>(json!({ "type": "user_input", "items": [] })).is_err());
 }
 
 #[test]
-fn user_input_deserializes_without_final_output_json_schema_field() -> Result<()> {
-    let op: Op = serde_json::from_value(json!({ "type": "user_input", "items": [] }))?;
-
-    assert_eq!(
-        op,
-        Op::UserInput {
-            items: Vec::new(),
-            final_output_json_schema: None,
-        }
-    );
-
-    Ok(())
-}
-
-#[test]
-fn user_input_serialization_includes_final_output_json_schema_when_some() -> Result<()> {
+fn user_turn_round_trips_final_output_json_schema() -> Result<()> {
     let schema = json!({
         "type": "object",
         "properties": {
@@ -184,20 +161,25 @@ fn user_input_serialization_includes_final_output_json_schema_when_some() -> Res
         "required": ["answer"],
         "additionalProperties": false
     });
-    let op = Op::UserInput {
+    let op = Op::UserTurn {
         items: Vec::new(),
+        cwd: PathBuf::from("/tmp/work"),
+        approval_policy: ApprovalPolicy::Headless,
+        vfs_policy: VfsPolicy::unrestricted(),
+        socket_policy: SocketPolicy::Enabled,
+        model: TEST_MODEL.to_string(),
+        effort: None,
+        summary: None,
+        service_tier: None,
         final_output_json_schema: Some(schema.clone()),
+        collaboration_mode: None,
+        personality: None,
     };
 
-    let json_op = serde_json::to_value(op)?;
-    assert_eq!(
-        json_op,
-        json!({
-            "type": "user_input",
-            "items": [],
-            "final_output_json_schema": schema,
-        })
-    );
+    let json_op = serde_json::to_value(&op)?;
+    assert_eq!(json_op["type"], "user_turn");
+    assert_eq!(json_op["final_output_json_schema"], schema);
+    assert_eq!(serde_json::from_value::<Op>(json_op)?, op);
 
     Ok(())
 }
@@ -694,8 +676,7 @@ fn fill_to_context_window_preserves_process_usage_counters() {
 }
 
 #[test]
-fn rollout_item_accepts_legacy_turn_context() -> Result<()> {
-    // Sandbox aliases are independent of the required turn provider.
+fn rollout_item_rejects_legacy_turn_context() {
     let legacy = json!({
         "type": "turn_context",
         "payload": {
@@ -715,19 +696,11 @@ fn rollout_item_accepts_legacy_turn_context() -> Result<()> {
             "summary": "concise"
         }
     });
-    match serde_json::from_value::<RolloutItem>(legacy)? {
-        RolloutItem::TurnContext(tc) => {
-            assert_eq!(tc.socket_policy, SocketPolicy::Restricted);
-            assert_eq!(tc.vfs_policy.kind, VfsPolicyKind::Restricted);
-        }
-        other => panic!("expected TurnContext, got {other:?}"),
-    }
-    Ok(())
+    assert!(serde_json::from_value::<RolloutItem>(legacy).is_err());
 }
 
 #[test]
-fn turn_context_item_accepts_legacy_sandbox_policy() -> Result<()> {
-    // Exercise the existing sandbox alias parser with a complete turn record.
+fn turn_context_item_requires_canonical_sandbox_policies() -> Result<()> {
     let legacy = json!({
         "turn_id": "3",
         "cwd": "/tmp/work",
@@ -738,10 +711,7 @@ fn turn_context_item_accepts_legacy_sandbox_policy() -> Result<()> {
         "summary": "concise"
     });
 
-    let item: TurnContextItem = serde_json::from_value(legacy)?;
-    assert_eq!(item.socket_policy, SocketPolicy::Restricted);
-    // Intermediate alias (file_system_sandbox_policy / network_sandbox_policy)
-    // and the modern fields must also continue to work.
+    assert!(serde_json::from_value::<TurnContextItem>(legacy).is_err());
     let intermediate = json!({
         "turn_id": "4",
         "cwd": "/tmp/work",
@@ -752,9 +722,93 @@ fn turn_context_item_accepts_legacy_sandbox_policy() -> Result<()> {
         "model_provider": "openai",
         "summary": "concise"
     });
-    let item: TurnContextItem = serde_json::from_value(intermediate)?;
+    assert!(serde_json::from_value::<TurnContextItem>(intermediate).is_err());
+
+    let canonical = json!({
+        "cwd": "/tmp/work",
+        "approval_policy": "headless",
+        "vfs_policy": { "kind": "unrestricted", "entries": [] },
+        "socket_policy": "enabled",
+        "model": TEST_MODEL,
+        "model_provider": "openai",
+        "summary": "concise"
+    });
+    let item: TurnContextItem = serde_json::from_value(canonical.clone())?;
     assert_eq!(item.socket_policy, SocketPolicy::Enabled);
     assert_eq!(item.vfs_policy.kind, VfsPolicyKind::Unrestricted);
+    let round_trip: TurnContextItem = serde_json::from_value(serde_json::to_value(item)?)?;
+    assert_eq!(round_trip.socket_policy, SocketPolicy::Enabled);
 
+    for field in ["vfs_policy", "socket_policy"] {
+        let mut incomplete = canonical.clone();
+        incomplete.as_object_mut().unwrap().remove(field);
+        assert!(serde_json::from_value::<TurnContextItem>(incomplete).is_err());
+    }
+
+    Ok(())
+}
+
+#[test]
+fn session_configured_requires_canonical_sandbox_policies() -> Result<()> {
+    let canonical = json!({
+        "session_id": ProcessId::new(),
+        "model": TEST_MODEL,
+        "model_provider_id": "openai",
+        "approval_policy": "headless",
+        "vfs_policy": { "kind": "unrestricted", "entries": [] },
+        "socket_policy": "enabled",
+        "cwd": "/tmp/work",
+        "history_log_id": 0,
+        "history_entry_count": 0
+    });
+    let event: SessionConfiguredEvent = serde_json::from_value(canonical.clone())?;
+    let round_trip: SessionConfiguredEvent = serde_json::from_value(serde_json::to_value(event)?)?;
+    assert_eq!(round_trip.socket_policy, SocketPolicy::Enabled);
+
+    for field in ["vfs_policy", "socket_policy"] {
+        let mut incomplete = canonical.clone();
+        incomplete.as_object_mut().unwrap().remove(field);
+        assert!(serde_json::from_value::<SessionConfiguredEvent>(incomplete).is_err());
+    }
+    for old_fields in [
+        json!({"sandbox_policy": {"type": "read-only"}}),
+        json!({
+            "file_system_sandbox_policy": {"kind": "unrestricted", "entries": []},
+            "network_sandbox_policy": "enabled"
+        }),
+    ] {
+        let mut old = canonical.clone();
+        let object = old.as_object_mut().unwrap();
+        object.remove("vfs_policy");
+        object.remove("socket_policy");
+        object.extend(old_fields.as_object().unwrap().clone());
+        assert!(serde_json::from_value::<SessionConfiguredEvent>(old).is_err());
+    }
+    Ok(())
+}
+
+#[test]
+fn compaction_requires_replacement_history() -> Result<()> {
+    for payload in [
+        json!({"message": "summary"}),
+        json!({"message": "summary", "replacement_history": null}),
+    ] {
+        assert!(
+            serde_json::from_value::<RolloutItem>(json!({
+                "type": "compacted",
+                "payload": payload
+            }))
+            .is_err()
+        );
+    }
+    let item: CompactedItem = serde_json::from_value(json!({
+        "message": "summary",
+        "replacement_history": []
+    }))?;
+    assert!(item.replacement_history.is_empty());
+    assert_eq!(
+        serde_json::to_value(item)?["replacement_history"],
+        json!([])
+    );
     Ok(())
 }

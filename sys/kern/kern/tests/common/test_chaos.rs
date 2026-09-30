@@ -345,7 +345,11 @@ impl TestChaos {
                 final_output_json_schema: None,
                 cwd: self.cwd.path().to_path_buf(),
                 approval_policy,
-                sandbox_policy,
+                vfs_policy: chaos_ipc::permissions::VfsPolicy::from_sandbox_policy(
+                    &sandbox_policy,
+                    self.cwd.path(),
+                ),
+                socket_policy: chaos_ipc::permissions::SocketPolicy::from(&sandbox_policy),
                 model: session_model,
                 effort: None,
                 summary: None,

@@ -219,7 +219,7 @@ async fn reconstruct_history_uses_replacement_history_verbatim() {
     ];
     let rollout_items = vec![RolloutItem::Compacted(CompactedItem {
         message: String::new(),
-        replacement_history: Some(replacement_history.clone()),
+        replacement_history: replacement_history.clone(),
     })];
 
     let reconstructed = session
@@ -832,7 +832,7 @@ async fn process_rollback_restores_cleared_reference_context_item_after_compacti
         )),
         RolloutItem::Compacted(CompactedItem {
             message: "summary after compaction".to_string(),
-            replacement_history: Some(compacted_history.clone()),
+            replacement_history: compacted_history.clone(),
         }),
         RolloutItem::EventMsg(EventMsg::TurnComplete(TurnCompleteEvent {
             turn_id: compact_turn_id,

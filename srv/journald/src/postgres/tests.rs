@@ -21,7 +21,7 @@ fn postgres_test_url() -> Option<String> {
 fn compacted(message: &str) -> RolloutItem {
     RolloutItem::Compacted(CompactedItem {
         message: message.to_string(),
-        replacement_history: None,
+        replacement_history: Vec::new(),
     })
 }
 

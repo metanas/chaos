@@ -65,6 +65,14 @@ impl Process {
         self.chaos.submit(op).await
     }
 
+    pub async fn user_turn(
+        &self,
+        items: Vec<UserInput>,
+        final_output_json_schema: Option<serde_json::Value>,
+    ) -> Op {
+        self.chaos.user_turn(items, final_output_json_schema).await
+    }
+
     pub async fn shutdown_and_wait(&self) -> ChaosResult<()> {
         self.chaos.shutdown_and_wait().await
     }

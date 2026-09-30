@@ -68,7 +68,9 @@ impl App {
             ));
         }
         if let Some(policy) = self.runtime_sandbox_policy_override.as_ref()
-            && let Err(err) = config.permissions.sandbox_policy.set(policy.clone())
+            && let Err(err) = config
+                .permissions
+                .set_sandbox_policy(policy.clone(), &config.cwd)
         {
             tracing::warn!(%err, "failed to carry forward sandbox policy override");
             self.chat_widget.add_error_message(format!(
@@ -101,7 +103,7 @@ impl App {
         user_message_prefix: &str,
         log_message: &str,
     ) -> bool {
-        if let Err(err) = config.permissions.sandbox_policy.set(policy) {
+        if let Err(err) = config.permissions.set_sandbox_policy(policy, &config.cwd) {
             tracing::warn!(error = %err, "{log_message}");
             self.chat_widget
                 .add_error_message(format!("{user_message_prefix}: {err}"));

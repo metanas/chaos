@@ -11,25 +11,19 @@ use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::Result;
-use portable_pty::native_pty_system;
 use portable_pty::CommandBuilder;
+use portable_pty::native_pty_system;
 use tokio::sync::mpsc;
 
+use crate::helpers::ExitTracker;
 use crate::helpers::spawn_blocking_read_loop;
 use crate::helpers::spawn_blocking_writer;
-use crate::helpers::ExitTracker;
 use crate::process::ChildTerminator;
 use crate::process::ProcessHandle;
 use crate::process::PtyHandles;
 use crate::process::PtyMasterHandle;
 use crate::process::SpawnedProcess;
 use crate::process::TerminalSize;
-
-/// Returns true when PTY support is available (always true on Unix).
-/// Chaos targets Linux/macOS/FreeBSD only.
-pub fn conpty_supported() -> bool {
-    true
-}
 
 struct PtyChildTerminator {
     killer: Box<dyn portable_pty::ChildKiller + Send + Sync>,

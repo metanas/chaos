@@ -1,6 +1,6 @@
 use anyhow::Result;
 use chaos_ipc::background_tasks::WakePolicy;
-use chaos_ipc::protocol::{ApprovalPolicy, EventMsg, Op, SandboxPolicy};
+use chaos_ipc::protocol::{ApprovalPolicy, EventMsg, Op};
 use chaos_ipc::user_input::UserInput;
 use chaos_session::background::{BackgroundWait, WaitEvent};
 use core_test_support::responses::{
@@ -46,7 +46,8 @@ async fn submit(test: &TestChaos, prompt: &str) -> Result<()> {
             final_output_json_schema: None,
             cwd: test.cwd.path().to_path_buf(),
             approval_policy: ApprovalPolicy::Headless,
-            sandbox_policy: SandboxPolicy::RootAccess,
+            vfs_policy: chaos_ipc::permissions::VfsPolicy::unrestricted(),
+            socket_policy: chaos_ipc::permissions::SocketPolicy::Enabled,
             model: test.session_configured.model.clone(),
             effort: None,
             summary: None,

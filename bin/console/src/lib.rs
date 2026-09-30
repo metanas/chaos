@@ -21,12 +21,8 @@ use chaos_kern::auth::enforce_login_restrictions;
 use chaos_kern::check_execpolicy_for_warnings;
 use chaos_kern::config::Config;
 use chaos_kern::config::ConfigOverrides;
-use chaos_kern::config::load_config_as_toml_with_cli_overrides;
 use chaos_kern::config::load_config_or_exit as kern_load_config_or_exit;
-use chaos_kern::config_loader::ConfigLoadError;
 use chaos_kern::config_loader::LoaderOverrides;
-use chaos_kern::config_loader::format_config_error_with_source;
-use chaos_kern::config_loader::format_error_chain;
 use chaos_kern::find_process_id_by_name;
 use chaos_kern::format_exec_policy_error_with_source;
 use chaos_kern::models_manager::CollaborationModesConfig;
@@ -35,7 +31,6 @@ use chaos_kern::runtime_db::get_runtime_db;
 use chaos_kern::terminal::Multiplexer;
 use chaos_proc::RuntimeDbHandle;
 use chaos_pwd::find_chaos_home;
-use chaos_realpath::AbsolutePathBuf;
 use chaos_snitch::BoxedLogLayer;
 use chaos_snitch::open_debug_log_file_layer;
 use chaos_snitch::open_log_file_layer;
@@ -179,7 +174,6 @@ pub async fn run_main(
         }
     };
 
-    // we load config.toml here to determine project state.
     #[allow(clippy::print_stderr)]
     let chaos_home = match find_chaos_home() {
         Ok(chaos_home) => chaos_home.to_path_buf(),
@@ -190,10 +184,6 @@ pub async fn run_main(
     };
 
     let cwd = cli.cwd.clone();
-    let config_cwd = match cwd.as_deref() {
-        Some(path) => AbsolutePathBuf::from_absolute_path(path.canonicalize()?)?,
-        None => AbsolutePathBuf::current_dir()?,
-    };
 
     // Config loading opens authoritative settings storage. Choose the backend
     // first so a fresh PostgreSQL installation never boots against SQLite.
@@ -207,39 +197,6 @@ pub async fn run_main(
             process_name: None,
             exit_reason: ExitReason::UserRequested,
         });
-    }
-
-    #[allow(clippy::print_stderr)]
-    let config_toml = match load_config_as_toml_with_cli_overrides(
-        &chaos_home,
-        &config_cwd,
-        cli_kv_overrides.clone(),
-    )
-    .await
-    {
-        Ok(config_toml) => config_toml,
-        Err(err) => {
-            let config_error = err
-                .get_ref()
-                .and_then(|err| err.downcast_ref::<ConfigLoadError>())
-                .map(ConfigLoadError::config_error);
-            if let Some(config_error) = config_error {
-                eprintln!(
-                    "Error loading config.toml:\n{}",
-                    format_config_error_with_source(config_error)
-                );
-            } else {
-                eprintln!("Error loading config.toml: {}", format_error_chain(&err));
-            }
-            std::process::exit(1);
-        }
-    };
-
-    if let Err(err) =
-        chaos_kern::personality_migration::maybe_migrate_personality(&chaos_home, &config_toml)
-            .await
-    {
-        tracing::warn!(error = %err, "failed to run personality migration");
     }
 
     // If `-c model_provider=<name>` was passed, promote it into the typed

@@ -172,8 +172,7 @@ pub(super) async fn submission_loop(
         if journal_paused
             && matches!(
                 &sub.op,
-                Op::UserInput { .. }
-                    | Op::UserTurn { .. }
+                Op::UserTurn { .. }
                     | Op::Compact
                     | Op::Review { .. }
                     | Op::ProcessRollback { .. }
@@ -197,7 +196,6 @@ pub(super) async fn submission_loop(
             &sub.op,
             Op::Interrupt
                 | Op::Shutdown
-                | Op::UserInput { .. }
                 | Op::UserTurn { .. }
                 | Op::Compact
                 | Op::Review { .. }
@@ -312,8 +310,8 @@ pub(super) async fn submission_loop(
                     .await;
                     false
                 }
-                Op::UserInput { .. } | Op::UserTurn { .. } => {
-                    handlers::user_input_or_turn(&sess, sub.id.clone(), sub.op).await;
+                Op::UserTurn { .. } => {
+                    handlers::user_turn(&sess, sub.id.clone(), sub.op).await;
                     false
                 }
                 Op::ExecApproval {

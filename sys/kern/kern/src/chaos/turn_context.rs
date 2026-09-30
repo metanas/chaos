@@ -345,6 +345,27 @@ pub(crate) struct SessionConfiguration {
 }
 
 impl SessionConfiguration {
+    pub(crate) fn user_turn(
+        &self,
+        items: Vec<chaos_ipc::user_input::UserInput>,
+        final_output_json_schema: Option<Value>,
+    ) -> chaos_ipc::protocol::Op {
+        chaos_ipc::protocol::Op::UserTurn {
+            items,
+            cwd: self.cwd.clone(),
+            approval_policy: self.approval_policy.value(),
+            vfs_policy: self.vfs_policy.clone(),
+            socket_policy: self.socket_policy,
+            model: self.collaboration_mode.model().to_string(),
+            effort: self.collaboration_mode.reasoning_effort(),
+            summary: self.model_reasoning_summary,
+            service_tier: Some(self.service_tier),
+            final_output_json_schema,
+            collaboration_mode: Some(self.collaboration_mode.clone()),
+            personality: self.personality,
+        }
+    }
+
     pub(crate) fn chaos_home(&self) -> &PathBuf {
         &self.chaos_home
     }
@@ -422,6 +443,12 @@ impl SessionConfiguration {
         if let Some(cwd) = updates.cwd.clone() {
             next_configuration.cwd = cwd;
         }
+        if let Some(vfs_policy) = &updates.vfs_policy {
+            next_configuration.vfs_policy = vfs_policy.clone();
+        }
+        if let Some(socket_policy) = updates.socket_policy {
+            next_configuration.socket_policy = socket_policy;
+        }
         if let Some(app_server_client_name) = updates.app_server_client_name.clone() {
             next_configuration.app_server_client_name = Some(app_server_client_name);
         }
@@ -435,6 +462,8 @@ pub(crate) struct SessionSettingsUpdate {
     pub(crate) approval_policy: Option<ApprovalPolicy>,
     pub(crate) approvals_reviewer: Option<ApprovalsReviewer>,
     pub(crate) sandbox_policy: Option<SandboxPolicy>,
+    pub(crate) vfs_policy: Option<VfsPolicy>,
+    pub(crate) socket_policy: Option<SocketPolicy>,
     pub(crate) collaboration_mode: Option<CollaborationMode>,
     pub(crate) reasoning_summary: Option<ReasoningSummaryConfig>,
     pub(crate) service_tier: Option<Option<ServiceTier>>,

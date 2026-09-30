@@ -198,7 +198,7 @@ async fn run_distill_task_inner(
     };
     let compacted_item = CompactedItem {
         message: summary_text.clone(),
-        replacement_history: Some(new_history.clone()),
+        replacement_history: new_history.clone(),
     };
     sess.replace_compacted_history(new_history, reference_context_item, compacted_item)
         .await;

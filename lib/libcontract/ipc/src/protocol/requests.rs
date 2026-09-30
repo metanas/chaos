@@ -23,6 +23,8 @@ use super::ApprovalPolicy;
 use super::ReviewDecision;
 use super::ReviewRequest;
 use super::SandboxPolicy;
+use super::SocketPolicy;
+use super::VfsPolicy;
 
 /// Submission Queue Entry - requests from user
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -91,33 +93,19 @@ pub enum Op {
     /// Use this when callers intentionally want to stop long-lived background shells.
     CleanBackgroundTerminals,
 
-    /// Legacy user input.
-    ///
-    /// Prefer [`Op::UserTurn`] so the caller provides full turn context
-    /// (cwd/approval/sandbox/model/etc.) for each turn.
-    UserInput {
-        /// User input items, see `InputItem`
-        items: Vec<UserInput>,
-        /// Optional JSON Schema used to constrain the final assistant message for this turn.
-        #[serde(skip_serializing_if = "Option::is_none")]
-        final_output_json_schema: Option<Value>,
-    },
-
-    /// Similar to [`Op::UserInput`], but contains additional context required
-    /// for a Chaos process turn.
+    /// User input with the full context required for a Chaos process turn.
     UserTurn {
         /// User input items, see `InputItem`
         items: Vec<UserInput>,
 
-        /// `cwd` to use with the [`SandboxPolicy`] and potentially tool calls
-        /// such as `local_shell`.
+        /// Working directory for this turn.
         cwd: PathBuf,
 
         /// Policy to use for command approval.
         approval_policy: ApprovalPolicy,
 
-        /// Policy to use for tool calls such as `local_shell`.
-        sandbox_policy: SandboxPolicy,
+        vfs_policy: VfsPolicy,
+        socket_policy: SocketPolicy,
 
         /// Must be a valid model slug for the configured client session
         /// associated with this conversation.
@@ -158,9 +146,8 @@ pub enum Op {
     /// Override parts of the persistent turn context for subsequent turns.
     ///
     /// All fields are optional; when omitted, the existing value is preserved.
-    /// This does not enqueue any input – it only updates defaults used for
-    /// turns that rely on persistent session-level context (for example,
-    /// [`Op::UserInput`]).
+    /// This does not enqueue any input – it only updates persistent session
+    /// settings, including those used by background turns.
     OverrideTurnContext {
         /// Updated `cwd` for sandbox/tool calls.
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -381,7 +368,6 @@ impl Op {
         match self {
             Self::Interrupt => "interrupt",
             Self::CleanBackgroundTerminals => "clean_background_terminals",
-            Self::UserInput { .. } => "user_input",
             Self::UserTurn { .. } => "user_turn",
             Self::OverrideTurnContext { .. } => "override_turn_context",
             Self::UpdatePermissions { .. } => "update_permissions",

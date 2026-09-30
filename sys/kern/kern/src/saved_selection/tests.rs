@@ -58,7 +58,7 @@ fn saved_selection_tracks_used_turns_rollback_compaction_and_fork_cutoff() {
     assert_eq!(saved_selection(&items).unwrap(), first);
     items.push(RolloutItem::Compacted(CompactedItem {
         message: "summary".into(),
-        replacement_history: Some(vec![]),
+        replacement_history: vec![],
     }));
     assert_eq!(saved_selection(&items).unwrap(), first);
     items.extend(turn("3", "third", "model-c"));

@@ -150,7 +150,7 @@ async fn run_remote_distill_task_inner_impl(
     };
     let compacted_item = CompactedItem {
         message: String::new(),
-        replacement_history: Some(new_history.clone()),
+        replacement_history: new_history.clone(),
     };
     sess.replace_compacted_history(new_history, reference_context_item, compacted_item)
         .await;

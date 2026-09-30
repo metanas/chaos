@@ -1,5 +1,4 @@
 use chaos_ipc::protocol::EventMsg;
-use chaos_ipc::protocol::Op;
 use chaos_ipc::user_input::UserInput;
 use chaos_kern::ChaosAuth;
 
@@ -38,13 +37,17 @@ async fn request_body_is_zstd_compressed_for_codex_backend_when_enabled() -> any
     let chaos = std::sync::Arc::clone(&fixture.process);
 
     chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "compress me".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
+        .submit(
+            chaos
+                .user_turn(
+                    vec![UserInput::Text {
+                        text: "compress me".into(),
+                        text_elements: Vec::new(),
+                    }],
+                    None,
+                )
+                .await,
+        )
         .await?;
 
     // Wait until the task completes so the request definitely hit the server.
@@ -86,13 +89,17 @@ async fn request_body_is_not_compressed_for_api_key_auth_even_when_enabled() -> 
     let chaos = std::sync::Arc::clone(&fixture.process);
 
     chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "do not compress".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
+        .submit(
+            chaos
+                .user_turn(
+                    vec![UserInput::Text {
+                        text: "do not compress".into(),
+                        text_elements: Vec::new(),
+                    }],
+                    None,
+                )
+                .await,
+        )
         .await?;
 
     wait_for_event(&chaos, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;

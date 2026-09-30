@@ -52,11 +52,11 @@ async fn reconstruction_uses_compaction_count_as_durable_pressure_window_identit
         }),
         RolloutItem::Compacted(CompactedItem {
             message: "first".to_string(),
-            replacement_history: Some(Vec::new()),
+            replacement_history: Vec::new(),
         }),
         RolloutItem::Compacted(CompactedItem {
             message: "second".to_string(),
-            replacement_history: Some(Vec::new()),
+            replacement_history: Vec::new(),
         }),
         RolloutItem::CompactionControl(current.clone()),
     ];
@@ -635,7 +635,7 @@ async fn record_initial_history_resumed_rollback_drops_incomplete_user_turn_comp
         )),
         RolloutItem::Compacted(CompactedItem {
             message: String::new(),
-            replacement_history: Some(Vec::new()),
+            replacement_history: Vec::new(),
         }),
         RolloutItem::EventMsg(EventMsg::ProcessRolledBack(
             chaos_ipc::protocol::ProcessRolledBackEvent { num_turns: 1 },
@@ -687,7 +687,7 @@ async fn record_initial_history_resumed_does_not_seed_reference_context_item_aft
         RolloutItem::TurnContext(previous_context_item),
         RolloutItem::Compacted(CompactedItem {
             message: String::new(),
-            replacement_history: Some(Vec::new()),
+            replacement_history: Vec::new(),
         }),
     ];
 
@@ -700,79 +700,6 @@ async fn record_initial_history_resumed_does_not_seed_reference_context_item_aft
 
     assert_eq!(session.previous_turn_settings().await, None);
     assert!(session.reference_context_item().await.is_none());
-}
-
-#[tokio::test]
-async fn reconstruct_history_legacy_compaction_without_replacement_history_does_not_inject_current_initial_context()
- {
-    let (session, turn_context) = make_session_and_context().await;
-    let rollout_items = vec![
-        RolloutItem::ResponseItem(user_message("before compact")),
-        RolloutItem::ResponseItem(assistant_message("assistant reply")),
-        RolloutItem::Compacted(CompactedItem {
-            message: "legacy summary".to_string(),
-            replacement_history: None,
-        }),
-    ];
-
-    let reconstructed = session
-        .reconstruct_history_from_rollout(&turn_context, &rollout_items)
-        .await;
-
-    assert_eq!(
-        reconstructed.history,
-        vec![
-            user_message("before compact"),
-            user_message("legacy summary"),
-        ]
-    );
-    assert!(reconstructed.reference_context_item.is_none());
-}
-
-#[tokio::test]
-async fn reconstruct_history_legacy_compaction_without_replacement_history_clears_later_reference_context_item()
- {
-    let (session, turn_context) = make_session_and_context().await;
-    let current_context_item = turn_context.to_turn_context_item();
-    let current_turn_id = current_context_item
-        .turn_id
-        .clone()
-        .expect("turn context should have turn_id");
-    let rollout_items = vec![
-        RolloutItem::ResponseItem(user_message("before compact")),
-        RolloutItem::Compacted(CompactedItem {
-            message: "legacy summary".to_string(),
-            replacement_history: None,
-        }),
-        RolloutItem::EventMsg(EventMsg::TurnStarted(
-            chaos_ipc::protocol::TurnStartedEvent {
-                turn_id: current_turn_id.clone(),
-                model_context_window: Some(128_000),
-                collaboration_mode_kind: ModeKind::Default,
-            },
-        )),
-        RolloutItem::EventMsg(EventMsg::UserMessage(
-            chaos_ipc::protocol::UserMessageEvent {
-                message: "after legacy compact".to_string(),
-                images: None,
-                local_images: Vec::new(),
-                text_elements: Vec::new(),
-            },
-        )),
-        RolloutItem::TurnContext(current_context_item),
-        RolloutItem::EventMsg(EventMsg::TurnComplete(
-            chaos_ipc::protocol::TurnCompleteEvent {
-                turn_id: current_turn_id,
-                last_agent_message: None,
-            },
-        )),
-    ];
-
-    let reconstructed = session
-        .reconstruct_history_from_rollout(&turn_context, &rollout_items)
-        .await;
-
-    assert!(reconstructed.reference_context_item.is_none());
 }
 
 #[tokio::test]
@@ -825,7 +752,7 @@ async fn record_initial_history_resumed_turn_context_after_compaction_reestablis
         // Compaction clears baseline until a later TurnContextItem re-establishes it.
         RolloutItem::Compacted(CompactedItem {
             message: String::new(),
-            replacement_history: Some(Vec::new()),
+            replacement_history: Vec::new(),
         }),
         RolloutItem::TurnContext(previous_context_item),
         RolloutItem::EventMsg(EventMsg::TurnComplete(
@@ -957,7 +884,7 @@ async fn record_initial_history_resumed_aborted_turn_without_id_clears_active_tu
         )),
         RolloutItem::Compacted(CompactedItem {
             message: String::new(),
-            replacement_history: Some(Vec::new()),
+            replacement_history: Vec::new(),
         }),
     ];
 
@@ -1159,7 +1086,7 @@ async fn record_initial_history_resumed_trailing_incomplete_turn_compaction_clea
         )),
         RolloutItem::Compacted(CompactedItem {
             message: String::new(),
-            replacement_history: Some(Vec::new()),
+            replacement_history: Vec::new(),
         }),
     ];
 
@@ -1302,7 +1229,7 @@ async fn record_initial_history_resumed_replaced_incomplete_compacted_turn_clear
         )),
         RolloutItem::Compacted(CompactedItem {
             message: String::new(),
-            replacement_history: Some(Vec::new()),
+            replacement_history: Vec::new(),
         }),
         // A newer TurnStarted replaces the incomplete compacted turn without a matching
         // completion/abort for the old one.

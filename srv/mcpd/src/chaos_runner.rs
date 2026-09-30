@@ -182,13 +182,15 @@ pub(crate) async fn run_chaos_session(args: RunChaosSessionArgs) -> SessionOutco
         .await
         .insert(request_id.clone(), process_id);
 
-    let user_input = Op::UserInput {
-        items: vec![UserInput::Text {
-            text: prompt,
-            text_elements: Vec::new(),
-        }],
-        final_output_json_schema: None,
-    };
+    let user_input = process
+        .user_turn(
+            vec![UserInput::Text {
+                text: prompt,
+                text_elements: Vec::new(),
+            }],
+            None,
+        )
+        .await;
 
     let submit_err = if existing_process_id.is_some() {
         process.submit(user_input).await.err()

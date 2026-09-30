@@ -12,8 +12,9 @@ impl ChatWidget {
 
     /// Set the sandbox policy in the widget's config copy.
     pub fn set_sandbox_policy(&mut self, policy: SandboxPolicy) -> ConstraintResult<()> {
-        self.config.permissions.sandbox_policy.set(policy)?;
-        Ok(())
+        self.config
+            .permissions
+            .set_sandbox_policy(policy, &self.config.cwd)
     }
 
     pub fn set_approvals_reviewer(&mut self, policy: ApprovalsReviewer) {

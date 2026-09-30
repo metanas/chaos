@@ -27,6 +27,19 @@ use wiremock::MockServer;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_test::internal::MockWriter;
 
+async fn submit_prompt(process: &Process, text: &str) {
+    let op = process
+        .user_turn(
+            vec![UserInput::Text {
+                text: text.to_string(),
+                text_elements: Vec::new(),
+            }],
+            None,
+        )
+        .await;
+    process.submit(op).await.unwrap();
+}
+
 fn extract_log_field(line: &str, key: &str) -> Option<String> {
     let quoted_prefix = format!("{key}=\"");
     if let Some(start) = line.find(&quoted_prefix) {
@@ -113,16 +126,7 @@ async fn responses_api_emits_api_request_event() {
 
     mount_sse_once(&server, sse(vec![ev_completed("done")])).await;
 
-    chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
-        .await
-        .unwrap();
+    submit_prompt(&chaos, "hello").await;
 
     wait_for_completed_provider_usage(&chaos).await;
 
@@ -154,16 +158,7 @@ async fn process_sse_emits_tracing_for_output_item() {
     )
     .await;
 
-    chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
-        .await
-        .unwrap();
+    submit_prompt(&chaos, "hello").await;
 
     wait_for_event(&chaos, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
@@ -186,16 +181,7 @@ async fn process_sse_emits_failed_event_on_parse_error() {
 
     mount_sse_once(&server, "data: not-json\n\n".to_string()).await;
 
-    chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
-        .await
-        .unwrap();
+    submit_prompt(&chaos, "hello").await;
 
     wait_for_event(&chaos, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
@@ -239,16 +225,7 @@ async fn process_sse_failed_event_records_response_error_message() {
     )
     .await;
 
-    chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
-        .await
-        .unwrap();
+    submit_prompt(&chaos, "hello").await;
 
     wait_for_completed_provider_usage(&chaos).await;
 
@@ -290,16 +267,7 @@ async fn process_sse_failed_event_logs_parse_error() {
     )
     .await;
 
-    chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
-        .await
-        .unwrap();
+    submit_prompt(&chaos, "hello").await;
 
     wait_for_event(&chaos, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
@@ -328,16 +296,7 @@ async fn process_sse_failed_event_logs_missing_error() {
     )
     .await;
 
-    chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
-        .await
-        .unwrap();
+    submit_prompt(&chaos, "hello").await;
 
     wait_for_event(&chaos, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
@@ -375,16 +334,7 @@ async fn process_sse_failed_event_logs_response_completed_parse_error() {
     )
     .await;
 
-    chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
-        .await
-        .unwrap();
+    submit_prompt(&chaos, "hello").await;
 
     wait_for_event(&chaos, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
@@ -425,16 +375,7 @@ async fn process_sse_emits_completed_telemetry() {
     )
     .await;
 
-    chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
-        .await
-        .unwrap();
+    submit_prompt(&chaos, "hello").await;
 
     wait_for_event(&chaos, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
@@ -486,16 +427,7 @@ async fn handle_responses_span_records_response_kind_and_tool_name() {
     )
     .await;
 
-    chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
-        .await
-        .unwrap();
+    submit_prompt(&chaos, "hello").await;
 
     wait_for_completed_provider_usage(&chaos).await;
 
@@ -539,16 +471,7 @@ async fn handle_response_item_records_tool_result_for_custom_tool_call() {
     )
     .await;
 
-    chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
-        .await
-        .unwrap();
+    submit_prompt(&chaos, "hello").await;
 
     wait_for_completed_provider_usage(&chaos).await;
 
@@ -601,16 +524,7 @@ async fn handle_response_item_records_tool_result_for_function_call() {
     )
     .await;
 
-    chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
-        .await
-        .unwrap();
+    submit_prompt(&chaos, "hello").await;
 
     wait_for_completed_provider_usage(&chaos).await;
 
@@ -673,16 +587,7 @@ async fn handle_response_item_records_tool_result_for_local_shell_missing_ids() 
     )
     .await;
 
-    chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
-        .await
-        .unwrap();
+    submit_prompt(&chaos, "hello").await;
 
     wait_for_completed_provider_usage(&chaos).await;
 
@@ -729,16 +634,7 @@ async fn handle_response_item_records_tool_result_for_local_shell_call() {
     )
     .await;
 
-    chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
-        .await
-        .unwrap();
+    submit_prompt(&chaos, "hello").await;
 
     // Provider usage can arrive before tool completion.
     wait_for_event(&chaos, |event| matches!(event, EventMsg::TurnComplete(_))).await;
@@ -844,16 +740,7 @@ async fn handle_container_exec_autoapprove_from_config_records_tool_decision() {
         .await
         .unwrap();
 
-    chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "hello".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
-        .await
-        .unwrap();
+    submit_prompt(&chaos, "hello").await;
 
     wait_for_event(&chaos, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
@@ -900,16 +787,7 @@ async fn handle_container_exec_user_approved_records_tool_decision() {
         .await
         .unwrap();
 
-    chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "approved".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
-        .await
-        .unwrap();
+    submit_prompt(&chaos, "approved").await;
 
     let approval_event =
         wait_for_event(&chaos, |ev| matches!(ev, EventMsg::ExecApprovalRequest(_))).await;
@@ -971,16 +849,7 @@ async fn handle_container_exec_user_approved_for_session_records_tool_decision()
         .await
         .unwrap();
 
-    chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "persist".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
-        .await
-        .unwrap();
+    submit_prompt(&chaos, "persist").await;
 
     let approval_event =
         wait_for_event(&chaos, |ev| matches!(ev, EventMsg::ExecApprovalRequest(_))).await;
@@ -1042,16 +911,7 @@ async fn handle_sandbox_error_user_approves_retry_records_tool_decision() {
         .await
         .unwrap();
 
-    chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "retry".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
-        .await
-        .unwrap();
+    submit_prompt(&chaos, "retry").await;
 
     let approval_event =
         wait_for_event(&chaos, |ev| matches!(ev, EventMsg::ExecApprovalRequest(_))).await;
@@ -1113,16 +973,7 @@ async fn handle_container_exec_user_denies_records_tool_decision() {
         .await
         .unwrap();
 
-    chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "deny".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
-        .await
-        .unwrap();
+    submit_prompt(&chaos, "deny").await;
 
     let approval_event =
         wait_for_event(&chaos, |ev| matches!(ev, EventMsg::ExecApprovalRequest(_))).await;
@@ -1184,16 +1035,7 @@ async fn handle_sandbox_error_user_approves_for_session_records_tool_decision() 
         .await
         .unwrap();
 
-    chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "persist".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
-        .await
-        .unwrap();
+    submit_prompt(&chaos, "persist").await;
 
     let approval_event =
         wait_for_event(&chaos, |ev| matches!(ev, EventMsg::ExecApprovalRequest(_))).await;
@@ -1256,16 +1098,7 @@ async fn handle_sandbox_error_user_denies_records_tool_decision() {
         .await
         .unwrap();
 
-    chaos
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-                text: "deny".into(),
-                text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-        })
-        .await
-        .unwrap();
+    submit_prompt(&chaos, "deny").await;
 
     let approval_event =
         wait_for_event(&chaos, |ev| matches!(ev, EventMsg::ExecApprovalRequest(_))).await;

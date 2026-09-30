@@ -587,7 +587,7 @@ async fn send_input_interrupts_before_prompt() {
         .collect();
     assert_eq!(ops_for_agent.len(), 2);
     assert!(matches!(ops_for_agent[0], Op::Interrupt));
-    assert!(matches!(ops_for_agent[1], Op::UserInput { .. }));
+    assert!(matches!(ops_for_agent[1], Op::UserTurn { .. }));
 
     let _ = thread
         .process
@@ -621,19 +621,22 @@ async fn send_input_accepts_structured_items() {
         .await
         .expect("send_input should succeed");
 
-    let expected = Op::UserInput {
-        items: vec![
-            UserInput::Mention {
-                name: "drive".to_string(),
-                path: "app://google_drive".to_string(),
-            },
-            UserInput::Text {
-                text: "read the folder".to_string(),
-                text_elements: Vec::new(),
-            },
-        ],
-        final_output_json_schema: None,
-    };
+    let expected = thread
+        .process
+        .user_turn(
+            vec![
+                UserInput::Mention {
+                    name: "drive".to_string(),
+                    path: "app://google_drive".to_string(),
+                },
+                UserInput::Text {
+                    text: "read the folder".to_string(),
+                    text_elements: Vec::new(),
+                },
+            ],
+            None,
+        )
+        .await;
     let captured = manager
         .captured_ops()
         .into_iter()
@@ -750,7 +753,7 @@ async fn spawned_subagent_alone_can_message_its_supervisor() {
         !manager
             .captured_ops()
             .iter()
-            .any(|(id, op)| *id == supervisor_id && matches!(op, Op::UserInput { .. }))
+            .any(|(id, op)| *id == supervisor_id && matches!(op, Op::UserTurn { .. }))
     );
     let registry = &parent_thread
         .process

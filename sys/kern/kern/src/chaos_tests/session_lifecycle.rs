@@ -633,11 +633,21 @@ fn op_kind_distinguishes_turn_ops() {
         "override_turn_context"
     );
     assert_eq!(
-        Op::UserInput {
+        Op::UserTurn {
             items: vec![],
+            cwd: std::path::PathBuf::from("/tmp/work"),
+            approval_policy: ApprovalPolicy::Headless,
+            vfs_policy: chaos_ipc::permissions::VfsPolicy::unrestricted(),
+            socket_policy: chaos_ipc::permissions::SocketPolicy::Enabled,
+            model: chaos_test_fixtures::TEST_MODEL.to_string(),
+            effort: None,
+            summary: None,
+            service_tier: None,
             final_output_json_schema: None,
+            collaboration_mode: None,
+            personality: None,
         }
         .kind(),
-        "user_input"
+        "user_turn"
     );
 }
