@@ -15,7 +15,7 @@ mod writer;
 
 pub use line_utils::{COLON_LOCATION_SUFFIX_RE, HASH_LOCATION_SUFFIX_RE, file_url_for_local_link};
 
-use pulldown_cmark::{Options, Parser};
+use pulldown_cmark::{Event, Options, Parser};
 use ratatui::text::Text;
 use std::path::Path;
 
@@ -52,7 +52,21 @@ pub(crate) fn render_markdown_with_prose_style(
     prose_style: ratatui::style::Style,
 ) -> Text<'static> {
     let parser = Parser::new_ext(input, parser_options());
-    let mut w = Writer::new(parser, width, cwd);
+    render_markdown_events_with_prose_style(parser, width, cwd, prose_style)
+}
+
+/// Render already-parsed, balanced events using the same writer as a full document.
+///
+/// Streaming parses the whole buffer to resolve references, then supplies only
+/// complete stable blocks. Re-parsing a source prefix would lose definitions
+/// located in a later block and could change both link text and table widths.
+pub(crate) fn render_markdown_events_with_prose_style<'a>(
+    events: impl Iterator<Item = Event<'a>>,
+    width: Option<usize>,
+    cwd: Option<&Path>,
+    prose_style: ratatui::style::Style,
+) -> Text<'static> {
+    let mut w = Writer::new(events, width, cwd);
     w.prose_style = prose_style;
     w.run();
     w.text

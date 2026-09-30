@@ -3,7 +3,8 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use crate::markdown;
-use pulldown_cmark::{Event, Parser, Tag};
+
+mod stability;
 
 /// Newline-gated accumulator that commits only stable Markdown blocks/lines.
 pub struct MarkdownStreamCollector {
@@ -50,25 +51,24 @@ impl MarkdownStreamCollector {
     /// Trailing prose/list/quote blocks are also held: a later definition-list
     /// description can turn their last paragraph into a styled term. Footnote
     /// documents wait for finalization because definitions can resolve earlier
-    /// references, even across otherwise-complete paragraphs.
+    /// references, even across otherwise-complete paragraphs. Literal markers
+    /// in code, math, HTML, or metadata do not trigger that holdback.
+    ///
+    /// Unresolved reference links/images hold their enclosing block and everything
+    /// after it. Once definitions arrive, stable blocks resume with resolved
+    /// events from the full source, even if a definition lies beyond the cutoff.
     pub fn commit_complete_lines(&mut self) -> Vec<Line<'static>> {
-        let source = self.buffer.clone();
-        let last_newline_idx = source.rfind('\n');
-        let source = if let Some(last_newline_idx) = last_newline_idx {
-            source[..=last_newline_idx].to_string()
-        } else {
+        let Some(last_newline_idx) = self.buffer.rfind('\n') else {
             return Vec::new();
         };
-        if source.contains("[^") {
-            // Conservative even for a literal marker in code: never commit a
-            // reference before knowing whether a later definition resolves it.
-            return Vec::new();
-        }
-        let boundary = stable_block_boundary(&source)
-            .min(crate::table_detect::table_holdback_boundary(&source).unwrap_or(source.len()));
-        let source = source[..boundary].to_string();
-        let mut rendered: Vec<Line<'static>> = Vec::new();
-        markdown::append_markdown(&source, self.width, Some(self.cwd.as_path()), &mut rendered);
+        let source = &self.buffer[..=last_newline_idx];
+        let rendered = crate::markdown_render::render_markdown_events_with_prose_style(
+            stability::stable_events(source),
+            self.width,
+            Some(self.cwd.as_path()),
+            crate::theme::assistant_message(),
+        )
+        .lines;
         let mut complete_line_count = rendered.len();
         if complete_line_count > 0
             && crate::render::line_utils::is_blank_line_spaces_only(
@@ -122,54 +122,6 @@ impl MarkdownStreamCollector {
     }
 }
 
-/// A trailing paragraph may become a definition-list title. Preserve its whole
-/// enclosing block so list/quote prefixes and paragraph spacing remain stable.
-/// Other block kinds (notably code) keep the existing newline-gated behavior.
-fn stable_block_boundary(source: &str) -> usize {
-    // A leading rule can become front matter when its closing delimiter arrives.
-    if let Some(marker @ ("---" | "+++")) = source.lines().next()
-        && !source
-            .lines()
-            .skip(1)
-            .any(|line| line == marker || (marker == "---" && line == "..."))
-    {
-        return 0;
-    }
-    let mut depth = 0usize;
-    let mut trailing = None;
-    for (event, range) in
-        Parser::new_ext(source, crate::markdown_render::parser_options()).into_offset_iter()
-    {
-        match event {
-            Event::Start(tag) => {
-                if depth == 0 {
-                    trailing = Some((
-                        range.start,
-                        match tag {
-                            Tag::Paragraph
-                            | Tag::List(_)
-                            | Tag::BlockQuote(_)
-                            | Tag::DefinitionList => true,
-                            Tag::Table(_) => {
-                                !source.ends_with("\n\n") && !source.ends_with("\r\n\r\n")
-                            }
-                            _ => false,
-                        },
-                    ));
-                }
-                depth += 1;
-            }
-            Event::End(_) => depth -= 1,
-            _ if depth == 0 => trailing = Some((range.start, false)),
-            _ => {}
-        }
-    }
-    match trailing {
-        Some((start, true)) => start,
-        _ => source.len(),
-    }
-}
-
 #[cfg(test)]
 fn test_cwd() -> PathBuf {
     // These tests only need a stable absolute cwd; using temp_dir() avoids baking Unix- or
@@ -195,3 +147,6 @@ pub fn simulate_stream_markdown_for_tests(deltas: &[&str], finalize: bool) -> Ve
 
 #[cfg(test)]
 pub(crate) mod tests;
+
+#[cfg(test)]
+mod reference_tests;
