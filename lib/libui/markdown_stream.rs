@@ -3,9 +3,9 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use crate::markdown;
+use pulldown_cmark::{Event, Parser, Tag};
 
-/// Newline-gated accumulator that renders markdown and commits only fully
-/// completed logical lines.
+/// Newline-gated accumulator that commits only stable Markdown blocks/lines.
 pub struct MarkdownStreamCollector {
     buffer: String,
     committed_line_count: usize,
@@ -47,6 +47,10 @@ impl MarkdownStreamCollector {
     /// its rows end in newlines: the renderer sizes columns from every row it
     /// can see, so a later row can change how earlier ones should be drawn.
     /// Those rows are withheld until the table closes or the stream finalizes.
+    /// Trailing prose/list/quote blocks are also held: a later definition-list
+    /// description can turn their last paragraph into a styled term. Footnote
+    /// documents wait for finalization because definitions can resolve earlier
+    /// references, even across otherwise-complete paragraphs.
     pub fn commit_complete_lines(&mut self) -> Vec<Line<'static>> {
         let source = self.buffer.clone();
         let last_newline_idx = source.rfind('\n');
@@ -55,10 +59,14 @@ impl MarkdownStreamCollector {
         } else {
             return Vec::new();
         };
-        let source = match crate::table_detect::table_holdback_boundary(&source) {
-            Some(boundary) => source[..boundary].to_string(),
-            None => source,
-        };
+        if source.contains("[^") {
+            // Conservative even for a literal marker in code: never commit a
+            // reference before knowing whether a later definition resolves it.
+            return Vec::new();
+        }
+        let boundary = stable_block_boundary(&source)
+            .min(crate::table_detect::table_holdback_boundary(&source).unwrap_or(source.len()));
+        let source = source[..boundary].to_string();
         let mut rendered: Vec<Line<'static>> = Vec::new();
         markdown::append_markdown(&source, self.width, Some(self.cwd.as_path()), &mut rendered);
         let mut complete_line_count = rendered.len();
@@ -83,8 +91,7 @@ impl MarkdownStreamCollector {
 
     /// Finalize the stream: emit all remaining lines beyond the last commit.
     /// If the buffer does not end with a newline, a temporary one is appended
-    /// for rendering. Optionally unwraps ```markdown language fences in
-    /// non-test builds.
+    /// for rendering.
     pub fn finalize_and_drain(&mut self) -> Vec<Line<'static>> {
         let raw_buffer = self.buffer.clone();
         let mut source: String = raw_buffer.clone();
@@ -112,6 +119,54 @@ impl MarkdownStreamCollector {
         // Reset collector state for next stream.
         self.clear();
         out
+    }
+}
+
+/// A trailing paragraph may become a definition-list title. Preserve its whole
+/// enclosing block so list/quote prefixes and paragraph spacing remain stable.
+/// Other block kinds (notably code) keep the existing newline-gated behavior.
+fn stable_block_boundary(source: &str) -> usize {
+    // A leading rule can become front matter when its closing delimiter arrives.
+    if let Some(marker @ ("---" | "+++")) = source.lines().next()
+        && !source
+            .lines()
+            .skip(1)
+            .any(|line| line == marker || (marker == "---" && line == "..."))
+    {
+        return 0;
+    }
+    let mut depth = 0usize;
+    let mut trailing = None;
+    for (event, range) in
+        Parser::new_ext(source, crate::markdown_render::parser_options()).into_offset_iter()
+    {
+        match event {
+            Event::Start(tag) => {
+                if depth == 0 {
+                    trailing = Some((
+                        range.start,
+                        match tag {
+                            Tag::Paragraph
+                            | Tag::List(_)
+                            | Tag::BlockQuote(_)
+                            | Tag::DefinitionList => true,
+                            Tag::Table(_) => {
+                                !source.ends_with("\n\n") && !source.ends_with("\r\n\r\n")
+                            }
+                            _ => false,
+                        },
+                    ));
+                }
+                depth += 1;
+            }
+            Event::End(_) => depth -= 1,
+            _ if depth == 0 => trailing = Some((range.start, false)),
+            _ => {}
+        }
+    }
+    match trailing {
+        Some((start, true)) => start,
+        _ => source.len(),
     }
 }
 

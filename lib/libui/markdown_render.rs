@@ -6,9 +6,11 @@
 //! absolute paths relative to a known working directory.
 
 mod block_handler;
+mod extensions;
 mod inline_handler;
 mod line_utils;
 mod styles;
+mod table;
 mod writer;
 
 pub use line_utils::{COLON_LOCATION_SUFFIX_RE, HASH_LOCATION_SUFFIX_RE, file_url_for_local_link};
@@ -49,16 +51,29 @@ pub(crate) fn render_markdown_with_prose_style(
     cwd: Option<&Path>,
     prose_style: ratatui::style::Style,
 ) -> Text<'static> {
+    let parser = Parser::new_ext(input, parser_options());
+    let mut w = Writer::new(parser, width, cwd);
+    w.prose_style = prose_style;
+    w.run();
+    w.text
+}
+
+/// Shared with the stream collector so buffering follows the same block grammar.
+pub(crate) fn parser_options() -> Options {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_TASKLISTS);
     options.insert(Options::ENABLE_MATH);
     options.insert(Options::ENABLE_GFM);
-    let parser = Parser::new_ext(input, options);
-    let mut w = Writer::new(parser, width, cwd);
-    w.prose_style = prose_style;
-    w.run();
-    w.text
+    options.insert(Options::ENABLE_TABLES);
+    options.insert(Options::ENABLE_FOOTNOTES);
+    options.insert(Options::ENABLE_DEFINITION_LIST);
+    options.insert(Options::ENABLE_SUPERSCRIPT);
+    options.insert(Options::ENABLE_SUBSCRIPT);
+    options.insert(Options::ENABLE_HEADING_ATTRIBUTES);
+    options.insert(Options::ENABLE_YAML_STYLE_METADATA_BLOCKS);
+    options.insert(Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS);
+    options
 }
 
 #[cfg(test)]
@@ -68,3 +83,6 @@ pub(crate) mod markdown_render_tests {
 
 #[cfg(test)]
 pub(crate) mod tests;
+
+#[cfg(test)]
+mod backport_tests;

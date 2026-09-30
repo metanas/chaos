@@ -17,6 +17,7 @@ pub(super) struct MarkdownStyles {
     pub(super) blockquote: Style,
     pub(super) task_checked: Style,
     pub(super) task_unchecked: Style,
+    pub(super) table_border: Style,
 }
 
 impl Default for MarkdownStyles {
@@ -53,6 +54,7 @@ impl Default for MarkdownStyles {
             // `Strikethrough` event.
             task_checked: Style::new().fg(p.success).bold(),
             task_unchecked: Style::new().dim(),
+            table_border: Style::new().fg(p.border),
         }
     }
 }

@@ -6,8 +6,10 @@ use std::path::{Path, PathBuf};
 use crate::render::line_utils::line_to_static;
 use crate::wrapping::{RtOptions, adaptive_wrap_line};
 
+use super::extensions::PendingImage;
 use super::line_utils::is_local_path_like_link;
 use super::styles::MarkdownStyles;
+use super::table::TableBuilder;
 
 #[derive(Clone, Debug)]
 pub(super) struct IndentContext {
@@ -88,7 +90,11 @@ where
     pub(super) current_subsequent_indent: Vec<Span<'static>>,
     pub(super) current_line_style: Style,
     pub(super) prose_style: Style,
-    pub(super) current_line_in_code_block: bool,
+    pub(super) current_line_preformatted: bool,
+    pub(super) table: Option<TableBuilder>,
+    pub(super) images: Vec<PendingImage>,
+    pub(super) heading_suffix: Option<String>,
+    pub(super) joined_definition_paragraph: bool,
 }
 
 impl<'a, I> Writer<'a, I>
@@ -120,7 +126,11 @@ where
             current_subsequent_indent: Vec::new(),
             current_line_style: Style::default(),
             prose_style: Style::default(),
-            current_line_in_code_block: false,
+            current_line_preformatted: false,
+            table: None,
+            images: Vec::new(),
+            heading_suffix: None,
+            joined_definition_paragraph: false,
         }
     }
 
@@ -145,7 +155,9 @@ where
             Event::DisplayMath(math) => {
                 let math = rewrite_math(&math);
                 self.code_lines(&math);
-                self.needs_newline = true;
+                if !self.capturing_inline() {
+                    self.needs_newline = true;
+                }
             }
             Event::SoftBreak => self.soft_break(),
             Event::HardBreak => self.hard_break(),
@@ -159,12 +171,15 @@ where
             }
             Event::Html(html) => self.html(html, /*inline*/ false),
             Event::InlineHtml(html) => self.html(html, /*inline*/ true),
-            Event::FootnoteReference(_) => {}
+            Event::FootnoteReference(label) => self.footnote_reference(&label),
             Event::TaskListMarker(checked) => self.task_list_marker(checked),
         }
     }
 
     pub(super) fn prepare_for_event(&mut self, event: &Event<'a>) {
+        if !matches!(event, Event::Start(pulldown_cmark::Tag::Paragraph)) {
+            self.joined_definition_paragraph = false;
+        }
         if !self.pending_local_link_soft_break {
             return;
         }
@@ -181,8 +196,8 @@ where
     pub(super) fn flush_current_line(&mut self) {
         if let Some(line) = self.current_line_content.take() {
             let style = self.current_line_style;
-            // NB we don't wrap code in code blocks, in order to preserve whitespace for copy/paste.
-            if !self.current_line_in_code_block
+            // Keep code whitespace and pre-laid-out table borders intact.
+            if !self.current_line_preformatted
                 && let Some(width) = self.wrap_width
             {
                 let opts = RtOptions::new(width)
@@ -200,7 +215,7 @@ where
             }
             self.current_initial_indent.clear();
             self.current_subsequent_indent.clear();
-            self.current_line_in_code_block = false;
+            self.current_line_preformatted = false;
             self.line_ends_with_local_link_target = false;
         }
     }
@@ -222,7 +237,7 @@ where
         self.current_subsequent_indent = self.prefix_spans(/*pending_marker_line*/ false);
         self.current_line_style = style;
         self.current_line_content = Some(line);
-        self.current_line_in_code_block = self.in_code_block;
+        self.current_line_preformatted = self.in_code_block;
         self.line_ends_with_local_link_target = false;
 
         self.pending_marker_line = false;
@@ -230,7 +245,7 @@ where
 
     pub(super) fn push_span(&mut self, mut span: Span<'static>) {
         if !self.in_code_block && self.prose_style != Style::default() {
-            if self.current_line_content.is_none() {
+            if self.current_line_content.is_none() && !self.capturing_inline() {
                 self.push_line(Line::default());
             }
             span.style = self
@@ -248,11 +263,25 @@ where
         {
             span.style.underline_color = Some(sentinel);
         }
+        // Images can be nested in table cells. Complete their fallback first, then
+        // send it to the table sink without emitting lines into the document.
+        if let Some(image) = self.images.last_mut() {
+            image.spans.push(span);
+            return;
+        }
+        if let Some(table) = self.table.as_mut() {
+            table.push_span(span);
+            return;
+        }
         if let Some(line) = self.current_line_content.as_mut() {
             line.push_span(span);
         } else {
             self.push_line(Line::from(vec![span]));
         }
+    }
+
+    pub(super) fn capturing_inline(&self) -> bool {
+        self.table.is_some() || !self.images.is_empty()
     }
 
     pub(super) fn push_blank_line(&mut self) {

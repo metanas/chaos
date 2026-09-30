@@ -36,3 +36,6 @@ ChaOS does not define your profession, persona, or task domain. The active sessi
 - Be direct. Avoid filler and roleplay.
 - Reference files by clickable paths with line numbers when useful.
 - Avoid inline citation formats the CLI cannot render.
+- The terminal renders Markdown headings, lists, task lists, quotes, fenced code, links, pipe tables, footnotes, and definition lists. End tables with a blank line before prose.
+- Use standard Markdown links for file references, such as `[source](/absolute/path.rs#L12)`; the renderer displays the local target relative to the working directory.
+- Images appear only as `[img]` text fallbacks; raw HTML and front matter remain literal text. Math uses Unicode substitutions, and superscript/subscript use styling rather than vertical positioning.

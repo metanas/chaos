@@ -301,6 +301,7 @@ pub(crate) async fn chatwidget_suite() {
     queued_message_edit_binding_mapping_covers_special_terminals();
     Box::pin(enqueueing_history_prompt_multiple_times_is_stable()).await;
     Box::pin(streaming_final_answer_ctrl_c_interrupt_preserves_background_shells()).await;
+    Box::pin(buffered_markdown_keeps_status_visible_until_completion()).await;
     Box::pin(idle_commit_ticks_do_not_restore_status_without_commentary_completion()).await;
     Box::pin(commentary_completion_restores_status_indicator_before_exec_begin()).await;
     Box::pin(plan_completion_restores_status_indicator_after_streaming_plan_output()).await;
@@ -4074,7 +4075,8 @@ async fn streaming_final_answer_ctrl_c_interrupt_preserves_background_shells() {
     chat.process_id = Some(ProcessId::new());
 
     chat.on_task_started();
-    chat.on_agent_message_delta("Final answer line\n".to_string());
+    // A heading is stable immediately; a trailing paragraph can become a definition term.
+    chat.on_agent_message_delta("# Final answer line\n".to_string());
     chat.on_commit_tick();
     drain_insert_history(&mut rx);
 
@@ -4105,13 +4107,45 @@ async fn streaming_final_answer_ctrl_c_interrupt_preserves_background_shells() {
 }
 
 #[cfg(test)]
+async fn buffered_markdown_keeps_status_visible_until_completion() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(None).await;
+    chat.on_task_started();
+    chat.on_agent_message_delta("Term\n".to_string());
+    chat.on_commit_tick();
+    assert!(drain_insert_history(&mut rx).is_empty());
+    assert!(chat.bottom_pane.status_indicator_visible());
+    assert!(chat.bottom_pane.is_task_running());
+
+    chat.on_agent_message_delta(": Description\n".to_string());
+    chat.on_commit_tick();
+    assert!(drain_insert_history(&mut rx).is_empty());
+    assert!(chat.bottom_pane.status_indicator_visible());
+
+    complete_assistant_message(
+        &mut chat,
+        "msg-buffered-definition",
+        "Term\n: Description\n",
+        Some(MessagePhase::Commentary),
+    );
+    let cells = drain_insert_history(&mut rx);
+    let rendered = cells
+        .iter()
+        .map(|lines| lines_to_single_string(lines))
+        .collect::<String>();
+    assert!(rendered.contains("Term"));
+    assert!(rendered.contains(": Description"));
+    assert!(chat.bottom_pane.status_indicator_visible());
+    assert!(chat.bottom_pane.is_task_running());
+}
+
+#[cfg(test)]
 async fn idle_commit_ticks_do_not_restore_status_without_commentary_completion() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(None).await;
 
     chat.on_task_started();
     assert_eq!(chat.bottom_pane.status_indicator_visible(), true);
 
-    chat.on_agent_message_delta("Final answer line\n".to_string());
+    chat.on_agent_message_delta("# Final answer line\n".to_string());
     chat.on_commit_tick();
     drain_insert_history(&mut rx);
 
@@ -4130,7 +4164,7 @@ async fn commentary_completion_restores_status_indicator_before_exec_begin() {
     chat.on_task_started();
     assert_eq!(chat.bottom_pane.status_indicator_visible(), true);
 
-    chat.on_agent_message_delta("Preamble line\n".to_string());
+    chat.on_agent_message_delta("# Preamble line\n".to_string());
     chat.on_commit_tick();
     drain_insert_history(&mut rx);
 
@@ -4139,7 +4173,7 @@ async fn commentary_completion_restores_status_indicator_before_exec_begin() {
     complete_assistant_message(
         &mut chat,
         "msg-commentary",
-        "Preamble line\n",
+        "# Preamble line\n",
         Some(MessagePhase::Commentary),
     );
 
@@ -4161,14 +4195,14 @@ async fn plan_completion_restores_status_indicator_after_streaming_plan_output()
     chat.on_task_started();
     assert_eq!(chat.bottom_pane.status_indicator_visible(), true);
 
-    chat.on_plan_delta("- Step 1\n".to_string());
+    chat.on_plan_delta("# Plan\n- Step 1\n".to_string());
     chat.on_commit_tick();
     drain_insert_history(&mut rx);
 
     assert_eq!(chat.bottom_pane.status_indicator_visible(), false);
     assert_eq!(chat.bottom_pane.is_task_running(), true);
 
-    chat.on_plan_item_completed("- Step 1\n".to_string());
+    chat.on_plan_item_completed("# Plan\n- Step 1\n".to_string());
 
     assert_eq!(chat.bottom_pane.status_indicator_visible(), true);
     assert_eq!(chat.bottom_pane.is_task_running(), true);
@@ -4182,13 +4216,13 @@ async fn preamble_keeps_working_status_snapshot() {
     // Regression sequence: a preamble line is committed to history before any exec/tool event.
     // After commentary completes, the status row should be restored before subsequent work.
     chat.on_task_started();
-    chat.on_agent_message_delta("Preamble line\n".to_string());
+    chat.on_agent_message_delta("# Preamble line\n".to_string());
     chat.on_commit_tick();
     drain_insert_history(&mut rx);
     complete_assistant_message(
         &mut chat,
         "msg-commentary-snapshot",
-        "Preamble line\n",
+        "# Preamble line\n",
         Some(MessagePhase::Commentary),
     );
 
@@ -4223,7 +4257,7 @@ async fn unified_exec_begin_restores_working_status_snapshot() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(None).await;
 
     chat.on_task_started();
-    chat.on_agent_message_delta("Preamble line\n".to_string());
+    chat.on_agent_message_delta("# Preamble line\n".to_string());
     chat.on_commit_tick();
     drain_insert_history(&mut rx);
 
@@ -8408,7 +8442,7 @@ async fn replayed_interrupted_reconnect_footer_row_snapshot() {
 async fn stream_error_restores_hidden_status_indicator() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(None).await;
     chat.on_task_started();
-    chat.on_agent_message_delta("Preamble line\n".to_string());
+    chat.on_agent_message_delta("# Preamble line\n".to_string());
     chat.on_commit_tick();
     drain_insert_history(&mut rx);
     assert!(!chat.bottom_pane.status_indicator_visible());

@@ -55,6 +55,11 @@ where
             return;
         }
         self.line_ends_with_local_link_target = false;
+        if self.capturing_inline() {
+            let style = self.inline_styles.last().copied().unwrap_or_default();
+            self.push_span(Span::styled(text.replace(['\r', '\n'], " "), style));
+            return;
+        }
         if self.pending_marker_line {
             self.push_line(Line::default());
         }
@@ -108,11 +113,20 @@ where
             return;
         }
         self.line_ends_with_local_link_target = false;
-        if self.pending_marker_line {
+        if self.pending_marker_line && !self.capturing_inline() {
             self.push_line(Line::default());
             self.pending_marker_line = false;
         }
-        let span = Span::from(code.into_string()).style(self.styles.code);
+        let style = if self.images.is_empty() {
+            self.styles.code
+        } else {
+            self.inline_styles
+                .last()
+                .copied()
+                .unwrap_or_default()
+                .patch(self.styles.code)
+        };
+        let span = Span::from(code.into_string()).style(style);
         self.push_rendered_span(span);
     }
 
@@ -121,6 +135,10 @@ where
             return;
         }
         self.line_ends_with_local_link_target = false;
+        if self.capturing_inline() {
+            self.code(code.replace(['\r', '\n'], " ").into());
+            return;
+        }
         if self.pending_marker_line {
             self.push_line(Line::default());
             self.pending_marker_line = false;
@@ -143,6 +161,10 @@ where
             return;
         }
         self.line_ends_with_local_link_target = false;
+        if self.capturing_inline() {
+            self.text(html);
+            return;
+        }
         self.pending_marker_line = false;
         for (i, line) in html.lines().enumerate() {
             if self.needs_newline {
@@ -162,12 +184,20 @@ where
         if self.suppressing_local_link_label() {
             return;
         }
+        if self.capturing_inline() {
+            self.inline_capture_break();
+            return;
+        }
         self.line_ends_with_local_link_target = false;
         self.push_line(Line::default());
     }
 
     pub(super) fn soft_break(&mut self) {
         if self.suppressing_local_link_label() {
+            return;
+        }
+        if self.capturing_inline() {
+            self.inline_capture_break();
             return;
         }
         if self.line_ends_with_local_link_target {
@@ -217,7 +247,7 @@ where
                 self.push_span(Span::styled(link.destination, self.styles.link));
                 self.push_span(")".into());
             } else if let Some(local_target_display) = link.local_target_display {
-                if self.pending_marker_line {
+                if self.pending_marker_line && !self.capturing_inline() {
                     self.push_line(Line::default());
                 }
                 let style = self

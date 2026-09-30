@@ -31,8 +31,10 @@ fn table_structure_is_recognised_by_shape() {
     assert!(is_table_delimiter_line("| --- | --- |"));
     assert!(is_table_delimiter_line("|:---:|---:|"));
     assert!(is_table_delimiter_line("--- | --- | ---"));
-    // Two dashes is short of the three a delimiter needs.
-    assert!(!is_table_delimiter_line("| -- | -- |"));
+    // Match pulldown-cmark: one dash is enough, including alignment colons.
+    assert!(is_table_delimiter_line("| -- | -- |"));
+    assert!(is_table_delimiter_line("| - | :-: |"));
+    assert!(!is_table_delimiter_line("| : | : |"));
     assert!(!is_table_delimiter_line("| A | B |"));
 
     assert_eq!(strip_blockquote_prefix("> > nested"), "nested");

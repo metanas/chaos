@@ -12,7 +12,25 @@ where
     pub(super) fn start_tag(&mut self, tag: Tag<'a>) {
         match tag {
             Tag::Paragraph => self.start_paragraph(),
-            Tag::Heading { level, .. } => self.start_heading(level),
+            Tag::Heading {
+                level,
+                id,
+                classes,
+                attrs,
+            } => {
+                self.start_heading(level);
+                let mut parts = Vec::new();
+                if let Some(id) = id {
+                    parts.push(format!("#{id}"));
+                }
+                parts.extend(classes.iter().map(|class| format!(".{class}")));
+                parts.extend(attrs.iter().map(|(key, value)| match value {
+                    Some(value) => format!("{key}={value}"),
+                    None => key.to_string(),
+                }));
+                self.heading_suffix =
+                    (!parts.is_empty()).then(|| format!(" {{{}}}", parts.join(" ")));
+            }
             Tag::BlockQuote(kind) => self.start_blockquote(kind),
             Tag::CodeBlock(kind) => {
                 let indent = match kind {
@@ -35,19 +53,17 @@ where
                 dest_url,
                 ..
             } => self.push_link(link_type, dest_url.to_string()),
-            Tag::HtmlBlock
-            | Tag::FootnoteDefinition(_)
-            | Tag::DefinitionList
-            | Tag::DefinitionListTitle
-            | Tag::DefinitionListDefinition
-            | Tag::Table(_)
-            | Tag::TableHead
-            | Tag::TableRow
-            | Tag::TableCell
-            | Tag::Image { .. }
-            | Tag::Superscript
-            | Tag::Subscript
-            | Tag::MetadataBlock(_) => {}
+            Tag::FootnoteDefinition(label) => self.start_footnote_definition(&label),
+            Tag::DefinitionList => self.start_definition_list(),
+            Tag::DefinitionListTitle => self.start_definition_title(),
+            Tag::DefinitionListDefinition => self.start_definition_description(),
+            Tag::Table(alignments) => self.start_table(alignments),
+            Tag::Image { dest_url, .. } => self.start_image(dest_url.to_string()),
+            Tag::Superscript | Tag::Subscript => {
+                self.push_inline_style(ratatui::style::Style::new().dim().italic());
+            }
+            Tag::MetadataBlock(kind) => self.start_metadata(kind),
+            Tag::HtmlBlock | Tag::TableHead | Tag::TableRow | Tag::TableCell => {}
         }
     }
 
@@ -62,25 +78,47 @@ where
                 self.indent_stack.pop();
                 self.pending_marker_line = false;
             }
-            TagEnd::Emphasis | TagEnd::Strong | TagEnd::Strikethrough => self.pop_inline_style(),
-            TagEnd::Link => self.pop_link(),
-            TagEnd::HtmlBlock
-            | TagEnd::FootnoteDefinition
-            | TagEnd::DefinitionList
-            | TagEnd::DefinitionListTitle
-            | TagEnd::DefinitionListDefinition
-            | TagEnd::Table
-            | TagEnd::TableHead
-            | TagEnd::TableRow
-            | TagEnd::TableCell
-            | TagEnd::Image
+            TagEnd::Emphasis
+            | TagEnd::Strong
+            | TagEnd::Strikethrough
             | TagEnd::Superscript
-            | TagEnd::Subscript
-            | TagEnd::MetadataBlock(_) => {}
+            | TagEnd::Subscript => self.pop_inline_style(),
+            TagEnd::Link => self.pop_link(),
+            TagEnd::FootnoteDefinition => self.end_footnote_definition(),
+            TagEnd::DefinitionList => self.needs_newline = true,
+            TagEnd::DefinitionListTitle => {
+                self.pop_inline_style();
+                self.needs_newline = false;
+            }
+            TagEnd::DefinitionListDefinition => self.end_definition_description(),
+            TagEnd::Table => self.end_table(),
+            TagEnd::TableHead => {
+                if let Some(table) = &mut self.table {
+                    table.finish_header();
+                }
+            }
+            TagEnd::TableRow => {
+                if let Some(table) = &mut self.table {
+                    table.finish_row();
+                }
+            }
+            TagEnd::TableCell => {
+                if let Some(table) = &mut self.table {
+                    table.finish_cell();
+                }
+            }
+            TagEnd::Image => self.end_image(),
+            TagEnd::MetadataBlock(kind) => self.end_metadata(kind),
+            TagEnd::HtmlBlock => {}
         }
     }
 
     pub(super) fn start_paragraph(&mut self) {
+        if self.joined_definition_paragraph {
+            self.joined_definition_paragraph = false;
+            self.in_paragraph = true;
+            return;
+        }
         if self.needs_newline {
             self.push_blank_line();
         }
@@ -118,6 +156,9 @@ where
     }
 
     pub(super) fn end_heading(&mut self) {
+        if let Some(suffix) = self.heading_suffix.take() {
+            self.push_span(Span::styled(suffix, ratatui::style::Style::new().dim()));
+        }
         self.needs_newline = true;
         self.pop_inline_style();
     }
@@ -160,11 +201,6 @@ where
     pub(super) fn start_item(&mut self) {
         self.pending_marker_line = true;
         let depth = self.list_indices.len();
-        let is_ordered = self
-            .list_indices
-            .last()
-            .map(Option::is_some)
-            .unwrap_or(false);
         let width = depth * 4 - 3;
         let marker = if let Some(last_index) = self.list_indices.last_mut() {
             match last_index {
@@ -183,12 +219,10 @@ where
         } else {
             None
         };
-        let indent_prefix = if depth == 0 {
-            Vec::new()
-        } else {
-            let indent_len = if is_ordered { width + 2 } else { width + 1 };
-            vec![Span::from(" ".repeat(indent_len))]
-        };
+        // Include every digit of an ordered marker (e.g. "12. "), not only
+        // the one-digit minimum. Tables and wrapped prose share this prefix.
+        let indent_len: usize = marker.iter().flatten().map(Span::width).sum();
+        let indent_prefix = vec![Span::from(" ".repeat(indent_len))];
         self.indent_stack.push(IndentContext::new(
             indent_prefix,
             marker,

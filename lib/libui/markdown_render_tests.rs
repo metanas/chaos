@@ -133,7 +133,7 @@ pub(crate) fn markdown_render_suite() {
     url_link_shows_destination();
     bare_url_autolink_does_not_duplicate_destination();
     bare_email_autolink_does_not_duplicate_destination();
-    pipe_table_text_stays_verbatim();
+    pipe_table_renders_aligned_cells();
     alert_blockquote_has_no_blank_line_after_header();
     markdown_render_file_link_snapshot();
     unordered_list_local_file_link_stays_inline_with_following_text();
@@ -898,16 +898,18 @@ fn bare_email_autolink_does_not_duplicate_destination() {
     );
 }
 
-fn pipe_table_text_stays_verbatim() {
+fn pipe_table_renders_aligned_cells() {
     let text = render_markdown_text(
         "| Left | Center | Right |\n|:-----|:------:|------:|\n| a | b | c |\n",
     );
     assert_eq!(
         plain_lines(&text),
         vec![
-            "| Left | Center | Right |".to_string(),
-            "|:-----|:------:|------:|".to_string(),
-            "| a | b | c |".to_string(),
+            "┌──────┬────────┬───────┐",
+            "│ Left │ Center │ Right │",
+            "├──────┼────────┼───────┤",
+            "│ a    │   b    │     c │",
+            "└──────┴────────┴───────┘",
         ]
     );
 }
@@ -1166,6 +1168,7 @@ Table below (alignment test):
 | Left | Center | Right |
 |:-----|:------:|------:|
 | a    |   b    |     c |
+
 Inline HTML: <sup>sup</sup> and <sub>sub</sub>.
 HTML block:
 <div style="border:1px solid #ccc;padding:2px">inline block</div>

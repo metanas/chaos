@@ -6,10 +6,19 @@ async fn no_commit_until_newline() {
     assert!(out.is_empty(), "should not commit without newline");
     c.push_delta("!\n");
     let out2 = c.commit_complete_lines();
-    assert_eq!(out2.len(), 1, "one completed line after newline");
+    assert!(
+        out2.is_empty(),
+        "a paragraph may still become a definition-list term"
+    );
+    c.push_delta("\n# Next\n");
+    assert_eq!(
+        lines_to_plain_strings(&c.commit_complete_lines()),
+        ["Hello, world!", "", "# Next"]
+    );
 }
 
 pub(crate) async fn markdown_stream_suite() {
+    extensions_stream_like_full_render();
     Box::pin(no_commit_until_newline()).await;
     Box::pin(finalize_commits_partial_line()).await;
     Box::pin(e2e_stream_blockquote_simple_uses_success_color()).await;
@@ -30,6 +39,47 @@ pub(crate) async fn markdown_stream_suite() {
     Box::pin(fuzz_class_bullet_duplication_variant_1()).await;
     Box::pin(fuzz_class_bullet_duplication_variant_2()).await;
     Box::pin(streaming_html_block_then_text_matches_full()).await;
+}
+
+fn extensions_stream_like_full_render() {
+    let sources = [
+        "Hello.\nWorld.\n\n# Next\n",
+        "intro\n| A | B |\n| - | -: |\n| short | x |\n| much longer text | y |\n\nAfter\n",
+        "| A | B |\n| - | - |\npipe-free body row\n\nAfter\n",
+        "> - | H |\n>   | --- |\n>   | 👩‍💻e\u{301}界 |\n\nAfter\n",
+        "| A |\n| --- |\n| first |\n\n| B |\n| --- |\n| second |\n",
+        "Claim[^n].\n\nOther paragraph.\n\n[^n]: Evidence.\n",
+        "[^n]: Evidence.\n\nClaim[^n].\n",
+        "Undefined[^n].\n",
+        "Term\n: First\n\n  Second paragraph.\n\nNext\n: Another\n",
+        "> Term\n> : Description\n\nAfter\n",
+        "- Term\n  : Description\n\nAfter\n",
+        "- [file](/work/src/lib.rs#L12)\n  : description\n",
+        "Before ![**diagram**\n`code`](d.png) after.\n\n# Next\n",
+        "---\ntitle: Demo\n---\n\nBody\n",
+        "+++\ntitle = \"Demo\"\n+++\n\nBody\n",
+        "---\n\nA rule, not closed front matter.\n",
+        "> ```rust,no_run\n> fn main() {}\n> ```\n\nAfter\n",
+        "```markdown\n| H |\n| --- |\n| [^literal] |\n```\n",
+    ];
+    for source in sources {
+        for width in [None, Some(12), Some(40)] {
+            let cwd = super::test_cwd();
+            let mut collector = MarkdownStreamCollector::new(width, &cwd);
+            let mut streamed = Vec::new();
+            // Try every UTF-8-safe character boundary, including boundaries
+            // inside links, delimiters, front matter, and combining sequences.
+            for character in source.chars() {
+                let mut bytes = [0; 4];
+                collector.push_delta(character.encode_utf8(&mut bytes));
+                streamed.extend(collector.commit_complete_lines());
+            }
+            streamed.extend(collector.finalize_and_drain());
+            let mut full = Vec::new();
+            markdown::append_markdown(source, width, Some(&cwd), &mut full);
+            assert_eq!(streamed, full, "width={width:?}, source={source:?}");
+        }
+    }
 }
 #[cfg(test)]
 async fn finalize_commits_partial_line() {
@@ -167,12 +217,9 @@ async fn heading_starts_on_new_line_when_following_paragraph() {
                 .join("")
         })
         .collect();
-    assert_eq!(
-        out1.len(),
-        1,
-        "first commit should contain only the paragraph line, got {}: {:?}",
-        out1.len(),
-        s1
+    assert!(
+        out1.is_empty(),
+        "trailing paragraph remains mutable: {s1:?}"
     );
 
     c.push_delta("## Heading\n");
@@ -189,8 +236,8 @@ async fn heading_starts_on_new_line_when_following_paragraph() {
         .collect();
     assert_eq!(
         s2,
-        vec!["", "## Heading"],
-        "expected a blank separator then the heading line"
+        vec!["Hello.", "", "## Heading"],
+        "the next block closes the preceding paragraph"
     );
 
     let line_to_string = |l: &ratatui::text::Line<'_>| -> String {
@@ -201,8 +248,8 @@ async fn heading_starts_on_new_line_when_following_paragraph() {
             .join("")
     };
 
-    assert_eq!(line_to_string(&out1[0]), "Hello.");
-    assert_eq!(line_to_string(&out2[1]), "## Heading");
+    assert_eq!(line_to_string(&out2[0]), "Hello.");
+    assert_eq!(line_to_string(&out2[2]), "## Heading");
 }
 
 #[cfg(test)]
@@ -230,8 +277,8 @@ async fn heading_not_inlined_when_split_across_chunks() {
         .collect();
     assert_eq!(
         s1,
-        vec!["Sounds good!"],
-        "expected paragraph followed by blank separator before heading chunk"
+        Vec::<String>::new(),
+        "wait for the next complete block line"
     );
 
     // Now finish the heading line with the trailing newline.
@@ -249,8 +296,8 @@ async fn heading_not_inlined_when_split_across_chunks() {
         .collect();
     assert_eq!(
         s2,
-        vec!["", "## Adding Bird subcommand"],
-        "expected the heading line only on the final commit"
+        vec!["Sounds good!", "", "## Adding Bird subcommand"],
+        "expected paragraph and heading once the heading is complete"
     );
 
     // Sanity check raw markdown rendering for a simple line does not produce spurious extras.
@@ -305,11 +352,7 @@ async fn growing_table_is_withheld_until_it_closes() {
     let mut collector = super::MarkdownStreamCollector::new(None, &super::test_cwd());
 
     collector.push_delta("intro\n");
-    assert_eq!(
-        lines_to_plain_strings(&collector.commit_complete_lines()),
-        vec!["intro".to_string()],
-        "prose ahead of the table commits normally"
-    );
+    assert!(collector.commit_complete_lines().is_empty());
 
     // The header alone could still turn into a table, so it waits for the
     // delimiter rather than committing as prose.
@@ -320,9 +363,10 @@ async fn growing_table_is_withheld_until_it_closes() {
     );
 
     collector.push_delta("| --- | --- |\n| a | b |\n");
-    assert!(
-        collector.commit_complete_lines().is_empty(),
-        "confirmed table rows stay mutable while more rows may arrive"
+    assert_eq!(
+        lines_to_plain_strings(&collector.commit_complete_lines()),
+        ["intro"],
+        "confirmed table closes the preceding paragraph but stays mutable"
     );
 
     // This row is wider than every cell above it, which is exactly the case

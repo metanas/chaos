@@ -14,7 +14,7 @@
 //!
 //! A GFM pipe table is a header line of pipe-separated segments with at least
 //! one non-empty cell, a delimiter line directly beneath it holding only
-//! alignment markers (`---`, `:---`, `---:`, `:---:`, three dashes minimum),
+//! alignment markers (`---`, `:---`, `---:`, `:---:`, one dash minimum),
 //! and body rows after that. Pipes inside a fenced code block are code rather
 //! than table syntax, so [`FenceTracker`] classifies each line first.
 
@@ -81,7 +81,7 @@ fn is_table_delimiter_segment(segment: &str) -> bool {
     }
     let without_leading = trimmed.strip_prefix(':').unwrap_or(trimmed);
     let without_ends = without_leading.strip_suffix(':').unwrap_or(without_leading);
-    without_ends.len() >= 3 && without_ends.chars().all(|c| c == '-')
+    !without_ends.is_empty() && without_ends.chars().all(|c| c == '-')
 }
 
 /// Whether every segment of `line` is an alignment marker.
