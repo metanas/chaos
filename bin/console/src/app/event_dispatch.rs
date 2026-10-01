@@ -363,10 +363,14 @@ impl App {
                                 }
                             }
                             Err(err) => {
-                                self.chat_widget.add_error_message(format!(
-                                    "Failed to resume session {}: {err}",
-                                    target_session.process_id
-                                ));
+                                let message = match err {
+                                    chaos_kern::error::ChaosErr::SessionInUse(_) => err.to_string(),
+                                    _ => format!(
+                                        "Failed to resume session {}: {err}",
+                                        target_session.process_id
+                                    ),
+                                };
+                                self.chat_widget.add_error_message(message);
                             }
                         }
                     }

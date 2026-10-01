@@ -44,6 +44,7 @@ use super::policy::is_persisted_response_item;
 use crate::async_breaker::AsyncCircuitBreaker;
 use crate::async_breaker::BreakerError;
 use crate::default_client::originator;
+use crate::error::ChaosErr;
 use crate::git_info::collect_git_info;
 use crate::path_utils;
 use crate::runtime_db;
@@ -763,7 +764,7 @@ enum JournalAppendOutcome {
 struct JournalSink {
     state: JournalSinkState,
     breaker: AsyncCircuitBreaker,
-    last_error: Option<String>,
+    last_error: Option<anyhow::Error>,
 }
 
 enum JournalSinkState {
@@ -809,7 +810,14 @@ impl JournalSink {
 
     fn failure(&self, context: &str) -> IoError {
         match &self.last_error {
-            Some(error) => IoError::other(format!("{context}: {error}")),
+            Some(error) => {
+                // Keep this expected resume failure typed across the recorder's
+                // I/O boundary. The full journal cause was already logged.
+                if let Some(ChaosErr::SessionInUse(process_id)) = error.downcast_ref::<ChaosErr>() {
+                    return IoError::other(ChaosErr::SessionInUse(*process_id));
+                }
+                IoError::other(format!("{context}: {error:#}"))
+            }
             None => IoError::other(context.to_string()),
         }
     }
@@ -869,13 +877,12 @@ impl JournalSink {
                     .breaker
                     .call(|| async {
                         match config_for_call.mode {
-                            JournalSinkMode::Create => {
-                                ActiveJournalWriter::initialize(
-                                    config_for_call,
-                                    pending_items.as_slice(),
-                                )
-                                .await
-                            }
+                            JournalSinkMode::Create => ActiveJournalWriter::initialize(
+                                config_for_call,
+                                pending_items.as_slice(),
+                            )
+                            .await
+                            .map_err(anyhow::Error::msg),
                             JournalSinkMode::Resume => {
                                 ActiveJournalWriter::attach_resumed(
                                     config_for_call,
@@ -901,7 +908,7 @@ impl JournalSink {
                         JournalAppendOutcome::Deferred
                     }
                     Err(BreakerError::Operation(err)) => {
-                        warn!("failed to initialize journal sink: {err}");
+                        warn!("failed to initialize journal sink: {err:#}");
                         self.last_error = Some(err);
                         health::set_persistence_health(PersistenceHealth::Failed);
                         self.state = JournalSinkState::Pending {
@@ -927,7 +934,7 @@ impl JournalSink {
                     }
                     Err(BreakerError::Operation(err)) => {
                         warn!("journal append deferred after failure: {err}");
-                        self.last_error = Some(err);
+                        self.last_error = Some(anyhow::Error::msg(err));
                         health::set_persistence_health(PersistenceHealth::Failed);
                         self.state = JournalSinkState::Active(writer);
                         JournalAppendOutcome::Deferred
@@ -1044,15 +1051,17 @@ impl ActiveJournalWriter {
     async fn attach_resumed(
         config: PendingJournalConfig,
         items: &[RolloutItem],
-    ) -> Result<Self, String> {
+    ) -> anyhow::Result<Self> {
         debug_assert!(matches!(config.mode, JournalSinkMode::Resume));
-        let client = journal_client_for_mounted_backend().await?;
+        let client = journal_client_for_mounted_backend()
+            .await
+            .map_err(anyhow::Error::msg)?;
         let mut writer = Self::connect_existing(client, &config).await?;
         if let Err(error) = writer.append_items(items).await {
             if let Err(cleanup_error) = writer.release_lease().await {
                 warn!(%cleanup_error, "failed to release partially attached journal writer");
             }
-            return Err(error);
+            return Err(anyhow::Error::msg(error));
         }
         Ok(writer)
     }
@@ -1063,7 +1072,7 @@ impl ActiveJournalWriter {
     async fn connect_existing(
         client: JournalClient,
         config: &PendingJournalConfig,
-    ) -> Result<Self, String> {
+    ) -> anyhow::Result<Self> {
         let create_input = JournalCreateProcessInput {
             process_id: config.process_id,
             parent: None,
@@ -1079,7 +1088,7 @@ impl ActiveJournalWriter {
             Err(JournalClientError::Remote(payload))
                 if payload.code == JournalErrorCode::AlreadyExists => {}
             Err(err) => {
-                return Err(format!("create_process failed: {err}"));
+                return Err(anyhow::Error::new(err).context("create_process failed"));
             }
         }
 
@@ -1090,7 +1099,16 @@ impl ActiveJournalWriter {
                 JOURNAL_LEASE_TTL.as_millis() as u64,
             )
             .await
-            .map_err(|err| format!("acquire_lease failed: {err}"))?;
+            .map_err(|err| {
+                let in_use = matches!(&err, JournalClientError::Remote(payload)
+                    if payload.code == JournalErrorCode::LeaseConflict);
+                let error = anyhow::Error::new(err);
+                if in_use {
+                    error.context(ChaosErr::SessionInUse(config.process_id))
+                } else {
+                    error.context("acquire_lease failed")
+                }
+            })?;
         let mut writer = Self {
             client,
             process_id: config.process_id,
@@ -1112,7 +1130,7 @@ impl ActiveJournalWriter {
                 if let Err(cleanup_error) = writer.release_lease().await {
                     warn!(%cleanup_error, "failed to release partially connected journal writer");
                 }
-                Err(format!("load_journal failed: {error}"))
+                Err(anyhow::Error::new(error).context("load_journal failed"))
             }
         }
     }
@@ -1601,7 +1619,7 @@ async fn rollout_writer(
                         Ok(()) => {}
                         Err(error) => {
                             warn!(%error, "journal lease unavailable; will retry");
-                            journal_sink.last_error = Some(error);
+                            journal_sink.last_error = Some(anyhow::Error::msg(error));
                             health::set_persistence_health(PersistenceHealth::Failed);
                         }
                     }

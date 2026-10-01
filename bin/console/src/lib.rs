@@ -23,6 +23,7 @@ use chaos_kern::config::Config;
 use chaos_kern::config::ConfigOverrides;
 use chaos_kern::config::load_config_or_exit as kern_load_config_or_exit;
 use chaos_kern::config_loader::LoaderOverrides;
+use chaos_kern::error::ChaosErr;
 use chaos_kern::find_process_id_by_name;
 use chaos_kern::format_exec_policy_error_with_source;
 use chaos_kern::models_manager::CollaborationModesConfig;
@@ -328,6 +329,17 @@ pub async fn run_main(
 }
 
 fn report_to_io_error(report: color_eyre::eyre::Report) -> std::io::Error {
+    // A busy session is an expected, actionable refusal, not an internal
+    // initialization crash. Keep full cause chains for every other failure.
+    if let Some(error) = report
+        .chain()
+        .find_map(|cause| match cause.downcast_ref::<ChaosErr>() {
+            Some(error @ ChaosErr::SessionInUse(_)) => Some(error),
+            _ => None,
+        })
+    {
+        return std::io::Error::other(error.to_string());
+    }
     let mut chain = report.chain();
     let mut message = chain
         .next()

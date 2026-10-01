@@ -22,6 +22,8 @@ records without `replacement_history` are no longer supported.
   keeping the composer and other panes visible instead of opening the transcript.
   Incoming output preserves the reading position; `End` or `Esc` resumes following
   live output, while `Ctrl+T` explicitly opens the transcript viewer.
+- Resuming a session already in use now shows a concise message with retry
+  guidance instead of nested journal errors; diagnostic details remain in logs.
 
 ### Removed
 - Legacy `user_input` submissions; callers must send `user_turn` with turn context.

@@ -571,12 +571,56 @@ async fn failed_resume_releases_lease_acquired_before_loading_journal() {
         .await
         .err()
         .expect("loading corrupt history should fail");
-    assert!(error.contains("load_journal failed"));
+    assert!(error.to_string().contains("load_journal failed"));
     journal
         .client
         .acquire_lease(config.process_id, "next-writer".into(), 30_000)
         .await
         .expect("failed resume must not leave a live lease");
+}
+
+#[tokio::test]
+async fn resumed_session_lease_conflict_preserves_type_and_diagnostics() {
+    let journal = TestJournal::new().await;
+    let writer = journal.writer().await;
+    let mut config = journal.config();
+    config.process_id = writer.process_id;
+    config.owner_id = "second-writer".into();
+    let error = ActiveJournalWriter::connect_existing(journal.client.clone(), &config)
+        .await
+        .err()
+        .expect("an active writer must block resume");
+    assert!(matches!(
+        error.downcast_ref::<ChaosErr>(),
+        Some(ChaosErr::SessionInUse(id)) if *id == writer.process_id
+    ));
+    let diagnostic = format!("{error:#}");
+    assert!(diagnostic.contains("LeaseConflict"));
+    assert!(diagnostic.contains(&writer.owner_id));
+    assert!(diagnostic.contains("holds the lease until"));
+
+    let mut sink = JournalSink::pending(config);
+    sink.last_error = Some(error);
+    let io_error = sink.failure("cannot claim journal writer for resumed process");
+    let mapped = super::super::error::map_session_init_error(
+        &anyhow::Error::new(io_error),
+        journal._dir.path(),
+    );
+    assert!(matches!(mapped, ChaosErr::SessionInUse(id) if id == writer.process_id));
+    assert!(!mapped.to_string().contains("ErrorPayload"));
+
+    // Formatting must not change ownership or release the other writer's lease.
+    writer
+        .client
+        .heartbeat_lease(
+            writer.process_id,
+            writer.owner_id.clone(),
+            writer.lease_token.clone(),
+            30_000,
+        )
+        .await
+        .unwrap();
+    writer.release_lease().await.unwrap();
 }
 
 #[tokio::test]

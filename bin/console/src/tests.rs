@@ -25,6 +25,24 @@ fn report_to_io_error_preserves_cause_chain() {
     );
 }
 
+#[test]
+fn report_to_io_error_shows_session_in_use_without_internal_wrappers() {
+    let process_id = chaos_ipc::ProcessId::new();
+    let result: color_eyre::Result<()> =
+        Err(chaos_kern::error::ChaosErr::SessionInUse(process_id).into());
+    let report = result
+        .wrap_err(format!("Failed to resume session {process_id}"))
+        .expect_err("busy session");
+
+    assert_eq!(
+        report_to_io_error(report).to_string(),
+        format!(
+            "Session {process_id} is already in use by another ChaOS instance.\n\
+             Close that instance and retry. If it has already exited, wait up to 30 seconds for its lock to expire."
+        )
+    );
+}
+
 async fn build_config(temp_dir: &TempDir) -> std::io::Result<Config> {
     ConfigBuilder::default()
         .chaos_home(temp_dir.path().to_path_buf())

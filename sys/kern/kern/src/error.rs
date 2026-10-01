@@ -77,6 +77,12 @@ pub enum ChaosErr {
     #[error("no thread with id: {0}")]
     ProcessNotFound(ProcessId),
 
+    #[error(
+        "Session {0} is already in use by another ChaOS instance.\n\
+         Close that instance and retry. If it has already exited, wait up to 30 seconds for its lock to expire."
+    )]
+    SessionInUse(ProcessId),
+
     #[error("agent thread limit reached (max {max_threads})")]
     AgentLimitReached { max_threads: usize },
 
@@ -202,6 +208,7 @@ impl ChaosErr {
             | ChaosErr::RetryLimit(_)
             | ChaosErr::ContextWindowExceeded
             | ChaosErr::ProcessNotFound(_)
+            | ChaosErr::SessionInUse(_)
             | ChaosErr::AgentLimitReached { .. }
             | ChaosErr::Spawn
             | ChaosErr::SessionConfiguredNotFirstEvent
@@ -583,6 +590,7 @@ impl ChaosErr {
             | ChaosErr::InternalAgentDied => ChaosErrorInfo::InternalServerError,
             ChaosErr::UnsupportedOperation(_)
             | ChaosErr::ProcessNotFound(_)
+            | ChaosErr::SessionInUse(_)
             | ChaosErr::AgentLimitReached { .. } => ChaosErrorInfo::BadRequest,
             ChaosErr::Sandbox(_) => ChaosErrorInfo::SandboxError,
             _ => ChaosErrorInfo::Other,

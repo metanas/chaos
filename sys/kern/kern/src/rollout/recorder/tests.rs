@@ -51,14 +51,13 @@ async fn background_confirm_does_not_report_a_deferred_writer_as_durable() {
     });
     sink.state = JournalSinkState::Disabled;
     let expires_at: Timestamp = "2026-09-06T18:00:30Z".parse().unwrap();
-    sink.last_error = Some(
+    sink.last_error = Some(anyhow::Error::new(
         chaos_journald::JournalError::LeaseConflict {
             process_id: ProcessId::new(),
             current_owner_id: "other-writer".into(),
             expires_at,
-        }
-        .to_string(),
-    );
+        },
+    ));
     let resume_error = sink
         .failure("cannot claim journal writer for resumed process")
         .to_string();

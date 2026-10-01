@@ -52,9 +52,11 @@ deliberate route back when a compaction summary proves incomplete.
 
 ## JOURNAL WRITER OWNERSHIP
 
-Only one writer may own a session journal at a time. Resume and durability
-errors include the underlying journal failure. A lease conflict identifies
-the session, current writer, and lease expiry time.
+Only one writer may own a session journal at a time. Resuming a session with
+an active writer reports that the session is already in use and explains how
+to retry, without displaying internal error wrappers. Logs retain the current
+writer and lease expiry for diagnosis. Other resume and durability errors
+include the underlying journal failure.
 
 Close the other instance of that session before retrying. A crashed writer's
 lease normally expires within 30 seconds; a live writer renews it. Do not
