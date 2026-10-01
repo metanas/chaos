@@ -74,6 +74,17 @@ pub(super) fn rendered_input(prompt: &Prompt) -> Vec<String> {
         .collect()
 }
 
+pub(super) fn rendered_history_input(prompt: &Prompt) -> Vec<String> {
+    let mut input = prompt.get_formatted_input();
+    if let Some(start) = prompt.request_local_start {
+        input.truncate(start);
+    }
+    input
+        .iter()
+        .filter_map(render_clamp_response_item)
+        .collect()
+}
+
 impl Checkpoint {
     pub(super) fn completed(
         backend: Backend,

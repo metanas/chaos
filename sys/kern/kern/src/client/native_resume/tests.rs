@@ -216,7 +216,18 @@ fn rendered_delta_delivers_new_hook_and_system_items_without_replaying_consumed_
             message("user", "first"),
             message("system", "<mcp_resource_update>old</mcp_resource_update>"),
         ];
-        let first = rendered_input(&prompt);
+        let history_len = prompt.input.len();
+        prompt.request_local_start = Some(history_len);
+        prompt.input.push(message("system", "old runtime guidance"));
+        let first = rendered_history_input(&prompt);
+        assert_eq!(first.len(), history_len);
+        assert!(
+            rendered_input(&prompt)
+                .last()
+                .unwrap()
+                .contains("old runtime guidance"),
+            "request-local guidance must still reach the native provider"
+        );
         assert!(
             first
                 .iter()
@@ -232,12 +243,15 @@ fn rendered_delta_delivers_new_hook_and_system_items_without_replaying_consumed_
             "answer",
         )
         .unwrap();
+        prompt.input.truncate(history_len);
         prompt.input.extend([
             message("assistant", "answer"),
             message("developer", "Stop hook: continue once"),
             message("system", "<mcp_resource_update>new</mcp_resource_update>"),
             message("system", "new canonical system notice"),
         ]);
+        prompt.request_local_start = Some(prompt.input.len());
+        prompt.input.push(message("system", "new runtime guidance"));
         let (_, delta) = cp
             .continuation(
                 backend,
@@ -251,8 +265,16 @@ fn rendered_delta_delivers_new_hook_and_system_items_without_replaying_consumed_
         assert!(delta.contains("Stop hook: continue once"));
         assert!(delta.contains("<mcp_resource_update>new</mcp_resource_update>"));
         assert!(delta.contains("new canonical system notice"));
+        assert_eq!(delta.matches("new runtime guidance").count(), 1);
+        assert!(!delta.contains("old runtime guidance"));
         assert!(!delta.contains("<mcp_resource_update>old"));
         assert!(!delta.contains("first"));
+        assert!(
+            rendered_history_input(&prompt)
+                .iter()
+                .all(|item| !item.contains("runtime guidance")),
+            "transient instructions must not enter the next durable checkpoint"
+        );
         // No new user message is needed, and canonical roles remain intact.
         assert!(
             matches!(&prompt.input[3], ResponseItem::Message { role, .. } if role == "developer")

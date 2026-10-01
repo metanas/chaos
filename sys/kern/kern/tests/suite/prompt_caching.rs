@@ -37,6 +37,55 @@ fn text_user_input_parts(texts: Vec<String>) -> serde_json::Value {
     })
 }
 
+fn without_runtime_guidance(
+    body1: serde_json::Value,
+    body2: serde_json::Value,
+) -> (serde_json::Value, serde_json::Value) {
+    let split = |mut body: serde_json::Value| {
+        assert_eq!(
+            body["input"]
+                .as_array()
+                .expect("input array")
+                .iter()
+                .filter(|item| {
+                    item["role"] == "developer"
+                        && item["content"][0]["text"]
+                            .as_str()
+                            .is_some_and(|text| text.contains("# Tools"))
+                })
+                .count(),
+            1,
+            "expected exactly one request-local guidance message"
+        );
+        let guidance = body["input"]
+            .as_array_mut()
+            .expect("input array")
+            .pop()
+            .expect("request-local runtime guidance");
+        assert_eq!(guidance["role"], "developer");
+        let content = guidance["content"].as_array().expect("guidance content");
+        assert_eq!(content.len(), 1);
+        assert_eq!(content[0]["type"], "input_text");
+        assert!(
+            content[0]["text"]
+                .as_str()
+                .expect("runtime guidance text")
+                .contains("# Tools"),
+            "expected capability-aware runtime guidance: {guidance}"
+        );
+        (body, guidance)
+    };
+    let (body1, guidance1) = split(body1);
+    let (body2, guidance2) = split(body2);
+    assert_eq!(
+        guidance1, guidance2,
+        "unchanged capabilities must produce identical request-local guidance"
+    );
+    // Runtime guidance is refreshed at the request tail, not persisted between
+    // turns. Cache assertions below own the durable conversation prefix.
+    (body1, body2)
+}
+
 fn assert_default_env_context(text: &str, cwd: &str, shell: &Shell) {
     assert_env_context(text, cwd, shell);
     assert!(
@@ -134,7 +183,10 @@ async fn prefixes_context_and_instructions_once_and_consistently_across_requests
         .await?;
     wait_for_event(&chaos, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
-    let body1 = req1.single_request().body_json();
+    let (body1, body2) = without_runtime_guidance(
+        req1.single_request().body_json(),
+        req2.single_request().body_json(),
+    );
     let input1 = body1["input"].as_array().expect("input array");
     assert_eq!(
         input1.len(),
@@ -163,8 +215,12 @@ async fn prefixes_context_and_instructions_once_and_consistently_across_requests
     );
     assert_eq!(input1[2], text_user_input("hello 1".to_string()));
 
-    let body2 = req2.single_request().body_json();
     let input2 = body2["input"].as_array().expect("input array");
+    assert_eq!(
+        input2.len(),
+        input1.len() + 1,
+        "expected only the new user message after the cached prefix"
+    );
     assert_eq!(
         &input2[..input1.len()],
         input1.as_slice(),
@@ -268,8 +324,7 @@ async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() -> an
 
     let request1 = req1.single_request();
     let request2 = req2.single_request();
-    let body1 = request1.body_json();
-    let body2 = request2.body_json();
+    let (body1, body2) = without_runtime_guidance(request1.body_json(), request2.body_json());
     // prompt_cache_key should remain constant across overrides
     assert_eq!(
         body1["prompt_cache_key"], body2["prompt_cache_key"],
@@ -380,8 +435,7 @@ async fn per_turn_overrides_keep_cached_prefix_and_key_constant() -> anyhow::Res
 
     let request1 = req1.single_request();
     let request2 = req2.single_request();
-    let body1 = request1.body_json();
-    let body2 = request2.body_json();
+    let (body1, body2) = without_runtime_guidance(request1.body_json(), request2.body_json());
 
     // prompt_cache_key should remain constant across per-turn overrides
     assert_eq!(
@@ -515,8 +569,7 @@ async fn send_user_turn_with_no_changes_does_not_send_environment_context() -> a
 
     let request1 = req1.single_request();
     let request2 = req2.single_request();
-    let body1 = request1.body_json();
-    let body2 = request2.body_json();
+    let (body1, body2) = without_runtime_guidance(request1.body_json(), request2.body_json());
 
     let expected_permissions_msg = body1["input"][0].clone();
     let expected_ui_msg = body1["input"][1].clone();
@@ -635,8 +688,7 @@ async fn send_user_turn_with_changes_sends_environment_context() -> anyhow::Resu
 
     let request1 = req1.single_request();
     let request2 = req2.single_request();
-    let body1 = request1.body_json();
-    let body2 = request2.body_json();
+    let (body1, body2) = without_runtime_guidance(request1.body_json(), request2.body_json());
 
     let expected_permissions_msg = body1["input"][0].clone();
     let expected_ui_msg = body1["input"][1].clone();
