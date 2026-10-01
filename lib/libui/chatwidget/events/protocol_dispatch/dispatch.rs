@@ -240,6 +240,7 @@ impl ChatWidget {
             EventMsg::CollabCloseEnd(ev) => self.on_collab_event(multi_agents::close_end(ev)),
             EventMsg::CollabResumeBegin(ev) => self.on_collab_event(multi_agents::resume_begin(ev)),
             EventMsg::CollabResumeEnd(ev) => self.on_collab_event(multi_agents::resume_end(ev)),
+            EventMsg::CollabAgentStatusChanged(_) => {}
             EventMsg::ProcessRolledBack(rollback) => {
                 self.last_copyable_output = None;
                 if from_replay {

@@ -143,6 +143,9 @@ impl EventProcessorWithJsonOutput {
             }
             protocol::EventMsg::McpToolCallBegin(ev) => self.handle_mcp_tool_call_begin(ev),
             protocol::EventMsg::McpToolCallEnd(ev) => self.handle_mcp_tool_call_end(ev),
+            protocol::EventMsg::CollabAgentStatusChanged(ev) => {
+                vec![ProcessEvent::AgentStatusChanged(ev.clone())]
+            }
             protocol::EventMsg::CollabAgentSpawnBegin(ev) => self.handle_collab_spawn_begin(ev),
             protocol::EventMsg::CollabAgentSpawnEnd(ev) => self.handle_collab_spawn_end(ev),
             protocol::EventMsg::CollabAgentInteractionBegin(ev) => {

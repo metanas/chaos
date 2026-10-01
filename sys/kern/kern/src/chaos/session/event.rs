@@ -1,13 +1,20 @@
 use chaos_ipc::items::TurnItem;
 use chaos_ipc::items::UserMessageItem;
 use chaos_ipc::models::ResponseItem;
+use chaos_ipc::protocol::CollabAgentStatus;
+use chaos_ipc::protocol::CollabAgentStatusChangedEvent;
 use chaos_ipc::protocol::Event;
 use chaos_ipc::protocol::EventMsg;
 use chaos_ipc::protocol::ItemCompletedEvent;
 use chaos_ipc::protocol::ItemStartedEvent;
 use chaos_ipc::protocol::RawResponseItemEvent;
 use chaos_ipc::protocol::RolloutItem;
+use chaos_ipc::protocol::SessionSource;
+use chaos_ipc::protocol::SubAgentSource;
 use chaos_ipc::user_input::UserInput;
+use futures::FutureExt;
+use futures::future::Either;
+use std::future::Future;
 use tracing::debug;
 
 use crate::minions::agent_status_from_event;
@@ -46,15 +53,68 @@ impl Session {
         self.deliver_event_raw(event).await;
     }
 
-    pub(crate) async fn deliver_event_raw(&self, event: Event) {
-        if let Some(status) = agent_status_from_event(&event.msg) {
+    /// Keep status routing off the enclosing turn future's stack without
+    /// allocating for ordinary streaming events. Select the branch synchronously
+    /// so even its temporary status value cannot enlarge the caller's future.
+    pub(crate) fn deliver_event_raw(&self, event: Event) -> impl Future<Output = ()> + Send + '_ {
+        let next_status = agent_status_from_event(&event.msg);
+        if next_status.is_some() || matches!(event.msg, EventMsg::SessionConfigured(_)) {
+            Either::Left(
+                async move {
+                    self.publish_agent_status(next_status).await;
+                    self.deliver_client_event(event).await;
+                }
+                .boxed(),
+            )
+        } else {
+            Either::Right(self.deliver_client_event(event))
+        }
+    }
+
+    async fn deliver_client_event(&self, event: Event) {
+        if let Err(e) = self.tx_event.send(event).await {
+            debug!("dropping event because channel is closed: {e}");
+        }
+    }
+
+    /// Publish only committed state, never raw completion/error payloads.
+    ///
+    /// Initial configuration is delivered before the submission loop can start
+    /// the first turn. Serialize commits with publication so even a fast turn
+    /// cannot publish a stale initial/running state after its completion.
+    async fn publish_agent_status(&self, next_status: Option<chaos_ipc::protocol::AgentStatus>) {
+        let _publication = self.agent_status_publication.lock().await;
+        if let Some(status) = next_status {
             self.agent_status.send_modify(|current| {
                 *current = crate::minions::preserve_turn_failure(current, status);
             });
         }
-        if let Err(e) = self.tx_event.send(event).await {
-            debug!("dropping event because channel is closed: {e}");
-        }
+        let status = CollabAgentStatus::from(&*self.agent_status.borrow());
+        let update = {
+            let state = self.state.lock().await;
+            let configuration = &state.session_configuration;
+            let SessionSource::SubAgent(SubAgentSource::ProcessSpawn {
+                parent_process_id,
+                agent_nickname,
+                agent_role,
+                ..
+            }) = &configuration.session_source
+            else {
+                return;
+            };
+            CollabAgentStatusChangedEvent {
+                parent_process_id: *parent_process_id,
+                child_process_id: self.conversation_id,
+                agent_nickname: agent_nickname.clone(),
+                agent_role: agent_role.clone(),
+                model: Some(configuration.collaboration_mode.model().to_string()),
+                status,
+            }
+        };
+        self.services
+            .agent_control
+            .publish_child_status(update)
+            .await;
     }
 
     pub(crate) async fn emit_turn_item_started(&self, turn_context: &TurnContext, item: &TurnItem) {
@@ -229,3 +289,6 @@ impl Session {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

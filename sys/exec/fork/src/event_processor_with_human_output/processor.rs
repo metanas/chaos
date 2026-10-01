@@ -787,6 +787,7 @@ impl EventProcessor for EventProcessorWithHumanOutput {
             | EventMsg::ProcessRolledBack(_)
             | EventMsg::RequestUserInput(_)
             | EventMsg::RequestPermissions(_)
+            | EventMsg::CollabAgentStatusChanged(_)
             | EventMsg::CollabResumeBegin(_)
             | EventMsg::CollabResumeEnd(_)
             | EventMsg::DynamicToolCallRequest(_)

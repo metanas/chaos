@@ -28,6 +28,54 @@ pub enum AgentStatus {
     NotFound,
 }
 
+/// Payload-free projection of a child's committed lifecycle status.
+///
+/// Completion ends the current turn, not the process: more input may make the
+/// child running again. Shutdown describes process closure, not work failure.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum CollabAgentStatus {
+    PendingInit,
+    Running,
+    Interrupted,
+    Completed,
+    Errored,
+    Shutdown,
+    NotFound,
+}
+
+impl From<&AgentStatus> for CollabAgentStatus {
+    fn from(status: &AgentStatus) -> Self {
+        match status {
+            AgentStatus::PendingInit => Self::PendingInit,
+            AgentStatus::Running => Self::Running,
+            AgentStatus::Interrupted => Self::Interrupted,
+            AgentStatus::Completed(_) => Self::Completed,
+            AgentStatus::Errored(_) => Self::Errored,
+            AgentStatus::Shutdown => Self::Shutdown,
+            AgentStatus::NotFound => Self::NotFound,
+        }
+    }
+}
+
+/// Live-only child state delivered to its direct parent, independently of tools.
+///
+/// This is not durable replay or an implicit wait for children. A resumed parent
+/// receives future commits from live children, not a snapshot of existing children.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
+pub struct CollabAgentStatusChangedEvent {
+    pub parent_process_id: ProcessId,
+    pub child_process_id: ProcessId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_nickname: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_role: Option<String>,
+    /// Effective kernel-selected model at publication, not vendor attestation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    pub status: CollabAgentStatus,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
 pub struct CollabAgentRef {
     /// Process ID of the receiver/new agent.

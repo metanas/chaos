@@ -166,6 +166,35 @@ pub(crate) struct AgentControl {
 }
 
 impl AgentControl {
+    /// Deliver an authoritative child status to its direct parent's live stream.
+    /// No task or subscription outlives this call, and no parent/model-facing
+    /// completion notification is involved. Production event queues are unbounded.
+    pub(crate) async fn publish_child_status(
+        &self,
+        update: chaos_ipc::protocol::CollabAgentStatusChangedEvent,
+    ) {
+        let Some(state) = self.manager.upgrade() else {
+            return;
+        };
+        let Ok(parent) = state.get_process(update.parent_process_id).await else {
+            return;
+        };
+        if matches!(parent.agent_status().await, AgentStatus::Shutdown) {
+            return;
+        }
+        // Send directly, bypassing rollout persistence and model-facing result
+        // delivery. The update describes the child, never the parent's status.
+        let _ = parent
+            .chaos
+            .session
+            .tx_event
+            .send(chaos_ipc::protocol::Event {
+                id: String::new(),
+                msg: chaos_ipc::protocol::EventMsg::CollabAgentStatusChanged(update),
+            })
+            .await;
+    }
+
     /// Construct a new `AgentControl` wired to the given state plus its
     /// process-table router adapter.
     pub(crate) fn new(manager: Weak<ProcessTableState>, router: Adapter<ProcessTableOp>) -> Self {

@@ -8,6 +8,9 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum ProcessEvent {
+    /// Payload-free status of a direct child, independent of collaboration tool calls.
+    #[serde(rename = "agent.status_changed")]
+    AgentStatusChanged(chaos_ipc::protocol::CollabAgentStatusChangedEvent),
     /// Emitted when a new process is started as the first event.
     #[serde(rename = "process.started")]
     ProcessStarted(ProcessStartedEvent),

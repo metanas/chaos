@@ -72,6 +72,7 @@ use super::CollabAgentInteractionBeginEvent;
 use super::CollabAgentInteractionEndEvent;
 use super::CollabAgentSpawnBeginEvent;
 use super::CollabAgentSpawnEndEvent;
+use super::CollabAgentStatusChangedEvent;
 use super::CollabCloseBeginEvent;
 use super::CollabCloseEndEvent;
 use super::CollabResumeBeginEvent;
@@ -281,6 +282,8 @@ pub enum EventMsg {
     CollabAgentSpawnBegin(CollabAgentSpawnBeginEvent),
     /// Collab interaction: agent spawn end.
     CollabAgentSpawnEnd(CollabAgentSpawnEndEvent),
+    /// Payload-free lifecycle update from a direct child, independent of tool calls.
+    CollabAgentStatusChanged(CollabAgentStatusChangedEvent),
     /// Collab interaction: agent interaction begin.
     CollabAgentInteractionBegin(CollabAgentInteractionBeginEvent),
     /// Collab interaction: agent interaction end.
@@ -308,6 +311,12 @@ impl From<CollabAgentSpawnBeginEvent> for EventMsg {
 impl From<CollabAgentSpawnEndEvent> for EventMsg {
     fn from(event: CollabAgentSpawnEndEvent) -> Self {
         EventMsg::CollabAgentSpawnEnd(event)
+    }
+}
+
+impl From<CollabAgentStatusChangedEvent> for EventMsg {
+    fn from(event: CollabAgentStatusChangedEvent) -> Self {
+        EventMsg::CollabAgentStatusChanged(event)
     }
 }
 

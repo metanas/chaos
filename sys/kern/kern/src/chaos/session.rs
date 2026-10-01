@@ -35,6 +35,8 @@ pub(crate) struct Session {
     pub(crate) tx_event: Sender<Event>,
     pub(crate) mcp_notification_tx: Sender<McpServerNotification>,
     pub(super) agent_status: watch::Sender<AgentStatus>,
+    /// Orders committed child statuses and their live parent publication.
+    pub(super) agent_status_publication: Mutex<()>,
     pub(super) out_of_band_elicitation_paused: watch::Sender<bool>,
     pub(crate) state: Mutex<SessionState>,
     pub(crate) active_turn: Mutex<Option<ActiveTurn>>,

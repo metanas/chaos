@@ -539,6 +539,7 @@ impl Session {
             tx_event: tx_event.clone(),
             mcp_notification_tx: mcp_notification_tx.clone(),
             agent_status,
+            agent_status_publication: Mutex::new(()),
             out_of_band_elicitation_paused,
             state: Mutex::new(state),
             active_turn: Mutex::new(None),
