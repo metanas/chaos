@@ -105,14 +105,11 @@ impl TileManager {
     ) -> Self {
         let mut runtime = HypertileRuntimeBuilder::default()
             .with_gap(0)
-            .with_palette_config(PaletteConfig {
-                allowed_plugins: Some(
-                    [PANE_CHAT, PANE_TOOL_LIST, PANE_INSPECTOR]
-                        .map(str::to_string)
-                        .to_vec(),
-                ),
-                behavior: PaletteBehavior::EmitSelection,
-            })
+            .with_palette_config(
+                PaletteConfig::default()
+                    .with_allowed_plugin_types([PANE_CHAT, PANE_TOOL_LIST, PANE_INSPECTOR])
+                    .with_behavior(PaletteBehavior::EmitSelection),
+            )
             .build();
         runtime.set_mode(InputMode::PluginInput);
         let inspector = Rc::new(RefCell::new(InspectorPane::default()));

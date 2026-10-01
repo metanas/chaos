@@ -9,6 +9,11 @@ should. There is no patch level; the build timestamp is the patch.
 
 ## [Unreleased]
 
+### Changed
+- Replace the Git fork dependencies for `ratatui-hypertile` and
+  `ratatui-hypertile-extras` with their upstream crates.io 0.4.2 releases,
+  adapting to the palette API while preserving pane filtering and selection handling.
+
 ## [47.10.0] - 2026-10-01
 
 Upgrading: integrations must use `user_turn` with `vfs_policy` and

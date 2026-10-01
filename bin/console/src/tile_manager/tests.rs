@@ -11,7 +11,7 @@ fn inspector_split_preserves_chat_focus_and_respects_visibility() {
     tiles.sync_inspector(area.width);
     assert!(tiles.is_single_pane(), "the inspector starts closed");
     assert!(tiles.chat_focused());
-    tiles.runtime.open_palette().unwrap();
+    assert!(tiles.runtime.open_palette());
     assert!(tiles.uses_full_viewport());
     let mut buf = Buffer::empty(area);
     tiles.render(area, &mut buf);

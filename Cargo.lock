@@ -9085,16 +9085,18 @@ dependencies = [
 
 [[package]]
 name = "ratatui-hypertile"
-version = "0.4.1"
-source = "git+https://github.com/seuros/ratatui-hypertile?rev=3b0f2888a293a3b5196e0499abee986d621c8f25#3b0f2888a293a3b5196e0499abee986d621c8f25"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cfeb8626eb91cd297d3bd8c8b9bc2486cd43110024a1669e34f3a52649637c08"
 dependencies = [
  "ratatui",
 ]
 
 [[package]]
 name = "ratatui-hypertile-extras"
-version = "0.4.1"
-source = "git+https://github.com/seuros/ratatui-hypertile?rev=3b0f2888a293a3b5196e0499abee986d621c8f25#3b0f2888a293a3b5196e0499abee986d621c8f25"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f95626aec3bbdd25ae006e669b7082649fed8561248bdca2ff613e4b5c5472d"
 dependencies = [
  "crossterm",
  "ratatui",

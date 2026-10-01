@@ -1218,7 +1218,7 @@ async fn open_agent_picker_selects_existing_agent_process() -> Result<()> {
         row: area.y,
         modifiers: KeyModifiers::NONE,
     });
-    app.tile_manager.runtime.open_palette().unwrap();
+    assert!(app.tile_manager.runtime.open_palette());
     app.handle_tui_event(&mut tui, click.clone()).await?;
     assert_eq!(app.active_process_id, Some(other));
     app.tile_manager.runtime.close_palette();
