@@ -160,6 +160,7 @@ fn exec_sandbox_mode(
 fn exec_config_overrides(inputs: ExecConfigOverrideInputs) -> ConfigOverrides {
     let provider_user_override = inputs.model_provider.is_some();
     ConfigOverrides {
+        tui_output: false,
         model: inputs.model,
         review_model: None,
         config_profile: inputs.config_profile,

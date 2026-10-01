@@ -94,14 +94,17 @@ unless its warning was previously acknowledged.
 
 ### Scrolling the thread
 
-Scroll up with the mouse wheel or trackpad to open the in-app thread history,
-including the live response. Scrolling stays within the thread, not the shell's
-build output or earlier commands.
+Scroll up with the mouse wheel, trackpad, or Page Up to read earlier output
+directly in the chat pane, including the live response. The composer and other
+panes stay visible, and new output does not move your reading position. Scroll
+back to the bottom, or press End or Esc, to follow live output again. Home jumps
+to the beginning. Scrolling stays within the thread, not the shell's build
+output or earlier commands.
 
-`Ctrl+T` also opens the transcript. Use the wheel, arrow keys, or Page Up/Page
-Down to navigate; `Ctrl+T` or `q` returns to the composer. For terminal-native
-text selection or shell scrollback, use your terminal's mouse-capture bypass
-(usually holding Shift).
+`Ctrl+T` explicitly opens the full transcript viewer. Use the wheel, arrow keys,
+or Page Up/Page Down to navigate; `Ctrl+T` or `q` returns to the composer. For
+terminal-native text selection or shell scrollback, use your terminal's
+mouse-capture bypass (usually holding Shift).
 
 ---
 

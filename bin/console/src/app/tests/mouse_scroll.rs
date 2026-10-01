@@ -1,6 +1,5 @@
 use super::*;
 use crate::history_cell::PlainHistoryCell;
-use crate::pager_overlay::PagerOverlay;
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use pretty_assertions::assert_eq;
 use ratatui::buffer::Buffer;
@@ -16,21 +15,23 @@ fn wheel(kind: MouseEventKind) -> TuiEvent {
 }
 
 fn first_thread_row(app: &mut App) -> String {
-    let Some(Overlay::Transcript(transcript)) = &mut app.overlay else {
-        panic!("wheel should open thread history");
-    };
-    // Match the full inline overlay, not the small composer viewport.
+    assert!(
+        app.overlay.is_none(),
+        "scrolling must stay in the chat pane"
+    );
+    // Match the chat pane, including its pinned composer.
     let area = Rect::new(0, 1, 100, 29);
     let mut buffer = Buffer::empty(area);
-    transcript.render(area, &mut buffer);
+    app.render_scrolled_chat(area, &mut buffer);
     (0..area.width)
-        .map(|x| buffer[(x, area.y + 1)].symbol())
+        .map(|x| buffer[(x, area.y)].symbol())
         .collect::<String>()
         .trim()
         .to_string()
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn mouse_scroll_routes_into_thread_and_reaches_both_ends() {
     let (mut app, _events, mut ops) = make_test_app_with_channels().await;
     let mut tui = make_test_tui();
@@ -145,17 +146,21 @@ async fn mouse_scroll_routes_into_thread_and_reaches_both_ends() {
     app.handle_tui_event(&mut tui, wheel(MouseEventKind::ScrollUp))
         .await
         .unwrap();
-    // 24 visible content rows: bottom is 36, first wheel moves up 3.
-    assert_eq!(first_thread_row(&mut app), "thread 33");
+    let visible_rows = 29 - app.chat_widget.bottom_pane_renderable().desired_height(100);
+    let bottom = 60 - visible_rows;
+    assert_eq!(first_thread_row(&mut app), format!("thread {}", bottom - 3));
+    assert!(app.tile_manager.chat_scrollback.is_scrolled());
+    assert!(!tui.is_alt_screen_active());
 
     app.handle_tui_event(&mut tui, wheel(MouseEventKind::ScrollDown))
         .await
         .unwrap();
-    assert_eq!(first_thread_row(&mut app), "thread 36");
+    assert!(!app.tile_manager.chat_scrollback.is_scrolled());
+    assert_eq!(first_thread_row(&mut app), format!("thread {bottom}"));
     app.handle_tui_event(&mut tui, wheel(MouseEventKind::ScrollDown))
         .await
         .unwrap();
-    assert_eq!(first_thread_row(&mut app), "thread 36");
+    assert_eq!(first_thread_row(&mut app), format!("thread {bottom}"));
 
     for _ in 0..20 {
         app.handle_tui_event(&mut tui, wheel(MouseEventKind::ScrollUp))
@@ -171,14 +176,33 @@ async fn mouse_scroll_routes_into_thread_and_reaches_both_ends() {
     .await
     .unwrap();
     assert!(app.overlay.is_none());
+    assert!(app.tile_manager.chat_scrollback.is_scrolled());
+    // Typing is paste-burst buffered; a cursor move flushes it without a
+    // wall-clock sleep or leaving scrollback.
+    app.handle_key_event(&mut tui, KeyEvent::new(KeyCode::Right, KeyModifiers::NONE))
+        .await;
+    assert_eq!(app.chat_widget.composer_text_with_pending(), "draftq");
+    app.handle_key_event(&mut tui, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+        .await;
+    assert!(!app.tile_manager.chat_scrollback.is_scrolled());
+    assert!(!app.backtrack.primed);
     app.handle_tui_event(&mut tui, wheel(MouseEventKind::ScrollUp))
         .await
         .unwrap();
-    assert_eq!(first_thread_row(&mut app), "thread 33");
+    assert_eq!(first_thread_row(&mut app), format!("thread {}", bottom - 3));
+    // The explicit viewer remains available and closing it restores the reading position.
+    app.handle_key_event(
+        &mut tui,
+        KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL),
+    )
+    .await;
+    assert!(matches!(app.overlay, Some(Overlay::Transcript(_))));
     app.close_transcript_overlay(&mut tui);
+    assert_eq!(first_thread_row(&mut app), format!("thread {}", bottom - 3));
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn mouse_scroll_does_not_open_an_empty_thread_or_scroll_past_live_end() {
     let mut app = make_test_app().await;
     let mut tui = make_test_tui();
@@ -186,12 +210,14 @@ async fn mouse_scroll_does_not_open_an_empty_thread_or_scroll_past_live_end() {
         .await
         .unwrap();
     assert!(app.overlay.is_none());
+    assert!(!app.tile_manager.chat_scrollback.is_scrolled());
 
     app.transcript_cells = vec![Arc::new(PlainHistoryCell::new(vec!["reply".into()]))];
     app.handle_tui_event(&mut tui, wheel(MouseEventKind::ScrollDown))
         .await
         .unwrap();
     assert!(app.overlay.is_none());
+    assert!(!app.tile_manager.chat_scrollback.is_scrolled());
 
     // The same events in the Inspector belong to its plugin, not the transcript
     // or composer. Reuse this routing fixture rather than a separate UI suite.
@@ -283,4 +309,110 @@ async fn mouse_scroll_does_not_open_an_empty_thread_or_scroll_past_live_end() {
     )
     .await;
     assert!(app.tile_manager.find_pane(PaneKind::ToolList).is_none());
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn scrollback_preserves_composer_and_position_during_output_then_restores_inline() {
+    let mut app = make_test_app().await;
+    let mut tui = make_test_tui();
+    app.transcript_cells = vec![Arc::new(PlainHistoryCell::new(
+        (0..60)
+            .map(|row| Line::from(format!("thread {row}")))
+            .collect(),
+    ))];
+    app.chat_widget
+        .set_composer_text("keep this draft".into(), Vec::new(), Vec::new());
+    app.handle_tui_event(&mut tui, wheel(MouseEventKind::ScrollUp))
+        .await
+        .unwrap();
+    let before = first_thread_row(&mut app);
+    app.handle_event(
+        &mut tui,
+        AppEvent::InsertHistoryCell(Box::new(PlainHistoryCell::new(vec!["new output".into()]))),
+    )
+    .await
+    .unwrap();
+    assert_eq!(first_thread_row(&mut app), before);
+    assert_eq!(
+        app.chat_widget.composer_text_with_pending(),
+        "keep this draft"
+    );
+    let area = Rect::new(0, 1, 100, 29);
+    let mut buffer = Buffer::empty(area);
+    assert!(app.render_scrolled_chat(area, &mut buffer).is_some());
+    let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+    assert!(text.contains("keep this draft"));
+    assert!(text.contains("End / Esc to follow live"));
+    assert!(!text.contains("/ Transcript"));
+
+    app.handle_key_event(&mut tui, KeyEvent::new(KeyCode::Enter, KeyModifiers::SHIFT))
+        .await;
+    assert!(app.tile_manager.chat_scrollback.is_scrolled());
+
+    // Even without a Tui draw between wheel and End, skipped native inserts
+    // require a rebuild. Otherwise quick wheel gestures can lose new output.
+    app.handle_key_event(&mut tui, KeyEvent::new(KeyCode::End, KeyModifiers::NONE))
+        .await;
+    assert!(!app.tile_manager.chat_scrollback.is_scrolled());
+    assert!(app.tile_manager.needs_inline_history_restore());
+    app.tile_manager.mark_inline_history_restored();
+    assert!(!app.tile_manager.uses_full_viewport());
+
+    app.handle_tui_event(&mut tui, wheel(MouseEventKind::ScrollUp))
+        .await
+        .unwrap();
+    app.reset_app_ui_state_after_clear(&mut tui);
+    assert!(!app.tile_manager.chat_scrollback.is_scrolled());
+    assert!(app.transcript_cells.is_empty());
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn scrollback_page_keys_keep_the_explicit_viewer_separate() {
+    super::page_up_scrolls_main_view().await;
+    super::page_up_keeps_log_panel_priority_when_visible().await;
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn scrollback_stays_inside_chat_when_tiled() {
+    let mut app = make_test_app().await;
+    let mut tui = make_test_tui();
+    let area = Rect::new(0, 1, 140, 39);
+    app.transcript_cells = vec![Arc::new(PlainHistoryCell::new(
+        (0..100)
+            .map(|row| Line::from(format!("thread {row}")))
+            .collect(),
+    ))];
+    app.tile_manager.toggle_inspector(area.width);
+    let mut buffer = Buffer::empty(area);
+    app.tile_manager.render(area, &mut buffer);
+    let chat = app.tile_manager.pane_rect(PaneId::ROOT).unwrap();
+    let inspector = app.tile_manager.find_pane(PaneKind::Inspector).unwrap();
+    let inspector_rect = app.tile_manager.pane_rect(inspector).unwrap();
+    app.handle_tui_event(
+        &mut tui,
+        TuiEvent::Mouse(MouseEvent {
+            kind: MouseEventKind::ScrollUp,
+            column: chat.x + 1,
+            row: chat.y + 1,
+            modifiers: KeyModifiers::NONE,
+        }),
+    )
+    .await
+    .unwrap();
+    assert!(app.overlay.is_none());
+    assert!(app.tile_manager.chat_scrollback.is_scrolled());
+    let before = buffer.clone();
+    app.render_scrolled_chat(chat, &mut buffer);
+    for y in inspector_rect.y..inspector_rect.bottom() {
+        for x in inspector_rect.x..inspector_rect.right() {
+            assert_eq!(buffer[(x, y)], before[(x, y)]);
+        }
+    }
+    assert_eq!(
+        app.tile_manager.find_pane(PaneKind::Inspector),
+        Some(inspector)
+    );
 }

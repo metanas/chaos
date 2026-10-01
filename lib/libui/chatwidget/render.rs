@@ -62,6 +62,18 @@ impl Renderable for ChatWidget {
 }
 
 impl ChatWidget {
+    /// The pinned composer/status region, without the scrollable active cell.
+    pub fn bottom_pane_renderable(&self) -> RenderableItem<'_> {
+        RenderableItem::Borrowed(&self.bottom_pane).inset(Padding::top(1))
+    }
+
+    /// Render the pinned region while history owns the rest of the chat pane.
+    /// Streaming still needs the current pane width even while scrolled up.
+    pub fn render_bottom_pane(&self, area: Rect, buf: &mut Buffer) {
+        self.bottom_pane_renderable().render(area, buf);
+        self.last_rendered_width.set(Some(area.width as usize));
+    }
+
     pub(super) fn as_renderable(&self) -> RenderableItem<'_> {
         let active_cell_renderable = match &self.active_cell {
             Some(cell) => RenderableItem::Borrowed(cell).inset(Padding::top(1)),
@@ -69,10 +81,7 @@ impl ChatWidget {
         };
         let mut flex = FlexRenderable::new();
         flex.push(/*flex*/ 1, active_cell_renderable);
-        flex.push(
-            /*flex*/ 0,
-            RenderableItem::Borrowed(&self.bottom_pane).inset(Padding::top(1)),
-        );
+        flex.push(/*flex*/ 0, self.bottom_pane_renderable());
         RenderableItem::Owned(Box::new(flex))
     }
 }

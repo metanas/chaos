@@ -533,6 +533,13 @@ impl ChatWidget {
         (!lines.is_empty()).then_some(lines)
     }
 
+    /// Compact main-screen output for in-pane scrollback, not expanded transcript output.
+    pub fn active_cell_display_lines(&self, width: u16) -> Vec<Line<'static>> {
+        self.active_cell
+            .as_ref()
+            .map_or_else(Vec::new, |cell| cell.display_lines(width))
+    }
+
     #[cfg(any(test, feature = "testing"))]
     pub fn status_line_text(&self) -> Option<String> {
         self.bottom_pane.status_line_text()

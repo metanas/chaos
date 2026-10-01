@@ -26,6 +26,7 @@ impl App {
     pub(crate) fn reset_transcript_reflow(&mut self) {
         self.transcript_reflow.clear();
         self.tile_manager.chat_history_key = None;
+        self.tile_manager.chat_scrollback = Default::default();
     }
 
     /// Note the terminal size for this draw and queue a rebuild if the width moved.
@@ -75,7 +76,10 @@ impl App {
             tui.frame_requester().schedule_frame_in(deadline - now);
             return Ok(());
         }
-        if self.overlay.is_some() || tui.is_alt_screen_active() {
+        if self.overlay.is_some()
+            || tui.is_alt_screen_active()
+            || self.tile_manager.chat_scrollback.is_scrolled()
+        {
             return Ok(());
         }
 

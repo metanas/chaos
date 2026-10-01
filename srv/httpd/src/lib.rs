@@ -92,6 +92,7 @@ pub async fn run_main(
 
     // 5. Build ConfigOverrides.
     let overrides = ConfigOverrides {
+        tui_output: false,
         model: serve_cli.model.clone(),
         review_model: None,
         config_profile: None,

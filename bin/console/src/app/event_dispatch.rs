@@ -7,6 +7,7 @@ use super::{
     tui,
 };
 use crate::onboarding::auth::AccountsWidget;
+use crate::tile_manager::Scroll;
 use crossterm::event::MouseEventKind;
 use std::sync::Arc;
 
@@ -64,12 +65,12 @@ impl App {
                         tui.frame_requester().schedule_frame();
                         return Ok(AppRunControl::Continue);
                     }
-                    if mouse_event.kind == MouseEventKind::ScrollUp
-                        && self.tile_manager.chat_focused()
-                        && (!self.transcript_cells.is_empty()
-                            || self.chat_widget.active_cell_transcript_key().is_some())
-                    {
-                        self.open_transcript_overlay(tui, Some(TuiEvent::Mouse(mouse_event)));
+                    if self.tile_manager.chat_focused() {
+                        match mouse_event.kind {
+                            MouseEventKind::ScrollUp => self.scroll_chat(tui, Scroll::Up(3)),
+                            MouseEventKind::ScrollDown => self.scroll_chat(tui, Scroll::Down(3)),
+                            _ => {}
+                        }
                     }
                 }
 
@@ -109,6 +110,11 @@ impl App {
                     }
                     // Allow widgets to process any pending timers before rendering.
                     self.chat_widget.pre_draw_tick();
+                    if self.tile_manager.chat_scrollback.is_scrolled() {
+                        // These cells are retained and rendered in the pane. Do not
+                        // also write them into native scrollback under the reader.
+                        tui.clear_pending_history_lines();
+                    }
                     let terminal_size = tui.terminal.size()?;
                     // When tiled, the viewport must be tall enough for the
                     // auxiliary panes, not just the chat content.
@@ -151,60 +157,71 @@ impl App {
                             self.tile_manager.render(main_area, frame.buffer);
 
                             if let Some(chat_rect) = self.tile_manager.pane_rect(PaneId::ROOT) {
-                                // Inline history normally lives in terminal scrollback. In a
-                                // full-height split, retain its visible tail above the live cell.
-                                let live_height = self
-                                    .chat_widget
-                                    .desired_height(chat_rect.width)
-                                    .min(chat_rect.height);
-                                let history_height = chat_rect.height.saturating_sub(live_height);
-                                let last_cell = self
-                                    .transcript_cells
-                                    .last()
-                                    .map_or(0, |cell| Arc::as_ptr(cell) as *const () as usize);
-                                // Keep a screenful cached as the live cell grows.
-                                let key = (
-                                    chat_rect.width,
-                                    chat_rect.height,
-                                    self.transcript_cells.len(),
-                                    last_cell,
-                                );
-                                if self.tile_manager.chat_history_key != Some(key) {
-                                    self.tile_manager.chat_history =
-                                        libui::transcript_reflow::reflow_transcript_lines(
-                                            &self.transcript_cells,
-                                            chat_rect.width,
-                                            Some(usize::from(chat_rect.height)),
-                                        );
-                                    self.tile_manager.chat_history_key = Some(key);
-                                }
-                                let history_rect = ratatui::layout::Rect {
-                                    height: history_height,
-                                    ..chat_rect
-                                };
-                                ratatui::widgets::Widget::render(
-                                    Paragraph::new(
-                                        self.tile_manager.chat_history[self
-                                            .tile_manager
-                                            .chat_history
-                                            .len()
-                                            .saturating_sub(usize::from(history_height))..]
-                                            .to_vec(),
-                                    ),
-                                    history_rect,
-                                    frame.buffer,
-                                );
-                                let live_rect = ratatui::layout::Rect {
-                                    y: chat_rect.y + history_height,
-                                    height: live_height,
-                                    ..chat_rect
-                                };
-                                self.chat_widget.render(live_rect, frame.buffer);
-                                if self.tile_manager.focused() == Some(PaneId::ROOT)
-                                    && !self.tile_manager.runtime.is_palette_open()
-                                    && let Some((x, y)) = self.chat_widget.cursor_pos(live_rect)
-                                {
-                                    frame.set_cursor_position((x, y));
+                                if self.tile_manager.chat_scrollback.is_scrolled() {
+                                    let cursor = self.render_scrolled_chat(chat_rect, frame.buffer);
+                                    if self.tile_manager.chat_focused()
+                                        && !self.tile_manager.runtime.is_palette_open()
+                                        && let Some(position) = cursor
+                                    {
+                                        frame.set_cursor_position(position);
+                                    }
+                                } else {
+                                    // Inline history normally lives in terminal scrollback. In a
+                                    // full-height split, retain its visible tail above the live cell.
+                                    let live_height = self
+                                        .chat_widget
+                                        .desired_height(chat_rect.width)
+                                        .min(chat_rect.height);
+                                    let history_height =
+                                        chat_rect.height.saturating_sub(live_height);
+                                    let last_cell = self
+                                        .transcript_cells
+                                        .last()
+                                        .map_or(0, |cell| Arc::as_ptr(cell) as *const () as usize);
+                                    // Keep a screenful cached as the live cell grows.
+                                    let key = (
+                                        chat_rect.width,
+                                        chat_rect.height,
+                                        self.transcript_cells.len(),
+                                        last_cell,
+                                    );
+                                    if self.tile_manager.chat_history_key != Some(key) {
+                                        self.tile_manager.chat_history =
+                                            libui::transcript_reflow::reflow_transcript_lines(
+                                                &self.transcript_cells,
+                                                chat_rect.width,
+                                                Some(usize::from(chat_rect.height)),
+                                            );
+                                        self.tile_manager.chat_history_key = Some(key);
+                                    }
+                                    let history_rect = ratatui::layout::Rect {
+                                        height: history_height,
+                                        ..chat_rect
+                                    };
+                                    ratatui::widgets::Widget::render(
+                                        Paragraph::new(
+                                            self.tile_manager.chat_history[self
+                                                .tile_manager
+                                                .chat_history
+                                                .len()
+                                                .saturating_sub(usize::from(history_height))..]
+                                                .to_vec(),
+                                        ),
+                                        history_rect,
+                                        frame.buffer,
+                                    );
+                                    let live_rect = ratatui::layout::Rect {
+                                        y: chat_rect.y + history_height,
+                                        height: live_height,
+                                        ..chat_rect
+                                    };
+                                    self.chat_widget.render(live_rect, frame.buffer);
+                                    if self.tile_manager.focused() == Some(PaneId::ROOT)
+                                        && !self.tile_manager.runtime.is_palette_open()
+                                        && let Some((x, y)) = self.chat_widget.cursor_pos(live_rect)
+                                    {
+                                        frame.set_cursor_position((x, y));
+                                    }
                                 }
                             }
                         }
@@ -461,7 +478,7 @@ impl App {
                     }
                     if self.overlay.is_some() {
                         self.deferred_history_lines.extend(display);
-                    } else {
+                    } else if !self.tile_manager.chat_scrollback.is_scrolled() {
                         tui.insert_history_lines(display);
                     }
                 }

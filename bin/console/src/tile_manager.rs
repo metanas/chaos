@@ -22,6 +22,8 @@ use ratatui_hypertile_extras::{
     PaletteConfig, mouse_event_from_crossterm,
 };
 
+pub(crate) use libui::chat_scrollback::{ChatScrollback, Scroll};
+
 // Plugin-type name constants — string keys in the runtime registry.
 const PANE_CHAT: &str = "chat";
 const PANE_TOOL_LIST: &str = "tool_list";
@@ -93,6 +95,7 @@ pub(crate) struct TileManager {
     rendered_full_viewport: bool,
     pub(crate) chat_history: Vec<ratatui::text::Line<'static>>,
     pub(crate) chat_history_key: Option<(u16, u16, usize, usize)>,
+    pub(crate) chat_scrollback: ChatScrollback,
 }
 
 impl TileManager {
@@ -140,6 +143,7 @@ impl TileManager {
             rendered_full_viewport: false,
             chat_history: Vec::new(),
             chat_history_key: None,
+            chat_scrollback: ChatScrollback::default(),
         }
     }
 
@@ -217,7 +221,9 @@ impl TileManager {
     }
 
     pub fn uses_full_viewport(&self) -> bool {
-        !self.is_single_pane() || self.runtime.is_palette_open()
+        !self.is_single_pane()
+            || self.runtime.is_palette_open()
+            || self.chat_scrollback.is_scrolled()
     }
 
     pub fn needs_inline_history_restore(&self) -> bool {
@@ -226,6 +232,12 @@ impl TileManager {
 
     pub fn mark_inline_history_restored(&mut self) {
         self.rendered_full_viewport = false;
+    }
+
+    pub fn require_inline_history_restore(&mut self) {
+        // Scrollback may start and receive committed cells before its first
+        // draw. Those skipped native inserts still need replay on return.
+        self.rendered_full_viewport = true;
     }
 
     /// Split the focused pane and assign the new pane a kind.

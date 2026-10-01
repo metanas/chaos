@@ -108,6 +108,7 @@ mod log_panel;
 mod pending_interactive_replay;
 mod process_routing;
 mod resize_reflow;
+mod scrollback;
 mod session_lifecycle;
 mod ui_helpers;
 

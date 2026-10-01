@@ -9,6 +9,20 @@ should. There is no patch level; the build timestamp is the patch.
 
 ## [Unreleased]
 
+## [47.10.0] - 2026-10-01
+
+Upgrading: integrations must use `user_turn` with `vfs_policy` and
+`socket_policy`. Legacy session records using `sandbox_policy` or compaction
+records without `replacement_history` are no longer supported.
+
+### Changed
+- Simplified built-in model guidance and limited terminal formatting instructions
+  to interactive TUI sessions.
+- Mouse-wheel and keyboard paging now scroll output directly in the chat pane,
+  keeping the composer and other panes visible instead of opening the transcript.
+  Incoming output preserves the reading position; `End` or `Esc` resumes following
+  live output, while `Ctrl+T` explicitly opens the transcript viewer.
+
 ### Removed
 - Legacy `user_input` submissions; callers must send `user_turn` with turn context.
 - The single `sandbox_policy` field in `user_turn`; turn submissions now carry
@@ -123,7 +137,8 @@ See the Drivers section of `man/chaos-install.7.md`.
   access for the model now comes from skipper.
 - `git://branches` resource template.
 
-[Unreleased]: https://github.com/seuros/chaos/compare/v47.9.0...HEAD
+[Unreleased]: https://github.com/seuros/chaos/compare/v47.10.0...HEAD
+[47.10.0]: https://github.com/seuros/chaos/compare/v47.9.0...v47.10.0
 [47.9.0]: https://github.com/seuros/chaos/compare/v47.8.0...v47.9.0
 [47.8.0]: https://github.com/seuros/chaos/compare/v47.7.1...v47.8.0
 [47.7.1]: https://github.com/seuros/chaos/compare/v47.7.0...v47.7.1

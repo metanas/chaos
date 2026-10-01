@@ -1,8 +1,8 @@
 use super::{
     AgentNavigationDirection, App, ExternalEditorState, KeyCode, KeyEvent, KeyEventKind, PaneKind,
-    TuiEvent, keychord_from_crossterm, next_agent_shortcut_matches,
-    previous_agent_shortcut_matches, tui,
+    keychord_from_crossterm, next_agent_shortcut_matches, previous_agent_shortcut_matches, tui,
 };
+use crate::tile_manager::Scroll;
 
 impl App {
     pub(super) async fn handle_key_event(&mut self, tui: &mut tui::Tui, key_event: KeyEvent) {
@@ -236,7 +236,16 @@ impl App {
                 kind: KeyEventKind::Press | KeyEventKind::Repeat,
                 ..
             } if self.overlay.is_none() && self.chat_widget.no_modal_or_popup_active() => {
-                self.open_transcript_overlay(tui, Some(TuiEvent::Key(key_event)));
+                if self.tile_manager.chat_focused() {
+                    let page = self.chat_scroll_page_height(tui);
+                    let scroll = match key_event.code {
+                        KeyCode::PageUp => Scroll::Up(page),
+                        KeyCode::PageDown => Scroll::Down(page),
+                        KeyCode::Home => Scroll::Start,
+                        _ => Scroll::End,
+                    };
+                    self.scroll_chat(tui, scroll);
+                }
                 return;
             }
             KeyEvent {
@@ -295,6 +304,18 @@ impl App {
 
         // ── Chat pane input ─────────────────────────────────────────
         // Only reached when Chat (ROOT) is focused.
+        if self.tile_manager.chat_scrollback.is_scrolled()
+            && self.chat_widget.no_modal_or_popup_active()
+            && matches!(key_event.kind, KeyEventKind::Press | KeyEventKind::Repeat)
+            && key_event.modifiers.is_empty()
+            && matches!(key_event.code, KeyCode::Esc | KeyCode::Enter)
+        {
+            self.scroll_chat(tui, Scroll::End);
+            if key_event.code == KeyCode::Esc {
+                self.chat_widget.suppress_repeats_of(key_event.code);
+                return;
+            }
+        }
         match key_event {
             // Esc primes/advances backtracking only in normal (not working) mode
             // with the composer focused and empty. In any other state, forward

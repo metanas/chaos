@@ -283,7 +283,9 @@ impl App {
         let was_backtrack = self.backtrack.overlay_preview_active;
         if !self.deferred_history_lines.is_empty() {
             let lines = std::mem::take(&mut self.deferred_history_lines);
-            tui.insert_history_lines(lines);
+            if !self.tile_manager.chat_scrollback.is_scrolled() {
+                tui.insert_history_lines(lines);
+            }
         }
         self.overlay = None;
         self.backtrack.overlay_preview_active = false;

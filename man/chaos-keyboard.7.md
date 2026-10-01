@@ -29,13 +29,20 @@ terminal must send it as Alt/Meta rather than inserting special characters.
 | --- | --- |
 | `Ctrl+O` | Open the full-screen session log viewer; no popup or modal may be active. |
 | `Ctrl+T` | Open the transcript viewer. |
-| `PageUp` / `PageDown` | Open the transcript and page up/down; no popup or modal may be active. |
-| `Home` / `End` | Open the transcript at its beginning/end; no popup or modal may be active. |
+| `PageUp` / `PageDown` | Scroll output in the chat pane; no popup or modal may be active. Auxiliary panes keep their own navigation. |
+| `Home` / `End` | Jump to the beginning of chat output / resume following live output; no popup or modal may be active. |
 | `Ctrl+L` | Clear the terminal display and in-memory transcript view while idle. Does not start a new session or clear model context. |
 | `Ctrl+G` | Edit the draft in an external editor; no popup or modal may be active. Uses `VISUAL`, then `EDITOR`. |
 
-`Home` and `End` are transcript-navigation keys in the main UI, not composer
+`Home` and `End` are output-navigation keys in the main UI, not composer
 line-motion keys. Use `Ctrl+A` and `Ctrl+E` to move within the draft.
+
+The mouse wheel scrolls chat output in place, keeping the composer and other
+panes visible. Incoming output does not move the reading position. Reaching the
+bottom, pressing `End`, or pressing `Esc` resumes following live output.
+While scrolled up, the first `Esc` only returns to live output; it does not
+interrupt work or prime backtracking. Pressing `Enter` to submit also returns to live.
+`Ctrl+T` remains the explicit full-screen transcript viewer.
 
 ## COMPOSER AND SESSION
 

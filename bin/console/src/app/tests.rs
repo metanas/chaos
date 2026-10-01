@@ -135,7 +135,7 @@ pub(crate) async fn app_tests_suite() {
     live_rollback_during_replay_is_applied_in_app_event_order().await;
     queued_rollback_syncs_overlay_and_clears_deferred_history().await;
     #[cfg(feature = "vt100-tests")]
-    page_up_opens_transcript_overlay_from_main_view().await;
+    page_up_scrolls_main_view().await;
     #[cfg(feature = "vt100-tests")]
     page_up_keeps_log_panel_priority_when_visible().await;
     new_session_requests_shutdown_for_previous_conversation().await;
@@ -2537,26 +2537,28 @@ async fn queued_rollback_syncs_overlay_and_clears_deferred_history() {
 }
 
 #[cfg(feature = "vt100-tests")]
-async fn page_up_opens_transcript_overlay_from_main_view() {
+async fn page_up_scrolls_main_view() {
     let mut app = make_test_app().await;
     let mut tui = make_test_tui();
-    app.transcript_cells = vec![
-        Arc::new(UserHistoryCell {
-            message: "first".to_string(),
-            text_elements: Vec::new(),
-            local_image_paths: Vec::new(),
-            remote_image_urls: Vec::new(),
-        }) as Arc<dyn HistoryCell>,
-        Arc::new(AgentMessageCell::new(vec![Line::from("reply")], false)) as Arc<dyn HistoryCell>,
-    ];
+    app.transcript_cells = vec![Arc::new(crate::history_cell::PlainHistoryCell::new(
+        (0..100)
+            .map(|row| Line::from(format!("row {row}")))
+            .collect(),
+    ))];
 
     for modifiers in [KeyModifiers::NONE, KeyModifiers::CONTROL] {
-        for code in [KeyCode::PageUp, KeyCode::PageDown] {
+        for (code, scrolled) in [(KeyCode::PageUp, true), (KeyCode::PageDown, false)] {
             app.handle_key_event(&mut tui, KeyEvent::new(code, modifiers))
                 .await;
-            assert!(matches!(app.overlay, Some(Overlay::Transcript(_))));
-            app.close_transcript_overlay(&mut tui);
+            assert!(app.overlay.is_none());
+            assert_eq!(app.tile_manager.chat_scrollback.is_scrolled(), scrolled);
         }
+    }
+    for (code, scrolled) in [(KeyCode::Home, true), (KeyCode::End, false)] {
+        app.handle_key_event(&mut tui, KeyEvent::new(code, KeyModifiers::NONE))
+            .await;
+        assert!(app.overlay.is_none());
+        assert_eq!(app.tile_manager.chat_scrollback.is_scrolled(), scrolled);
     }
 }
 

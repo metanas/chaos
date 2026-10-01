@@ -11,6 +11,7 @@ pub mod activity;
 pub mod app_event;
 pub mod app_event_sender;
 pub mod bottom_pane;
+pub mod chat_scrollback;
 pub mod chatwidget;
 pub mod clipboard_paste;
 pub mod clipboard_text;
