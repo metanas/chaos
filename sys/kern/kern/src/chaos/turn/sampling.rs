@@ -74,6 +74,7 @@ pub(super) fn build_prompt(
 
     Prompt {
         input,
+        request_local_start: None,
         tools,
         parallel_tool_calls: turn_context.model_info.supports_parallel_tool_calls,
         base_instructions,
@@ -168,6 +169,7 @@ pub(super) async fn run_sampling_request(
     let mut retries = 0;
     let mut last_server_model: Option<String> = None;
     let history_len = prompt.input.len();
+    prompt.request_local_start = Some(history_len);
     loop {
         // Request-local guidance and warnings are refreshed after tool batches
         // and retries. Never persist them in history, where they become stale.
