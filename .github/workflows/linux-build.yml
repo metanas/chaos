@@ -66,8 +66,63 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  build-macos:
+    runs-on: macos-26
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_BUILD_JOBS: '2'
+      RUSTC_WRAPPER: ''
+    steps:
+      - uses: actions/checkout@v7
+      - uses: seuros/setup-upkg@master
+      - name: Install macOS build dependencies
+        run: |
+          set -euo pipefail
+          upkg install llvm pkgconf
+          LLVM_PREFIX="$(brew --prefix llvm)"
+          echo "LIBCLANG_PATH=${LLVM_PREFIX}/lib" >> "$GITHUB_ENV"
+          echo "${LLVM_PREFIX}/bin" >> "$GITHUB_PATH"
+      - uses: jdx/mise-action@v4
+        with:
+          install_args: rust
+          cache: false
+      - uses: Swatinem/rust-cache@v2.9.1
+        with:
+          key: macos-aarch64-release
+      - name: Test clamp and build portable runtime binaries
+        run: |
+          cargo test --locked --release -p chaos-clamp --lib
+          cargo build --locked --release --bin chaos --bin chaos_journald --bin alcatraz --bin chaos-forkve-wrapper
+      - name: Package and smoke-test
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          mkdir dist bundle
+          for bin in chaos chaos_journald alcatraz chaos-forkve-wrapper; do
+            install -m 0755 "target/release/$bin" "bundle/$bin"
+            otool -L "bundle/$bin" > "dist/$bin.otool"
+          done
+          bundle/chaos --version
+          bundle/chaos_journald --help
+          bundle/alcatraz -p '(version 1)(allow default)' /usr/bin/true
+          git rev-parse HEAD > bundle/SOURCE_REVISION
+          cp scripts/dist-install.sh bundle/install.sh
+          artifact="chaos-macos-aarch64-${GITHUB_SHA}.tar.gz"
+          tar -czf "dist/$artifact" -C bundle .
+          (cd dist && shasum -a 256 "$artifact" > "$artifact.sha256")
+      - uses: actions/upload-artifact@v7
+        with:
+          name: chaos-macos-aarch64-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
   publish:
-    needs: build
+    needs: [build, build-macos]
     if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     permissions:
@@ -75,7 +130,8 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: chaos-linux-x86_64-${{ github.sha }}
+          pattern: chaos-*-${{ github.sha }}
+          merge-multiple: true
           path: dist
       - name: Publish commit-pinned prerelease
         env:
@@ -84,6 +140,11 @@ jobs:
         run: |
           set -euo pipefail
           tag="build-${GITHUB_SHA}"
+          # Verify both bundles before publishing the complete immutable release.
+          for platform in linux-x86_64 macos-aarch64; do
+            artifact="chaos-${platform}-${GITHUB_SHA}.tar.gz"
+            (cd dist && sha256sum -c "$artifact.sha256")
+          done
           # Successful published builds are immutable; reruns never overwrite assets.
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Build already published: $tag"
@@ -91,5 +152,5 @@ jobs:
           fi
           gh release create "$tag" dist/*.tar.gz dist/*.sha256 \
             --target "$GITHUB_SHA" --prerelease --latest=false \
-            --title "Linux build ${GITHUB_SHA}" \
-            --notes "Automated Linux x86_64 build of ${GITHUB_SHA}. Built on Debian bookworm (glibc 2.36); requires libdbus-1-3. Clamp tests and executable smoke check passed; consult rust-ci separately for full test results. Not a stable release."
+            --title "Runtime build ${GITHUB_SHA}" \
+            --notes "Automated Linux x86_64 and macOS Apple Silicon builds of ${GITHUB_SHA}. Linux: Debian bookworm (glibc 2.36), requires libdbus-1-3. macOS: built on macos-26. Clamp tests and executable smoke check passed; consult rust-ci separately for full test results. Not a stable release."

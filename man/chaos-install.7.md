@@ -41,6 +41,35 @@ This is integrity checking against the same GitHub release, not an independent
 signature or provenance guarantee. Replacement of the four binaries is still
 sequential, not a transactional bundle update.
 
+### Per-commit builds
+
+Every successful `linux-build` workflow on `master` publishes both Linux x86_64
+and macOS Apple Silicon bundles to the immutable `build-<full-commit-SHA>`
+prerelease. The workflow retains its historical name. Each bundle contains all
+four runtime binaries, `install.sh`, and `SOURCE_REVISION`; each archive has a
+separate `.sha256` asset. Clamp tests and executable smoke checks run before
+publication; consult `rust-ci` separately for full test results.
+
+These builds do not replace the latest stable release. The top-level
+`install.sh` uses stable-release asset names, so download per-commit builds
+explicitly. For example, on Apple Silicon macOS (with GitHub CLI installed):
+
+```bash
+sha='REPLACE_WITH_FULL_COMMIT_SHA'
+asset="chaos-macos-aarch64-${sha}.tar.gz"
+mkdir "chaos-${sha}" && cd "chaos-${sha}"
+gh release download "build-${sha}" --repo seuros/chaos \
+  --pattern "$asset" --pattern "$asset.sha256"
+shasum -a 256 -c "$asset.sha256" && \
+  tar -xzf "$asset" && sh ./install.sh
+```
+
+Linux assets use `chaos-linux-x86_64-<full-commit-SHA>.tar.gz` and require
+Debian bookworm-compatible glibc (2.36+) and `libdbus-1-3`. Mac builds are
+produced on `macos-26`; Intel Macs are not included. Published builds are never
+overwritten by workflow reruns. Pull-request builds upload Actions artifacts
+without publishing a release.
+
 ### Install from source
 
 Ask `chaos` to set up your environment. Then:
