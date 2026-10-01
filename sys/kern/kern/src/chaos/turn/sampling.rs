@@ -9,10 +9,15 @@ use crate::client::ModelClientSession;
 use crate::client_common::Prompt;
 use crate::error::ChaosErr;
 use crate::error::Result as ChaosResult;
+use crate::modes::ModeCapabilities;
 use crate::tools::ToolRouter;
 use crate::tools::context::SharedTurnDiffTracker;
+use crate::tools::groups::ToolGroupFilter;
 use crate::tools::parallel::ToolCallRuntime;
 use crate::util::backoff;
+use chaos_ipc::models::DeveloperInstructions;
+use chaos_ipc::protocol::ApprovalPolicy;
+use chaos_ipc::protocol::SessionSource;
 use chaos_mcp_runtime::McpServerInstructions;
 
 use super::super::Session;
@@ -74,6 +79,29 @@ pub(super) fn build_prompt(
         base_instructions,
         personality: turn_context.personality,
         output_schema: turn_context.final_output_json_schema.clone(),
+    }
+}
+
+fn append_runtime_instructions(
+    prompt: &mut Prompt,
+    tool_groups: ToolGroupFilter<'_>,
+    mode: ModeCapabilities,
+    source: &SessionSource,
+    tui_output: bool,
+    approval_policy: ApprovalPolicy,
+) {
+    let instructions = crate::prompt_template::runtime_instructions(
+        &prompt.tools,
+        tool_groups,
+        mode,
+        source,
+        prompt.output_schema.is_some(),
+        tui_output && approval_policy != ApprovalPolicy::Headless,
+    );
+    if !instructions.is_empty() {
+        prompt
+            .input
+            .push(DeveloperInstructions::new(instructions).into());
     }
 }
 
@@ -141,8 +169,8 @@ pub(super) async fn run_sampling_request(
     let mut last_server_model: Option<String> = None;
     let history_len = prompt.input.len();
     loop {
-        // Request-local warnings are refreshed even after tool batches/retries.
-        // Never persist them in history, where recovered conditions become stale.
+        // Request-local guidance and warnings are refreshed after tool batches
+        // and retries. Never persist them in history, where they become stale.
         prompt.input.truncate(history_len);
         if retries > 0 {
             machine_input.clear();
@@ -176,6 +204,17 @@ pub(super) async fn run_sampling_request(
                 Arc::clone(&turn_diff_tracker),
             );
         }
+        append_runtime_instructions(
+            &mut prompt,
+            ToolGroupFilter {
+                catalog: &sess.services.tool_group_catalog,
+                state: &sess.services.tool_group_state,
+            },
+            turn_context.mode_capabilities,
+            &turn_context.session_source,
+            turn_context.config.tui_output,
+            turn_context.approval_policy.value(),
+        );
         prompt.input.extend(machine_input.iter().cloned());
         let err = match Box::pin(try_run_sampling_request(
             tool_runtime.clone(),

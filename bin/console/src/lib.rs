@@ -210,6 +210,7 @@ pub async fn run_main(
     let additional_dirs = cli.add_dir.clone();
 
     let overrides = ConfigOverrides {
+        tui_output: !cli.auto_exec.headless,
         approval_policy,
         sandbox_mode,
         cwd,

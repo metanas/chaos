@@ -405,6 +405,7 @@ model_provider = "test-provider"
     let mut config = ConfigBuilder::default()
         .chaos_home(home.path().to_path_buf())
         .harness_overrides(ConfigOverrides {
+            tui_output: true,
             config_profile: Some("test-profile".to_string()),
             ..Default::default()
         })
@@ -434,6 +435,7 @@ model_provider = "test-provider"
         .expect("custom role should apply");
 
     assert_eq!(config.active_profile.as_deref(), Some("test-profile"));
+    assert!(config.tui_output);
     assert_eq!(config.model_provider_id, "test-provider");
     assert_eq!(config.model_provider.name, "Test Provider");
 }

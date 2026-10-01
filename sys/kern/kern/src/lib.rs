@@ -108,6 +108,7 @@ mod event_mapping {
 }
 mod process_table;
 mod prompt_images;
+mod prompt_template;
 mod response_debug_context;
 pub mod review_format;
 pub mod review_prompts;

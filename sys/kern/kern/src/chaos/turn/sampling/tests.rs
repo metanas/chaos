@@ -93,3 +93,62 @@ fn leaves_base_instructions_unchanged_without_mcp_instructions() {
 
     assert_eq!(base.text, "Base instructions.");
 }
+
+#[test]
+fn runtime_guidance_is_request_local_and_preserves_literal_base() {
+    let original = vec![DeveloperInstructions::new("saved context").into()];
+    let mut prompt = Prompt {
+        input: original.clone(),
+        tools: vec![crate::client_common::tools::ToolSpec::LocalShell {}],
+        base_instructions: chaos_ipc::models::BaseInstructions {
+            text: "literal {{ not_a_template }}".to_owned(),
+        },
+        ..Prompt::default()
+    };
+    let catalog = crate::tools::groups::build_catalog().unwrap();
+    let state = catalog.new_state();
+    append_runtime_instructions(
+        &mut prompt,
+        ToolGroupFilter {
+            catalog: &catalog,
+            state: &state,
+        },
+        ModeCapabilities::default(),
+        &SessionSource::Api,
+        false,
+        ApprovalPolicy::Interactive,
+    );
+    assert_eq!(&prompt.input[..original.len()], original.as_slice());
+    assert_eq!(prompt.input.len(), original.len() + 1);
+    assert_eq!(
+        prompt.base_instructions.text,
+        "literal {{ not_a_template }}"
+    );
+    let message = serde_json::to_value(prompt.input.last().unwrap()).unwrap();
+    assert_eq!(message["role"], "system");
+}
+
+#[cfg(feature = "tui")]
+#[test]
+fn headless_policy_suppresses_console_guidance() {
+    let catalog = crate::tools::groups::build_catalog().unwrap();
+    let state = catalog.new_state();
+    for (policy, expected_messages) in [
+        (ApprovalPolicy::Interactive, 1),
+        (ApprovalPolicy::Headless, 0),
+    ] {
+        let mut prompt = Prompt::default();
+        append_runtime_instructions(
+            &mut prompt,
+            ToolGroupFilter {
+                catalog: &catalog,
+                state: &state,
+            },
+            ModeCapabilities::default(),
+            &SessionSource::Cli,
+            true,
+            policy,
+        );
+        assert_eq!(prompt.input.len(), expected_messages);
+    }
+}

@@ -1,0 +1,14 @@
+{% if tools %}
+{% include "_tools.md.j2" %}
+{% include "_resources.md.j2" %}
+{% if mode.mutation and ("mcp_add_server" in tools or "mcp_server" in tools or "mcp-management" in disabled_groups) %}{% include "_mcp.md.j2" %}{% endif %}
+{% if "call_mcp_tool_async" in tools or "write_stdin" in tools %}{% include "_jobs.md.j2" %}{% endif %}
+{% if mode.mutation and ("apply_patch" in tools or "editing" in disabled_groups) %}{% include "_editing.md.j2" %}{% endif %}
+{% endif %}
+{% if not mode.mutation %}
+
+# Active mode
+
+Inspection and planning only.
+{% endif %}
+{% if output.terminal %}{% include "_terminal.md.j2" %}{% endif %}

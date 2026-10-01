@@ -25,7 +25,6 @@ fn with_config_overrides_never_yields_empty_base_instructions() {
 
     // After kern finalization the sentinel is replaced.
     let finalized = with_config_overrides(model, &test_config());
-    assert_eq!(finalized.base_instructions, BASE_INSTRUCTIONS);
     assert!(!finalized.base_instructions.is_empty());
 }
 
@@ -43,6 +42,34 @@ fn unknown_model() -> ModelInfo {
         supports_reasoning_effort: false,
         native_server_side_tools: vec![],
     })
+}
+
+#[test]
+fn explicit_base_instructions_bypass_template_rendering() {
+    let mut config = test_config();
+    let literal = "{% if model.id %}{{ untouched }}{% endif %}\n";
+    config.base_instructions = Some(literal.to_owned());
+
+    let updated = with_config_overrides(unknown_model(), &config);
+
+    assert_eq!(updated.base_instructions, literal);
+    assert!(updated.model_messages.is_none());
+}
+
+#[test]
+fn local_prompt_replaces_provider_instructions() {
+    let mut model = unknown_model();
+    model.base_instructions = "provider prompt".to_owned();
+    let config = test_config();
+
+    let updated = with_config_overrides(model, &config);
+
+    assert_eq!(
+        updated.base_instructions,
+        crate::prompt_template::render(&updated, &config)
+    );
+    assert_ne!(updated.base_instructions, "provider prompt");
+    assert!(updated.model_messages.is_none());
 }
 
 fn sol_model() -> ModelInfo {

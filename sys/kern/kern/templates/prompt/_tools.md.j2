@@ -1,0 +1,10 @@
+
+# Tools
+
+- Use the exposed tool schemas. The tool set is refreshed after calls and mode changes.
+{% if "enable_tools" in tools %}
+- Use `enable_tools` to activate the groups required by the task.
+{% endif %}
+{% if "read_session_history" in tools or "search_session_history" in tools %}
+- Use the session-history tools to retrieve earlier conversation context.
+{% endif %}

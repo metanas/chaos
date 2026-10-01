@@ -1,0 +1,9 @@
+
+# MCP management
+
+{% if "mcp-management" in disabled_groups %}
+- Enable `mcp-management` with `enable_tools` before managing servers.
+{% endif %}
+- Use `mcp_add_server` and `mcp_server` for server configuration changes instead of editing `.mcp.json`.
+- Read `chaos://mcp` before changes and check it afterward for startup, authentication, and connection status.
+- For HTTP bearer authentication, use `bearer_token_env_var`.

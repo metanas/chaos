@@ -186,6 +186,7 @@ impl Config {
         let mut startup_warnings = Vec::new();
 
         let ConfigOverrides {
+            tui_output,
             model,
             review_model: override_review_model,
             cwd,
@@ -724,6 +725,7 @@ impl Config {
                 .as_ref()
                 .and_then(|feedback| feedback.enabled)
                 .unwrap_or(true),
+            tui_output,
             tui_notifications: cfg
                 .tui
                 .as_ref()

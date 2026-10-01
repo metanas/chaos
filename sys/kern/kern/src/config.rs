@@ -471,6 +471,8 @@ pub struct Config {
     /// Compact prompt override.
     pub compact_prompt: Option<String>,
 
+    pub tui_output: bool,
+
     /// TUI notifications preference. When set, the TUI will send terminal notifications on
     /// approvals and turn completions when not focused.
     pub tui_notifications: Notifications,
@@ -1068,6 +1070,7 @@ pub use chaos_sysctl::types::ToolsToml;
 /// Optional overrides for user configuration (e.g., from CLI flags).
 #[derive(Default, Debug, Clone)]
 pub struct ConfigOverrides {
+    pub tui_output: bool,
     pub model: Option<String>,
     pub review_model: Option<String>,
     pub cwd: Option<PathBuf>,

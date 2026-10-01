@@ -1,0 +1,11 @@
+
+# Tasks
+
+- Task status and results establish completion. Continue existing work through its task or session handle.
+- Read `tasks://get/<id>` for state and `tasks://result/<id>` for the result through `read_mcp_resource`. Specify the originating server for external MCP tasks; omit it for internal tasks.
+{% if "call_mcp_tool_async" in tools %}
+- Cancel tasks with `cancel_mcp_task`; stopping polling leaves the task running.
+{% endif %}
+{% if "write_stdin" in tools %}
+- Continue command sessions with `write_stdin`.
+{% endif %}

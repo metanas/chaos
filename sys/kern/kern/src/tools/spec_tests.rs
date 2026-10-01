@@ -554,7 +554,17 @@ fn non_mutating_mode_hides_mutating_tools_but_keeps_mode_switching() {
 
     let (tools, _) = build_specs(&tools_config, None, None, &[dynamic_tool]).build();
 
-    assert_contains_tool_names(&tools, &["switch_mode"]);
+    assert_contains_tool_names(
+        &tools,
+        &[
+            "switch_mode",
+            "list_mcp_resources",
+            "list_mcp_resource_templates",
+            "read_mcp_resource",
+            "set_mcp_resource_subscription",
+            "refresh_models",
+        ],
+    );
     assert_lacks_tool_name(&tools, "update_plan");
     assert_lacks_tool_name(&tools, "apply_patch");
     assert_lacks_tool_name(&tools, "request_permissions");
@@ -570,7 +580,15 @@ fn capability_groups_hide_native_tools_until_enabled_and_rebuild_cleanly() {
     let tools = build_grouped_tools(&config, &catalog, &state, None, &[]);
     assert_contains_tool_names(
         &tools,
-        &["enable_tools", "request_user_input", "refresh_models"],
+        &[
+            "enable_tools",
+            "request_user_input",
+            "refresh_models",
+            "list_mcp_resources",
+            "list_mcp_resource_templates",
+            "read_mcp_resource",
+            "set_mcp_resource_subscription",
+        ],
     );
     assert_lacks_tool_name(&tools, "disable_tools");
     for name in [

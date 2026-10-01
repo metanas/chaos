@@ -1,7 +1,6 @@
 use crate::client_common::tools::ToolSpec;
 use crate::config::types::Personality;
 use crate::error::Result;
-use crate::models_manager::model_info::BASE_INSTRUCTIONS;
 use chaos_ipc::models::BaseInstructions;
 use chaos_ipc::models::FunctionCallOutputBody;
 use chaos_ipc::models::ResponseItem;
@@ -52,7 +51,7 @@ impl Default for Prompt {
             tools: Vec::new(),
             parallel_tool_calls: false,
             base_instructions: BaseInstructions {
-                text: BASE_INSTRUCTIONS.to_string(),
+                text: crate::prompt_template::default_instructions(),
             },
             personality: None,
             output_schema: None,

@@ -48,3 +48,26 @@ fn test_tui_notification_method() {
         toml::from_str(toml).expect("deserialize notification_method=\"bel\"");
     assert_eq!(parsed.tui.notification_method, NotificationMethod::Bel);
 }
+
+#[test]
+fn tui_output_requires_frontend_opt_in_not_saved_tui_settings() {
+    let home = tempfile::tempdir().unwrap();
+    let saved: ConfigToml = toml::from_str("[tui]\nanimations = true").unwrap();
+    let config = Config::load_from_base_config_with_overrides(
+        saved.clone(),
+        ConfigOverrides::default(),
+        home.path().to_path_buf(),
+    )
+    .unwrap();
+    assert!(!config.tui_output);
+    let config = Config::load_from_base_config_with_overrides(
+        saved,
+        ConfigOverrides {
+            tui_output: true,
+            ..Default::default()
+        },
+        home.path().to_path_buf(),
+    )
+    .unwrap();
+    assert!(config.tui_output);
+}

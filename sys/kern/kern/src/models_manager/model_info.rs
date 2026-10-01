@@ -9,8 +9,6 @@ use crate::truncate::approx_bytes_for_tokens;
 // Re-export pure ABI conversion from the catalog crate.
 pub use chaos_model_catalog::model_info_from_abi;
 
-pub const BASE_INSTRUCTIONS: &str = include_str!("../../prompt.md");
-
 pub(crate) fn with_config_overrides(mut model: ModelInfo, config: &Config) -> ModelInfo {
     model.model_family = config.model_provider.family_for_model(
         &config.model_provider_id,
@@ -80,9 +78,9 @@ pub(crate) fn with_config_overrides(mut model: ModelInfo, config: &Config) -> Mo
         model.base_instructions = base_instructions.clone();
         model.model_messages = None;
     } else {
-        // Always override server-supplied instructions with the local prompt.
+        // Always override server-supplied instructions with the rendered local prompt.
         // The server sends OpenAI-branded personality; ChaOS has its own identity.
-        model.base_instructions = BASE_INSTRUCTIONS.to_string();
+        model.base_instructions = crate::prompt_template::render(&model, config);
         model.model_messages = None;
     }
 

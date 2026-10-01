@@ -1123,6 +1123,7 @@ fn expected_precedence_fixture_config_baseline(fixture: &PrecedenceTestFixture) 
         active_project_trust: ProjectTrust { trust_level: None },
         notices: Default::default(),
         disable_paste_burst: false,
+        tui_output: false,
         tui_notifications: Default::default(),
         tui_notification_method: Default::default(),
         animations: true,

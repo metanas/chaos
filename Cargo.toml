@@ -303,6 +303,7 @@ log = "0.4"
 lru = "0.18.5"
 mime_guess = "2.0.5"
 mimalloc = { version = "0.1", default-features = false }
+minijinja = { version = "2.24.0", features = ["loader"] }
 mlua = { version = "0.12.1", features = ["lua54", "vendored", "async", "serialize", "send"] }
 multimap = "0.10.1"
 notify = "8.2.0"

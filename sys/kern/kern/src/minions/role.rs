@@ -285,6 +285,7 @@ mod reload {
 
     fn reload_overrides(config: &Config, preserve_current_provider: bool) -> ConfigOverrides {
         ConfigOverrides {
+            tui_output: config.tui_output,
             cwd: Some(config.cwd.clone()),
             model_provider: preserve_current_provider.then(|| config.model_provider_id.clone()),
             active_project_trust: Some(config.active_project_trust.clone()),

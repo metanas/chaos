@@ -13,6 +13,9 @@ path = "src/lib.rs"
 [lints]
 workspace = true
 
+[features]
+tui = []
+
 [build-dependencies]
 serde = { workspace = true, features = ["derive"] }
 toml = { workspace = true }
@@ -91,6 +94,7 @@ rand = { workspace = true }
 quick-xml = { workspace = true }
 regex-lite = { workspace = true }
 mime_guess = { workspace = true }
+minijinja = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
