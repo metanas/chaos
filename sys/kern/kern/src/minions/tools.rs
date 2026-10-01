@@ -20,6 +20,7 @@ use crate::tools::handlers::parse_arguments;
 use crate::tools::registry::ToolHandler;
 use crate::tools::registry::ToolKind;
 use chaos_ipc::ProcessId;
+use chaos_ipc::config_types::ClampBackend;
 use chaos_ipc::models::BaseInstructions;
 use chaos_ipc::models::ResponseInputItem;
 use chaos_ipc::openai_models::ReasoningEffort;
@@ -336,12 +337,35 @@ async fn apply_requested_spawn_agent_model_overrides(
     }
 
     if let Some(requested_model) = requested_model {
+        // A clamped Claude Code session has no API catalog: its models are
+        // whatever the Claude Code subprocess advertised at initialization,
+        // and the child runs on the same subscription through its own clamp
+        // transport. Validate against that list, failing closed as below.
+        if session.services.model_client.is_clamped()
+            && session.services.model_client.clamp_backend() == ClampBackend::ClaudeCode
+        {
+            let available_models = chaos_clamp::cached_model_presets();
+            let selected = find_spawn_agent_model(&available_models, requested_model)?;
+            config.model = Some(selected.model.clone());
+            if let Some(reasoning_effort) = requested_reasoning_effort {
+                validate_spawn_agent_reasoning_effort(
+                    &selected.model,
+                    &selected.supported_reasoning_efforts,
+                    reasoning_effort,
+                )?;
+                config.model_reasoning_effort = Some(reasoning_effort);
+            }
+            return Ok(());
+        }
+
         let available_models = session
             .services
             .models_manager
             .list_models(RefreshStrategy::Offline)
             .await;
-        let selected_model_name = find_spawn_agent_model_name(&available_models, requested_model)?;
+        let selected_model_name = find_spawn_agent_model(&available_models, requested_model)?
+            .model
+            .clone();
         let selected_model_info = session
             .services
             .models_manager
@@ -373,6 +397,50 @@ async fn apply_requested_spawn_agent_model_overrides(
     }
 
     Ok(())
+}
+
+/// Decide the child's model transport once every role, provider and model
+/// override has been applied.
+///
+/// The answer comes from the parent's *live* model client, not the persisted
+/// config: `/clamp` toggles change the client without touching config, so a
+/// cloned config can say either thing.
+///
+/// - Parent direct: child direct.
+/// - Parent clamped, child bound to a different provider: child direct on that
+///   provider's own transport (an explicit binding is honoured, never
+///   silently rerouted through the parent's subscription).
+/// - Parent clamped, same provider: child clamped on the parent's backend. On
+///   Claude Code the child's model must be one the subprocess accepts;
+///   anything else is refused rather than silently replaced by the
+///   subscription default.
+pub(crate) fn resolve_spawn_agent_transport(
+    session: &Session,
+    turn: &TurnContext,
+    config: &mut Config,
+) -> Result<(), FunctionCallError> {
+    let client = &session.services.model_client;
+    if !client.is_clamped() || config.model_provider_id != turn.config.model_provider_id {
+        config.clamp = false;
+        return Ok(());
+    }
+    let backend = client.clamp_backend();
+    if backend == ClampBackend::ClaudeCode
+        && let Some(model) = config.model.as_deref()
+        && !clamp_claude_code_accepts(model)
+    {
+        return Err(FunctionCallError::RespondToModel(format!(
+            "Model `{model}` cannot run on the clamped Claude Code transport. \
+             Choose a Claude model, or bind an explicit model_provider."
+        )));
+    }
+    config.clamp = true;
+    config.clamp_backend = backend;
+    Ok(())
+}
+
+fn clamp_claude_code_accepts(model: &str) -> bool {
+    model == "default" || model.starts_with("claude") || chaos_clamp::is_cached_model(model)
 }
 
 pub(crate) async fn apply_requested_spawn_agent_provider_binding(
@@ -445,14 +513,13 @@ pub(crate) async fn apply_requested_spawn_agent_provider_binding(
     Ok(())
 }
 
-fn find_spawn_agent_model_name(
-    available_models: &[chaos_ipc::openai_models::ModelPreset],
+fn find_spawn_agent_model<'a>(
+    available_models: &'a [chaos_ipc::openai_models::ModelPreset],
     requested_model: &str,
-) -> Result<String, FunctionCallError> {
+) -> Result<&'a chaos_ipc::openai_models::ModelPreset, FunctionCallError> {
     available_models
         .iter()
         .find(|model| model.model == requested_model)
-        .map(|model| model.model.clone())
         .ok_or_else(|| {
             let available = available_models
                 .iter()
