@@ -118,14 +118,13 @@ fn runtime_guidance_is_request_local_and_preserves_literal_base() {
         false,
         ApprovalPolicy::Interactive,
     );
-    assert_eq!(prompt.input, original);
-    assert_eq!(prompt.request_context.len(), 1);
-    assert_eq!(prompt.get_formatted_input().len(), original.len() + 1);
+    assert_eq!(&prompt.input[..original.len()], original.as_slice());
+    assert_eq!(prompt.input.len(), original.len() + 1);
     assert_eq!(
         prompt.base_instructions.text,
         "literal {{ not_a_template }}"
     );
-    let message = serde_json::to_value(prompt.request_context.last().unwrap()).unwrap();
+    let message = serde_json::to_value(prompt.input.last().unwrap()).unwrap();
     assert_eq!(message["role"], "system");
 }
 
@@ -150,7 +149,6 @@ fn headless_policy_suppresses_console_guidance() {
             true,
             policy,
         );
-        assert!(prompt.input.is_empty());
-        assert_eq!(prompt.request_context.len(), expected_messages);
+        assert_eq!(prompt.input.len(), expected_messages);
     }
 }

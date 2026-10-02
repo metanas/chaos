@@ -141,12 +141,29 @@ Resumes require the same effective clamp configuration, including any non-defaul
 backend. For AGY, retain the process ID, dedicated home, CLI path, and model
 selection across invocations and workers.
 
+### Sub-agents under clamp
+
+A sub-agent spawned or resumed by a clamped parent inherits the parent's live
+transport, including a `/clamp` toggle made during the session. When the child
+resolves to a different provider (through an explicit provider or a role), it
+uses that provider's own transport and is never routed through the parent's CLI.
+
+With Claude Code, `spawn_agent` validates a requested `model` and
+`reasoning_effort` against the models the CLI advertised to the parent's
+session (for example `haiku`, `sonnet`, `opus`), and passes the model to
+the child CLI's `--model`. No Anthropic API key is needed. Unknown models and
+effort levels the CLI did not advertise are rejected rather than substituted.
+
 Claude Code resumes also require its native session files (normally under
 `~/.claude/projects`) and the same working directory to survive between
 invocations. Chaos stores owner-only, per-process checkpoints under
 `$CHAOS_HOME/clamp/claude`; these contain a native session ID and history
 fingerprints, not transcript contents. Ephemeral Chaos sessions keep checkpoints
 only in memory.
+
+Request-local runtime guidance and machine warnings are sent on every request,
+but are excluded from the durable history fingerprint. Refreshed guidance therefore
+does not invalidate an otherwise compatible native conversation.
 
 A checkpoint is reused only when the model, base instructions, working directory,
 and completed Chaos history prefix still match. New/forked sessions, rewritten

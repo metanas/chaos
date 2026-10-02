@@ -66,10 +66,20 @@ fn fingerprint(items: &[String]) -> String {
         .collect()
 }
 
-/// Only canonical history participates in the checkpoint fingerprint.
 pub(super) fn rendered_input(prompt: &Prompt) -> Vec<String> {
     prompt
-        .get_formatted_history()
+        .get_formatted_input()
+        .iter()
+        .filter_map(render_clamp_response_item)
+        .collect()
+}
+
+pub(super) fn rendered_history_input(prompt: &Prompt) -> Vec<String> {
+    let mut input = prompt.get_formatted_input();
+    if let Some(start) = prompt.request_local_start {
+        input.truncate(start);
+    }
+    input
         .iter()
         .filter_map(render_clamp_response_item)
         .collect()
@@ -110,7 +120,6 @@ impl Checkpoint {
         system: &str,
         cwd: &std::path::Path,
         input: &[String],
-        request_context: &[chaos_ipc::models::ResponseItem],
     ) -> Option<(String, String)> {
         if self.version != 1
             || self.backend != backend
@@ -125,20 +134,9 @@ impl Checkpoint {
         }
         // Include *all* unsent items, including new developer instructions and
         // hook messages. Merely selecting the last user message drops context.
-        // Refresh request-only guidance too, without including it in the saved
-        // prefix: it is not part of the next turn's canonical history.
         Some((
             self.session_id.clone(),
-            input[self.input_len..]
-                .iter()
-                .cloned()
-                .chain(
-                    request_context
-                        .iter()
-                        .filter_map(render_clamp_response_item),
-                )
-                .collect::<Vec<_>>()
-                .join("\n\n"),
+            input[self.input_len..].join("\n\n"),
         ))
     }
 }

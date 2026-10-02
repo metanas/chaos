@@ -74,7 +74,7 @@ pub(super) fn build_prompt(
 
     Prompt {
         input,
-        request_context: Vec::new(),
+        request_local_start: None,
         tools,
         parallel_tool_calls: turn_context.model_info.supports_parallel_tool_calls,
         base_instructions,
@@ -101,7 +101,7 @@ fn append_runtime_instructions(
     );
     if !instructions.is_empty() {
         prompt
-            .request_context
+            .input
             .push(DeveloperInstructions::new(instructions).into());
     }
 }
@@ -168,10 +168,12 @@ pub(super) async fn run_sampling_request(
     );
     let mut retries = 0;
     let mut last_server_model: Option<String> = None;
+    let history_len = prompt.input.len();
+    prompt.request_local_start = Some(history_len);
     loop {
         // Request-local guidance and warnings are refreshed after tool batches
         // and retries. Never persist them in history, where they become stale.
-        prompt.request_context.clear();
+        prompt.input.truncate(history_len);
         if retries > 0 {
             machine_input.clear();
             machine_warnings::append(
@@ -215,7 +217,7 @@ pub(super) async fn run_sampling_request(
             turn_context.config.tui_output,
             turn_context.approval_policy.value(),
         );
-        prompt.request_context.extend(machine_input.iter().cloned());
+        prompt.input.extend(machine_input.iter().cloned());
         let err = match Box::pin(try_run_sampling_request(
             tool_runtime.clone(),
             Arc::clone(&sess),

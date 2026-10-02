@@ -686,8 +686,8 @@ impl ModelClientSession {
         let settings = clamp_settings.antigravity;
         let system_prompt = crate::clamp_bridge::antigravity_system_prompt(prompt);
         let full_prompt_state = render_clamp_full_prompt(prompt);
-        let checkpoint_input = super::native_resume::rendered_input(prompt);
-        let request_context = prompt.request_context.clone();
+        let continuation_input = super::native_resume::rendered_input(prompt);
+        let checkpoint_input = super::native_resume::rendered_history_input(prompt);
         let clamp_cwd = match settings.cwd.clone() {
             Some(cwd) => cwd,
             None => std::env::current_dir()?,
@@ -724,8 +724,7 @@ impl ModelClientSession {
                     &model,
                     &system_prompt,
                     &clamp_cwd,
-                    &checkpoint_input,
-                    &request_context,
+                    &continuation_input,
                 )
             });
             // Neither an in-memory ID nor a legacy ID-only file establishes that
@@ -1043,8 +1042,8 @@ impl ModelClientSession {
         use chaos_clamp::Message as ClampMessage;
         let system_prompt = prompt.base_instructions.text.clone();
         let full_prompt_state = render_clamp_full_prompt(prompt);
-        let checkpoint_input = super::native_resume::rendered_input(prompt);
-        let request_context = prompt.request_context.clone();
+        let continuation_input = super::native_resume::rendered_input(prompt);
+        let checkpoint_input = super::native_resume::rendered_history_input(prompt);
         let clamp_cwd = self
             .client
             .state
@@ -1085,8 +1084,7 @@ impl ModelClientSession {
                     &clamp_model_slug,
                     &system_prompt,
                     &clamp_cwd,
-                    &checkpoint_input,
-                    &request_context,
+                    &continuation_input,
                 )
             });
             if continuation.is_none()
@@ -1223,10 +1221,13 @@ impl ModelClientSession {
                 return;
             };
 
-            // Only override the model when running a Claude model slug.
+            // Only override the model when running a Claude model slug, or a
+            // value Claude Code itself advertised at initialization (the
+            // `haiku` / `sonnet` / `opus` aliases a spawned child may carry).
             // Non-Claude slugs (OpenAI, xAI, …) are not valid in Claude Code;
             // in that case let the subprocess use its MAX-subscription default.
-            if clamp_model_slug.starts_with("claude")
+            if (clamp_model_slug.starts_with("claude")
+                || chaos_clamp::is_cached_model(&clamp_model_slug))
                 && let Err(e) = transport.set_model(&clamp_model_slug).await
             {
                 *guard = None;

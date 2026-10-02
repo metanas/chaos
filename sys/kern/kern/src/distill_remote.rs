@@ -111,7 +111,7 @@ async fn run_remote_distill_task_inner_impl(
     .await?;
     let mut prompt = Prompt {
         input: prompt_input,
-        request_context: Vec::new(),
+        request_local_start: None,
         tools: tool_router.model_visible_specs(),
         parallel_tool_calls: turn_context.model_info.supports_parallel_tool_calls,
         base_instructions,
