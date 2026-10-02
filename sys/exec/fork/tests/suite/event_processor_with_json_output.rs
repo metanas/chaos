@@ -645,6 +645,75 @@ fn mcp_tool_call_defaults_arguments_and_preserves_structured_content() {
 }
 
 #[test]
+fn child_status_events_are_independent_payload_free_snapshots() {
+    use chaos_ipc::protocol::CollabAgentStatusChangedEvent;
+
+    let mut ep = EventProcessorWithJsonOutput::new(None);
+    let parent = ProcessId::from_string("67e55044-10b1-426f-9247-bb680e5fe0c8").unwrap();
+    let child = ProcessId::from_string("9e107d9d-372b-4b8c-a2a4-1d9bb3fce0c1").unwrap();
+
+    // No spawn/wait/tool item is needed. Completed is a turn state, so a
+    // later input can make the same child run again before it is closed.
+    for (status, wire_status, message) in [
+        (AgentStatus::PendingInit, "pending_init", None),
+        (AgentStatus::Running, "running", None),
+        (AgentStatus::Interrupted, "interrupted", None),
+        (
+            AgentStatus::Errored("private error".into()),
+            "errored",
+            Some("private error"),
+        ),
+        (
+            AgentStatus::Completed(Some("private result".into())),
+            "completed",
+            Some("private result"),
+        ),
+        (AgentStatus::Running, "running", None),
+        (AgentStatus::Completed(None), "completed", None),
+        (AgentStatus::Shutdown, "shutdown", None),
+        (AgentStatus::NotFound, "not_found", None),
+    ] {
+        let projected = CollabAgentStatus::from(&status);
+        // Tool results keep their payloads; both surfaces share the status projection.
+        assert_eq!(
+            serde_json::to_value(CollabAgentState::from(status)).unwrap(),
+            json!({"status": wire_status, "message": message})
+        );
+        let update = CollabAgentStatusChangedEvent {
+            parent_process_id: parent,
+            child_process_id: child,
+            agent_nickname: Some("Ada".to_string()),
+            agent_role: Some("default".to_string()),
+            model: Some(TEST_MODEL.to_string()),
+            status: projected,
+        };
+        let events = ep.collect_process_events(&event(
+            "child-status",
+            EventMsg::CollabAgentStatusChanged(update.clone()),
+        ));
+        assert_eq!(events, vec![ProcessEvent::AgentStatusChanged(update)]);
+        let value = serde_json::to_value(&events[0]).unwrap();
+        // Exact allowlist: no prompt, result, message or raw error payload.
+        assert_eq!(
+            value,
+            json!({
+                "type": "agent.status_changed",
+                "parent_process_id": parent.to_string(),
+                "child_process_id": child.to_string(),
+                "agent_nickname": "Ada",
+                "agent_role": "default",
+                "model": TEST_MODEL,
+                "status": wire_status,
+            })
+        );
+        assert_eq!(
+            serde_json::from_value::<ProcessEvent>(value).unwrap(),
+            events[0]
+        );
+    }
+}
+
+#[test]
 fn collab_spawn_begin_and_end_emit_item_events() {
     let mut ep = EventProcessorWithJsonOutput::new(None);
     let sender_process_id = ProcessId::from_string("67e55044-10b1-426f-9247-bb680e5fe0c8").unwrap();

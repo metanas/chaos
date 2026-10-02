@@ -143,6 +143,9 @@ impl EventProcessorWithJsonOutput {
             }
             protocol::EventMsg::McpToolCallBegin(ev) => self.handle_mcp_tool_call_begin(ev),
             protocol::EventMsg::McpToolCallEnd(ev) => self.handle_mcp_tool_call_end(ev),
+            protocol::EventMsg::CollabAgentStatusChanged(ev) => {
+                vec![ProcessEvent::AgentStatusChanged(ev.clone())]
+            }
             protocol::EventMsg::CollabAgentSpawnBegin(ev) => self.handle_collab_spawn_begin(ev),
             protocol::EventMsg::CollabAgentSpawnEnd(ev) => self.handle_collab_spawn_end(ev),
             protocol::EventMsg::CollabAgentInteractionBegin(ev) => {
@@ -890,36 +893,13 @@ fn is_collab_failure(status: &CoreAgentStatus) -> bool {
 
 impl From<CoreAgentStatus> for CollabAgentState {
     fn from(value: CoreAgentStatus) -> Self {
-        match value {
-            CoreAgentStatus::PendingInit => Self {
-                status: CollabAgentStatus::PendingInit,
-                message: None,
-            },
-            CoreAgentStatus::Running => Self {
-                status: CollabAgentStatus::Running,
-                message: None,
-            },
-            CoreAgentStatus::Interrupted => Self {
-                status: CollabAgentStatus::Interrupted,
-                message: None,
-            },
-            CoreAgentStatus::Completed(message) => Self {
-                status: CollabAgentStatus::Completed,
-                message,
-            },
-            CoreAgentStatus::Errored(message) => Self {
-                status: CollabAgentStatus::Errored,
-                message: Some(message),
-            },
-            CoreAgentStatus::Shutdown => Self {
-                status: CollabAgentStatus::Shutdown,
-                message: None,
-            },
-            CoreAgentStatus::NotFound => Self {
-                status: CollabAgentStatus::NotFound,
-                message: None,
-            },
-        }
+        let status = CollabAgentStatus::from(&value);
+        let message = match value {
+            CoreAgentStatus::Completed(message) => message,
+            CoreAgentStatus::Errored(message) => Some(message),
+            _ => None,
+        };
+        Self { status, message }
     }
 }
 

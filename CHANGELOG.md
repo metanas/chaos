@@ -9,6 +9,11 @@ should. There is no patch level; the build timestamp is the patch.
 
 ## [Unreleased]
 
+### Added
+- Payload-free direct-child lifecycle updates in `chaos exec --json`, independent
+  of collaboration tool results. Failed initialization does not create a pending
+  child entry.
+
 ### Changed
 - Update the Skipper driver to 0.4.0 with PR watching, discussion/list resources,
   and workspace metadata. Building the driver now requires Rust 1.99.

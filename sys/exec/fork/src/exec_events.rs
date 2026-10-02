@@ -1,4 +1,5 @@
 use chaos_ipc::models::WebSearchAction;
+pub use chaos_ipc::protocol::CollabAgentStatus;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value as JsonValue;
@@ -8,6 +9,9 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum ProcessEvent {
+    /// Payload-free status of a direct child, independent of collaboration tool calls.
+    #[serde(rename = "agent.status_changed")]
+    AgentStatusChanged(chaos_ipc::protocol::CollabAgentStatusChangedEvent),
     /// Emitted when a new process is started as the first event.
     #[serde(rename = "process.started")]
     ProcessStarted(ProcessStartedEvent),
@@ -248,19 +252,6 @@ pub enum CollabTool {
     SendInput,
     Wait,
     CloseAgent,
-}
-
-/// The status of a collab agent.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum CollabAgentStatus {
-    PendingInit,
-    Running,
-    Interrupted,
-    Completed,
-    Errored,
-    Shutdown,
-    NotFound,
 }
 
 /// Last known state of a collab agent.

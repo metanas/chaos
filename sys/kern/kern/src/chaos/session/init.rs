@@ -536,6 +536,7 @@ impl Session {
             tx_event: tx_event.clone(),
             mcp_notification_tx: mcp_notification_tx.clone(),
             agent_status,
+            agent_status_publication: Mutex::new(()),
             out_of_band_elicitation_paused,
             state: Mutex::new(state),
             active_turn: Mutex::new(None),
@@ -724,6 +725,10 @@ impl Session {
             state.set_pending_session_start_source(Some(session_start_source));
         }
 
+        // SessionConfigured precedes fallible startup (notably required MCP
+        // servers). Publish only once startup succeeds, so failed spawns cannot
+        // leave an unregistered child stuck in PendingInit on the parent stream.
+        Box::pin(sess.publish_agent_status(None)).await;
         Ok(sess)
     }
 }

@@ -818,7 +818,7 @@ async fn unified_exec_emits_terminal_interaction_for_write_stdin() -> Result<()>
             ev_completed("resp-3"),
         ]),
     ];
-    mount_sse_sequence(&server, responses).await;
+    let request_log = mount_sse_sequence(&server, responses).await;
 
     let session_model = session_configured.model.clone();
 
@@ -855,7 +855,19 @@ async fn unified_exec_emits_terminal_interaction_for_write_stdin() -> Result<()>
         }
     }
 
-    let delta = terminal_interaction.expect("expected TerminalInteraction event");
+    let delta = terminal_interaction.unwrap_or_else(|| {
+        let outputs: Vec<_> = request_log
+            .requests()
+            .iter()
+            .map(|request| {
+                (
+                    request.function_call_output_text(open_call_id),
+                    request.function_call_output_text(stdin_call_id),
+                )
+            })
+            .collect();
+        panic!("expected TerminalInteraction event; tool outputs: {outputs:?}");
+    });
     assert_eq!(delta.process_id, "1000");
     let expected_stdin = stdin_args
         .get("chars")

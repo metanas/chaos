@@ -471,6 +471,20 @@ impl ProcessTable {
         let (session, turn) = crate::chaos::make_session_and_context().await;
         let process_id = session.conversation_id;
         let (status_tx, agent_status) = tokio::sync::watch::channel(status);
+        self.insert_session_for_tests(session, &turn, agent_status)
+            .await;
+        (process_id, status_tx)
+    }
+
+    /// Register an in-memory session without booting a submission loop.
+    #[cfg(test)]
+    pub(crate) async fn insert_session_for_tests(
+        &self,
+        session: crate::chaos::Session,
+        turn: &crate::chaos::TurnContext,
+        agent_status: tokio::sync::watch::Receiver<crate::minions::AgentStatus>,
+    ) -> Arc<Process> {
+        let process_id = session.conversation_id;
         let chaos = Chaos {
             tx_sub: async_channel::bounded(1).0,
             rx_event: async_channel::bounded(1).1,
@@ -478,13 +492,16 @@ impl ProcessTable {
             session: Arc::new(session),
             session_loop_termination: crate::chaos::completed_session_loop_termination(),
         };
-        let process = Process::new(chaos, self.state.file_watcher.register_config(&turn.config));
+        let process = Arc::new(Process::new(
+            chaos,
+            self.state.file_watcher.register_config(&turn.config),
+        ));
         self.state
             .processes
             .write()
             .await
-            .insert(process_id, Arc::new(process));
-        (process_id, status_tx)
+            .insert(process_id, Arc::clone(&process));
+        process
     }
 
     #[cfg(test)]

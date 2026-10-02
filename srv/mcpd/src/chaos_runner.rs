@@ -441,6 +441,7 @@ async fn run_event_loop(
                     | EventMsg::CollabCloseEnd(_)
                     | EventMsg::CollabResumeBegin(_)
                     | EventMsg::CollabResumeEnd(_)
+                    | EventMsg::CollabAgentStatusChanged(_)
                     | EventMsg::DeprecationNotice(_) => {
                         // Already forwarded as notification above.
                     }

@@ -784,6 +784,7 @@ pub(crate) async fn run_turn(
                 if state.history.replace_last_turn_images("Invalid image") {
                     continue;
                 }
+                drop(state);
                 let event = EventMsg::Error(crate::protocol::ErrorEvent {
                     message: "Invalid image in your last message. Please remove it and try again."
                         .to_string(),
