@@ -10,6 +10,8 @@ should. There is no patch level; the build timestamp is the patch.
 ## [Unreleased]
 
 ### Changed
+- Update the Skipper driver to 0.4.0 with PR watching, discussion/list resources,
+  and workspace metadata. Building the driver now requires Rust 1.99.
 - Replace the Git fork dependencies for `ratatui-hypertile` and
   `ratatui-hypertile-extras` with their upstream crates.io 0.4.2 releases,
   adapting to the palette API while preserving pane filtering and selection handling.
