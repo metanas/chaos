@@ -25,8 +25,11 @@ pub const REVIEW_EXIT_INTERRUPTED_TMPL: &str =
 /// API request payload for a single model turn
 #[derive(Debug, Clone)]
 pub struct Prompt {
-    /// Conversation context input items.
+    /// Canonical conversation history, excluding request-only guidance.
     pub input: Vec<ResponseItem>,
+
+    /// Current guidance and warnings sent after history, but never checkpointed.
+    pub request_context: Vec<ResponseItem>,
 
     /// Tools available to the model, including additional tools sourced from
     /// external MCP servers.
@@ -48,6 +51,7 @@ impl Default for Prompt {
     fn default() -> Self {
         Self {
             input: Vec::new(),
+            request_context: Vec::new(),
             tools: Vec::new(),
             parallel_tool_calls: false,
             base_instructions: BaseInstructions {
@@ -61,6 +65,12 @@ impl Default for Prompt {
 
 impl Prompt {
     pub(crate) fn get_formatted_input(&self) -> Vec<ResponseItem> {
+        let mut input = self.get_formatted_history();
+        input.extend(self.request_context.iter().cloned());
+        input
+    }
+
+    pub(crate) fn get_formatted_history(&self) -> Vec<ResponseItem> {
         let mut input = self.input.clone();
         // Vendor-agnostic model input: shell/apply_patch outputs should be
         // plain structured text for the model regardless of whether the

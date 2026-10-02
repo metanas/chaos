@@ -14,6 +14,13 @@ should. There is no patch level; the build timestamp is the patch.
   `ratatui-hypertile-extras` with their upstream crates.io 0.4.2 releases,
   adapting to the palette API while preserving pane filtering and selection handling.
 
+### Fixed
+- Keep request-only runtime guidance and machine warnings out of native resume
+  checkpoints, preserving Claude and Antigravity tool history across turns while
+  still delivering current guidance on every request.
+- Update prompt-caching tests to verify request-local guidance separately from
+  the canonical conversation prefix.
+
 ## [47.10.0] - 2026-10-01
 
 Upgrading: integrations must use `user_turn` with `vfs_policy` and

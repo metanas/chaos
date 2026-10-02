@@ -687,6 +687,7 @@ impl ModelClientSession {
         let system_prompt = crate::clamp_bridge::antigravity_system_prompt(prompt);
         let full_prompt_state = render_clamp_full_prompt(prompt);
         let checkpoint_input = super::native_resume::rendered_input(prompt);
+        let request_context = prompt.request_context.clone();
         let clamp_cwd = match settings.cwd.clone() {
             Some(cwd) => cwd,
             None => std::env::current_dir()?,
@@ -724,6 +725,7 @@ impl ModelClientSession {
                     &system_prompt,
                     &clamp_cwd,
                     &checkpoint_input,
+                    &request_context,
                 )
             });
             // Neither an in-memory ID nor a legacy ID-only file establishes that
@@ -1042,6 +1044,7 @@ impl ModelClientSession {
         let system_prompt = prompt.base_instructions.text.clone();
         let full_prompt_state = render_clamp_full_prompt(prompt);
         let checkpoint_input = super::native_resume::rendered_input(prompt);
+        let request_context = prompt.request_context.clone();
         let clamp_cwd = self
             .client
             .state
@@ -1083,6 +1086,7 @@ impl ModelClientSession {
                     &system_prompt,
                     &clamp_cwd,
                     &checkpoint_input,
+                    &request_context,
                 )
             });
             if continuation.is_none()

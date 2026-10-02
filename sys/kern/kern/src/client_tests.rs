@@ -183,6 +183,7 @@ fn antigravity_conversation_state_resumes_across_model_clients() {
             "system",
             std::path::Path::new("/work"),
             &input,
+            &[],
         ),
         Some(("conversation-e2e".into(), "second".into()))
     );

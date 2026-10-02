@@ -35,7 +35,8 @@ fn native_resume_requires_completed_matching_history_and_sends_all_new_items() {
                 "claude",
                 "system",
                 std::path::Path::new("/work"),
-                &input
+                &input,
+                &[],
             ),
             Some((ID.into(), input[2..].join("\n\n")))
         );
@@ -45,8 +46,15 @@ fn native_resume_requires_completed_matching_history_and_sends_all_new_items() {
             ("claude", "system", "/other"),
         ] {
             assert!(
-                cp.continuation(backend, model, system, std::path::Path::new(cwd), &input)
-                    .is_none()
+                cp.continuation(
+                    backend,
+                    model,
+                    system,
+                    std::path::Path::new(cwd),
+                    &input,
+                    &[]
+                )
+                .is_none()
             );
         }
         for input in [
@@ -62,7 +70,8 @@ fn native_resume_requires_completed_matching_history_and_sends_all_new_items() {
                     "claude",
                     "system",
                     std::path::Path::new("/work"),
-                    &input
+                    &input,
+                    &[],
                 )
                 .is_none()
             );
@@ -96,7 +105,8 @@ fn checkpoint_is_private_consumed_before_dispatch_and_scoped_to_one_process() {
                 "claude",
                 "system",
                 std::path::Path::new("/work"),
-                &next_input()
+                &next_input(),
+                &[],
             )
             .is_some()
         );
@@ -144,7 +154,8 @@ fn ephemeral_checkpoint_stays_in_memory_and_invalid_ids_are_not_resumable() {
                 "claude",
                 "system",
                 std::path::Path::new("/work"),
-                &next_input()
+                &next_input(),
+                &[],
             )
             .is_none()
         );
@@ -156,7 +167,8 @@ fn ephemeral_checkpoint_stays_in_memory_and_invalid_ids_are_not_resumable() {
                 "claude",
                 "system",
                 std::path::Path::new("/work"),
-                &next_input()
+                &next_input(),
+                &[],
             )
             .is_none()
         );
@@ -177,7 +189,8 @@ fn backend_ids_and_legacy_checkpoint_compatibility() {
             "claude",
             "system",
             std::path::Path::new("/work"),
-            &next_input()
+            &next_input(),
+            &[],
         )
         .is_none()
     );
@@ -191,7 +204,8 @@ fn backend_ids_and_legacy_checkpoint_compatibility() {
                 "claude",
                 "system",
                 std::path::Path::new("/work"),
-                &next_input()
+                &next_input(),
+                &[],
             )
             .is_some()
     );
@@ -216,11 +230,19 @@ fn rendered_delta_delivers_new_hook_and_system_items_without_replaying_consumed_
             message("user", "first"),
             message("system", "<mcp_resource_update>old</mcp_resource_update>"),
         ];
+        prompt.request_context = vec![
+            message("developer", "request-only old guidance"),
+            message("system", "request-only old machine warning"),
+        ];
+        let full = super::super::tools::render_clamp_full_prompt(&prompt);
+        assert!(full.contains("request-only old guidance"));
+        assert!(full.contains("request-only old machine warning"));
         let first = rendered_input(&prompt);
         assert!(
             first
                 .iter()
-                .all(|item| !item.contains("Canonical system instructions"))
+                .all(|item| !item.contains("Canonical system instructions")
+                    && !item.contains("request-only"))
         );
         let cp = Checkpoint::completed(
             backend,
@@ -238,6 +260,10 @@ fn rendered_delta_delivers_new_hook_and_system_items_without_replaying_consumed_
             message("system", "<mcp_resource_update>new</mcp_resource_update>"),
             message("system", "new canonical system notice"),
         ]);
+        prompt.request_context = vec![
+            message("developer", "request-only refreshed guidance"),
+            message("system", "request-only refreshed machine warning"),
+        ];
         let (_, delta) = cp
             .continuation(
                 backend,
@@ -245,6 +271,7 @@ fn rendered_delta_delivers_new_hook_and_system_items_without_replaying_consumed_
                 "system",
                 std::path::Path::new("/work"),
                 &rendered_input(&prompt),
+                &prompt.request_context,
             )
             .unwrap();
         assert!(delta.contains("role=\"developer\""));
@@ -253,9 +280,44 @@ fn rendered_delta_delivers_new_hook_and_system_items_without_replaying_consumed_
         assert!(delta.contains("new canonical system notice"));
         assert!(!delta.contains("<mcp_resource_update>old"));
         assert!(!delta.contains("first"));
+        assert!(!delta.contains("request-only old"));
+        assert!(delta.ends_with(
+            "<message role=\"developer\">\nrequest-only refreshed guidance\n</message>\n\n\
+             <message role=\"system\">\nrequest-only refreshed machine warning\n</message>"
+        ));
         // No new user message is needed, and canonical roles remain intact.
         assert!(
             matches!(&prompt.input[3], ResponseItem::Message { role, .. } if role == "developer")
+        );
+        let cp = Checkpoint::completed(
+            backend,
+            ID,
+            "model",
+            "system",
+            "/work".into(),
+            rendered_input(&prompt),
+            "second answer",
+        )
+        .unwrap();
+        prompt.input.extend([
+            message("assistant", "second answer"),
+            message("user", "third"),
+        ]);
+        prompt.request_context.clear();
+        assert_eq!(
+            cp.continuation(
+                backend,
+                "model",
+                "system",
+                std::path::Path::new("/work"),
+                &rendered_input(&prompt),
+                &prompt.request_context,
+            ),
+            Some((
+                ID.into(),
+                "<message role=\"user\">\nthird\n</message>".into()
+            )),
+            "removing request-only context must not invalidate native resume"
         );
     }
 }

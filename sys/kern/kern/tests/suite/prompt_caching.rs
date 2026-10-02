@@ -1,5 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
+use anyhow::Context;
 use chaos_ipc::config_types::ReasoningSummary;
 use chaos_ipc::openai_models::ReasoningEffort;
 use chaos_ipc::protocol::ApprovalPolicy;
@@ -35,6 +36,31 @@ fn text_user_input_parts(texts: Vec<String>) -> serde_json::Value {
             .map(|text| serde_json::json!({ "type": "input_text", "text": text }))
             .collect::<Vec<_>>()
     })
+}
+
+/// Runtime guidance is refreshed at the end of each request, not saved in the
+/// cached conversation prefix. Verify that tail before comparing history.
+fn history_input(body: &serde_json::Value) -> anyhow::Result<&[serde_json::Value]> {
+    let (guidance, history) = body["input"]
+        .as_array()
+        .context("input array")?
+        .split_last()
+        .context("request-local runtime guidance")?;
+    let is_guidance = |item: &serde_json::Value| {
+        item["role"] == "developer"
+            && item["content"][0]["text"]
+                .as_str()
+                .is_some_and(|text| text.starts_with("# Tools\n"))
+    };
+    assert!(
+        is_guidance(guidance),
+        "missing runtime guidance: {guidance}"
+    );
+    assert!(
+        !history.iter().any(is_guidance),
+        "request-local guidance must not accumulate in cached history"
+    );
+    Ok(history)
 }
 
 fn assert_default_env_context(text: &str, cwd: &str, shell: &Shell) {
@@ -135,7 +161,7 @@ async fn prefixes_context_and_instructions_once_and_consistently_across_requests
     wait_for_event(&chaos, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     let body1 = req1.single_request().body_json();
-    let input1 = body1["input"].as_array().expect("input array");
+    let input1 = history_input(&body1)?;
     assert_eq!(
         input1.len(),
         3,
@@ -164,10 +190,10 @@ async fn prefixes_context_and_instructions_once_and_consistently_across_requests
     assert_eq!(input1[2], text_user_input("hello 1".to_string()));
 
     let body2 = req2.single_request().body_json();
-    let input2 = body2["input"].as_array().expect("input array");
+    let input2 = history_input(&body2)?;
     assert_eq!(
         &input2[..input1.len()],
-        input1.as_slice(),
+        input1,
         "expected cached prefix to be reused"
     );
     assert_eq!(input2[input1.len()], text_user_input("hello 2".to_string()));
@@ -283,10 +309,11 @@ async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() -> an
         "role": "user",
         "content": [ { "type": "input_text", "text": "hello 2" } ]
     });
-    let expected_permissions_msg = body1["input"][0].clone();
-    let body1_input = body1["input"].as_array().expect("input array");
+    let body1_input = history_input(&body1)?;
+    let body2_input = history_input(&body2)?;
+    let expected_permissions_msg = body1_input[0].clone();
     // After overriding the turn context, emit one updated permissions message.
-    let expected_permissions_msg_2 = body2["input"][body1_input.len()].clone();
+    let expected_permissions_msg_2 = body2_input[body1_input.len()].clone();
     assert_ne!(
         expected_permissions_msg_2, expected_permissions_msg,
         "expected updated permissions message after override"
@@ -294,7 +321,7 @@ async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() -> an
     let mut expected_body2 = body1_input.to_vec();
     expected_body2.push(expected_permissions_msg_2);
     expected_body2.push(expected_user_message_2);
-    assert_eq!(body2["input"], serde_json::Value::Array(expected_body2));
+    assert_eq!(body2_input, expected_body2.as_slice());
 
     Ok(())
 }
@@ -396,9 +423,10 @@ async fn per_turn_overrides_keep_cached_prefix_and_key_constant() -> anyhow::Res
         "role": "user",
         "content": [ { "type": "input_text", "text": "hello 2" } ]
     });
-    let expected_permissions_msg = body1["input"][0].clone();
-    let body1_input = body1["input"].as_array().expect("input array");
-    let expected_settings_update_msg = body2["input"][body1_input.len()].clone();
+    let body1_input = history_input(&body1)?;
+    let body2_input = history_input(&body2)?;
+    let expected_permissions_msg = body1_input[0].clone();
+    let expected_settings_update_msg = body2_input[body1_input.len()].clone();
     assert_ne!(
         expected_settings_update_msg, expected_permissions_msg,
         "expected updated permissions message after per-turn override"
@@ -413,7 +441,7 @@ async fn per_turn_overrides_keep_cached_prefix_and_key_constant() -> anyhow::Res
         }),
         "expected model switch section after model override: {expected_settings_update_msg:?}"
     );
-    let expected_env_msg_2 = body2["input"][body1_input.len() + 1].clone();
+    let expected_env_msg_2 = body2_input[body1_input.len() + 1].clone();
     assert_eq!(expected_env_msg_2["role"].as_str(), Some("user"));
     let env_text = expected_env_msg_2["content"][0]["text"]
         .as_str()
@@ -429,7 +457,7 @@ async fn per_turn_overrides_keep_cached_prefix_and_key_constant() -> anyhow::Res
     expected_body2.push(expected_settings_update_msg);
     expected_body2.push(expected_env_msg_2);
     expected_body2.push(expected_user_message_2);
-    assert_eq!(body2["input"], serde_json::Value::Array(expected_body2));
+    assert_eq!(body2_input, expected_body2.as_slice());
 
     Ok(())
 }
@@ -518,8 +546,10 @@ async fn send_user_turn_with_no_changes_does_not_send_environment_context() -> a
     let body1 = request1.body_json();
     let body2 = request2.body_json();
 
-    let expected_permissions_msg = body1["input"][0].clone();
-    let expected_ui_msg = body1["input"][1].clone();
+    let body1_input = history_input(&body1)?;
+    let body2_input = history_input(&body2)?;
+    let expected_permissions_msg = body1_input[0].clone();
+    let expected_ui_msg = body1_input[1].clone();
 
     // Post b430498671: `user_instructions` no longer rides along in the
     // cached contextual user prefix. Only the environment context is
@@ -535,21 +565,21 @@ async fn send_user_turn_with_no_changes_does_not_send_environment_context() -> a
     let expected_contextual_user_msg_1 = text_user_input_parts(vec![expected_env_text_1]);
     let expected_user_message_1 = text_user_input("hello 1".to_string());
 
-    let expected_input_1 = serde_json::Value::Array(vec![
+    let expected_input_1 = vec![
         expected_permissions_msg.clone(),
         expected_contextual_user_msg_1.clone(),
         expected_user_message_1.clone(),
-    ]);
-    assert_eq!(body1["input"], expected_input_1);
+    ];
+    assert_eq!(body1_input, expected_input_1.as_slice());
 
     let expected_user_message_2 = text_user_input("hello 2".to_string());
-    let expected_input_2 = serde_json::Value::Array(vec![
+    let expected_input_2 = vec![
         expected_permissions_msg,
         expected_contextual_user_msg_1,
         expected_user_message_1,
         expected_user_message_2,
-    ]);
-    assert_eq!(body2["input"], expected_input_2);
+    ];
+    assert_eq!(body2_input, expected_input_2.as_slice());
 
     Ok(())
 }
@@ -638,8 +668,10 @@ async fn send_user_turn_with_changes_sends_environment_context() -> anyhow::Resu
     let body1 = request1.body_json();
     let body2 = request2.body_json();
 
-    let expected_permissions_msg = body1["input"][0].clone();
-    let expected_ui_msg = body1["input"][1].clone();
+    let body1_input = history_input(&body1)?;
+    let body2_input = history_input(&body2)?;
+    let expected_permissions_msg = body1_input[0].clone();
+    let expected_ui_msg = body1_input[1].clone();
 
     // Post b430498671: only environment context is bundled into the
     // cached contextual user prefix; `user_instructions` was evicted.
@@ -651,15 +683,14 @@ async fn send_user_turn_with_changes_sends_environment_context() -> anyhow::Resu
     assert_default_env_context(&expected_env_text_1, &default_cwd.to_string_lossy(), &shell);
     let expected_contextual_user_msg_1 = text_user_input_parts(vec![expected_env_text_1]);
     let expected_user_message_1 = text_user_input("hello 1".to_string());
-    let expected_input_1 = serde_json::Value::Array(vec![
+    let expected_input_1 = vec![
         expected_permissions_msg.clone(),
         expected_contextual_user_msg_1.clone(),
         expected_user_message_1.clone(),
-    ]);
-    assert_eq!(body1["input"], expected_input_1);
+    ];
+    assert_eq!(body1_input, expected_input_1.as_slice());
 
-    let body1_input = body1["input"].as_array().expect("input array");
-    let expected_settings_update_msg = body2["input"][body1_input.len()].clone();
+    let expected_settings_update_msg = body2_input[body1_input.len()].clone();
     assert_ne!(
         expected_settings_update_msg, expected_permissions_msg,
         "expected updated permissions message after policy change"
@@ -675,14 +706,14 @@ async fn send_user_turn_with_changes_sends_environment_context() -> anyhow::Resu
         "expected model switch section after model override: {expected_settings_update_msg:?}"
     );
     let expected_user_message_2 = text_user_input("hello 2".to_string());
-    let expected_input_2 = serde_json::Value::Array(vec![
+    let expected_input_2 = vec![
         expected_permissions_msg,
         expected_contextual_user_msg_1,
         expected_user_message_1,
         expected_settings_update_msg,
         expected_user_message_2,
-    ]);
-    assert_eq!(body2["input"], expected_input_2);
+    ];
+    assert_eq!(body2_input, expected_input_2.as_slice());
 
     Ok(())
 }
