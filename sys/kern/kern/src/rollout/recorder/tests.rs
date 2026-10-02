@@ -49,7 +49,7 @@ async fn background_confirm_does_not_report_a_deferred_writer_as_durable() {
         owner_id: "test".into(),
         mode: JournalSinkMode::Create,
     });
-    sink.state = JournalSinkState::Disabled;
+    sink.machine.handle(JournalStorageEvent::Disable).unwrap();
     let expires_at: Timestamp = "2026-09-06T18:00:30Z".parse().unwrap();
     sink.last_error = Some(anyhow::Error::new(
         chaos_journald::JournalError::LeaseConflict {
@@ -102,9 +102,11 @@ async fn background_fenced_writer_cannot_reacquire_a_lease() {
         next_seq: 0,
         last_lease_refresh: Instant::now(),
         pending_items: Vec::new(),
-        fenced: true,
-        lease_confirmed: false,
-        needs_reacquire: false,
+        lease: {
+            let mut lease = Lease::default();
+            lease.apply(WriterLeaseEvent::Fence);
+            lease
+        },
     };
     assert!(writer.ensure_lease().await.unwrap_err().contains("fenced"));
 }

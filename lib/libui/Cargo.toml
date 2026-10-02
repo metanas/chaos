@@ -80,6 +80,7 @@ serde_json = { workspace = true, features = ["preserve_order"] }
 shlex = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
+state-machines = { workspace = true }
 pulldown-cmark = { workspace = true }
 termprofile = { workspace = true }
 supports-hyperlinks = { workspace = true }

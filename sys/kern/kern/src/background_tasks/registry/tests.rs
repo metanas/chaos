@@ -1,6 +1,60 @@
 use super::*;
 
 #[tokio::test]
+async fn ordinary_terminal_records_cannot_be_reopened_via_registration() {
+    let registry = TaskRegistry::default();
+    registry.begin_submission("call").await;
+    let id = TaskRegistry::submission_id("call");
+    registry
+        .complete(&id, TaskState::Succeeded, None, None)
+        .await;
+    let mut task = registry.get(&id).await.unwrap();
+    task.state = TaskState::Running;
+    registry.register(task).await;
+    assert_eq!(registry.get(&id).await.unwrap().state, TaskState::Succeeded);
+}
+
+#[tokio::test]
+async fn only_undelivered_machine_recovery_success_can_be_withdrawn() {
+    let registry = TaskRegistry::default();
+    registry.begin_submission("recovery").await;
+    let id = TaskRegistry::submission_id("recovery");
+    let mut task = registry.get(&id).await.unwrap();
+    task.source = Some(TaskSource::MachineRecovery);
+    task.state = TaskState::Running;
+    registry.register(task).await;
+    registry
+        .complete(&id, TaskState::Succeeded, None, None)
+        .await;
+    let mut task = registry.get(&id).await.unwrap();
+    task.state = TaskState::Running;
+    registry.register(task).await;
+    assert_eq!(registry.get(&id).await.unwrap().state, TaskState::Running);
+    registry
+        .complete(&id, TaskState::Succeeded, None, None)
+        .await;
+    registry
+        .acknowledge(std::slice::from_ref(&id), "wake")
+        .await;
+    let mut task = registry.get(&id).await.unwrap();
+    task.state = TaskState::Running;
+    registry.register(task).await;
+    assert_eq!(registry.get(&id).await.unwrap().state, TaskState::Succeeded);
+}
+
+#[tokio::test]
+async fn closed_wake_policy_cannot_restart_cancelled_observers() {
+    let registry = TaskRegistry::default();
+    registry.set_policy(WakePolicy::Closed).await;
+    registry.set_policy(WakePolicy::Enabled).await;
+    assert_eq!(
+        registry.subscribe().borrow().wake_policy,
+        WakePolicy::Closed
+    );
+    assert!(registry.observer_cancel.is_cancelled());
+}
+
+#[tokio::test]
 async fn machine_recovery_pending_success_is_never_replayed() {
     let registry = TaskRegistry::default();
     registry

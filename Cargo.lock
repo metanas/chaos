@@ -1082,6 +1082,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "state-machines",
  "toml 1.1.6+spec-1.1.0",
 ]
 
@@ -1242,6 +1243,7 @@ dependencies = [
  "serde_json",
  "serial_test",
  "shlex 2.0.1",
+ "state-machines",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
@@ -6322,6 +6324,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shlex 2.0.1",
+ "state-machines",
  "strum",
  "strum_macros",
  "supports-hyperlinks",
@@ -6526,6 +6529,7 @@ dependencies = [
  "rand 0.10.3",
  "serde",
  "serde_json",
+ "state-machines",
  "thiserror 2.0.21",
  "tokio",
  "tokio-stream",

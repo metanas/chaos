@@ -517,6 +517,8 @@ impl Drop for RunCancellationGuard {
     }
 }
 
+mod lifecycle;
+
 struct ExecutionState {
     jobs: Mutex<HashMap<String, SynopsisJobResult>>,
     active: Mutex<HashMap<ActionId, ProcessId>>,
@@ -571,7 +573,7 @@ impl ExecutionState {
 
     fn mark_running(&self, id: &ActionId) {
         if let Some(job) = self.lock_jobs().get_mut(id.as_str()) {
-            job.state = SynopsisJobState::Running;
+            job.state.apply(lifecycle::SynopsisJobEvent::Start);
         }
     }
 
@@ -583,20 +585,16 @@ impl ExecutionState {
     }
 
     fn mark_failed(&self, id: &ActionId, error: String) {
-        if let Some(job) = self.lock_jobs().get_mut(id.as_str()) {
-            job.state = SynopsisJobState::Failed;
+        if let Some(job) = self.lock_jobs().get_mut(id.as_str())
+            && job.state.apply(lifecycle::SynopsisJobEvent::Fail)
+        {
             job.error = Some(error);
         }
     }
 
     fn mark_cancelled(&self, id: &ActionId) {
-        if let Some(job) = self.lock_jobs().get_mut(id.as_str())
-            && matches!(
-                job.state,
-                SynopsisJobState::Pending | SynopsisJobState::Running
-            )
-        {
-            job.state = SynopsisJobState::Cancelled;
+        if let Some(job) = self.lock_jobs().get_mut(id.as_str()) {
+            job.state.apply(lifecycle::SynopsisJobEvent::Cancel);
         }
     }
 
@@ -609,10 +607,13 @@ impl ExecutionState {
         outcome: ActionOutcome,
     ) {
         if let Some(job) = self.lock_jobs().get_mut(id.as_str()) {
-            job.state = match outcome {
-                ActionOutcome::Success => SynopsisJobState::Completed,
-                ActionOutcome::Failure => SynopsisJobState::Failed,
+            let event = match outcome {
+                ActionOutcome::Success => lifecycle::SynopsisJobEvent::Complete,
+                ActionOutcome::Failure => lifecycle::SynopsisJobEvent::Fail,
             };
+            if !job.state.apply(event) {
+                return;
+            }
             job.status = Some(status);
             job.nickname = nickname;
             if agent_type.is_some() {

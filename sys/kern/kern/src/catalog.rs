@@ -310,11 +310,7 @@ impl CatalogMutation {
     }
 }
 
-enum McpCatalogGateState {
-    Staging(Vec<CatalogMutation>),
-    Active,
-    Retired,
-}
+mod gate;
 
 /// Generation-scoped MCP catalog sink.
 ///
@@ -326,14 +322,14 @@ enum McpCatalogGateState {
 /// the registry mailbox.
 pub(crate) struct McpCatalogGate {
     live: Arc<CatalogSink>,
-    state: StdMutex<McpCatalogGateState>,
+    state: StdMutex<gate::Gate>,
 }
 
 impl McpCatalogGate {
     pub(crate) fn staging(live: Arc<CatalogSink>) -> Self {
         Self {
             live,
-            state: StdMutex::new(McpCatalogGateState::Staging(Vec::new())),
+            state: StdMutex::new(gate::Gate::default()),
         }
     }
 
@@ -342,10 +338,10 @@ impl McpCatalogGate {
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let McpCatalogGateState::Staging(mutations) = &mut *state else {
+        if state.machine.current_state() != gate::CatalogGateState::Staging {
             return;
-        };
-        let staged = std::mem::take(mutations);
+        }
+        let staged = std::mem::take(&mut state.staged);
         {
             let mut catalog = self
                 .live
@@ -359,7 +355,13 @@ impl McpCatalogGate {
                 mutation.apply(&mut catalog);
             }
         }
-        *state = McpCatalogGateState::Active;
+        assert!(
+            state
+                .machine
+                .handle(gate::CatalogGateEvent::Activate)
+                .is_ok(),
+            "staging catalog activates under its state lock"
+        );
     }
 
     pub(crate) fn retire(&self) {
@@ -367,7 +369,11 @@ impl McpCatalogGate {
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        *state = McpCatalogGateState::Retired;
+        assert!(
+            state.machine.handle(gate::CatalogGateEvent::Retire).is_ok(),
+            "catalog gate can always retire"
+        );
+        state.staged.clear();
     }
 
     fn submit(&self, mutation: CatalogMutation) {
@@ -375,16 +381,16 @@ impl McpCatalogGate {
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        match &mut *state {
-            McpCatalogGateState::Staging(mutations) => mutations.push(mutation),
-            McpCatalogGateState::Active => {
+        match state.machine.current_state() {
+            gate::CatalogGateState::Staging => state.staged.push(mutation),
+            gate::CatalogGateState::Active => {
                 let mut catalog = self
                     .live
                     .write()
                     .unwrap_or_else(std::sync::PoisonError::into_inner);
                 mutation.apply(&mut catalog);
             }
-            McpCatalogGateState::Retired => {}
+            gate::CatalogGateState::Retired => {}
         }
     }
 }

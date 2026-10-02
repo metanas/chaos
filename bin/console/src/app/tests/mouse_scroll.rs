@@ -185,7 +185,7 @@ async fn mouse_scroll_routes_into_thread_and_reaches_both_ends() {
     app.handle_key_event(&mut tui, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
         .await;
     assert!(!app.tile_manager.chat_scrollback.is_scrolled());
-    assert!(!app.backtrack.primed);
+    assert!(!app.backtrack.primed());
     app.handle_tui_event(&mut tui, wheel(MouseEventKind::ScrollUp))
         .await
         .unwrap();
@@ -341,7 +341,11 @@ async fn scrollback_preserves_composer_and_position_during_output_then_restores_
     let area = Rect::new(0, 1, 100, 29);
     let mut buffer = Buffer::empty(area);
     assert!(app.render_scrolled_chat(area, &mut buffer).is_some());
-    let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+    let text: String = buffer
+        .content
+        .iter()
+        .map(ratatui::buffer::Cell::symbol)
+        .collect();
     assert!(text.contains("keep this draft"));
     assert!(text.contains("End / Esc to follow live"));
     assert!(!text.contains("/ Transcript"));

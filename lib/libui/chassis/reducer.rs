@@ -8,6 +8,8 @@ use chaos_ipc::protocol::Event;
 use chaos_ipc::protocol::EventMsg;
 use chaos_ipc::protocol::TokenUsage;
 
+mod lifecycle;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SessionStatus {
     #[default]
@@ -86,13 +88,16 @@ impl FrontendState {
     }
 
     pub fn record_user_submission(&mut self, text: String) {
+        if self.status == SessionStatus::Shutdown {
+            return;
+        }
         self.transcript.push(TranscriptEntry::User { text });
-        self.turn = TurnStatus::InFlight;
+        self.turn.submit();
     }
 
     pub fn mark_kernel_gone(&mut self) {
-        self.status = SessionStatus::Shutdown;
-        self.turn = TurnStatus::Idle;
+        self.status.shutdown();
+        self.turn.finish();
         self.clear_pending_bookkeeping();
         self.transcript.push(TranscriptEntry::Notice {
             level: NoticeLevel::Error,
@@ -107,15 +112,15 @@ impl FrontendState {
     pub fn apply_event_msg(&mut self, msg: EventMsg) {
         match msg {
             EventMsg::SessionConfigured(_) => {
-                self.status = SessionStatus::Ready;
+                self.status.configure();
             }
             EventMsg::ShutdownComplete => {
-                self.status = SessionStatus::Shutdown;
-                self.turn = TurnStatus::Idle;
+                self.status.shutdown();
+                self.turn.finish();
                 self.clear_pending_bookkeeping();
             }
             EventMsg::TurnComplete(_) | EventMsg::TurnAborted(_) => {
-                self.turn = TurnStatus::Idle;
+                self.turn.finish();
                 self.clear_pending_bookkeeping();
             }
             EventMsg::AgentMessageContentDelta(delta) => {
@@ -195,7 +200,7 @@ impl FrontendState {
                     level: NoticeLevel::Error,
                     text: format_error(&err.message, err.chaos_error_info.as_ref()),
                 });
-                self.turn = TurnStatus::Idle;
+                self.turn.finish();
                 self.clear_pending_bookkeeping();
             }
             EventMsg::StreamError(err) => {

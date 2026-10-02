@@ -13,6 +13,9 @@ use crate::machine_warnings::MachineWarning;
 pub(crate) const POLL_INTERVAL: Duration = Duration::from_secs(30);
 const MAX_GAP: Duration = Duration::from_secs(60);
 
+mod lifecycle;
+use lifecycle::RecoveryObservationEvent;
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Phase {
@@ -121,7 +124,7 @@ impl Recovery {
         let Ok(status) = observation else {
             self.healthy_since = None;
             if !self.outstanding.is_empty() {
-                self.phase = Phase::Unavailable;
+                self.phase.observe(RecoveryObservationEvent::Unavailable);
             }
             return;
         };
@@ -151,11 +154,11 @@ impl Recovery {
                 }
             }
             self.healthy_since = None;
-            self.phase = Phase::Warning;
+            self.phase.observe(RecoveryObservationEvent::Warn);
             return;
         }
         if self.outstanding.is_empty() {
-            self.phase = Phase::Healthy;
+            self.phase.observe(RecoveryObservationEvent::Healthy);
             return;
         }
         let evidence = self.outstanding.iter().try_fold(true, |healthy, warning| {
@@ -163,26 +166,28 @@ impl Recovery {
         });
         match evidence {
             Err(reason) => {
-                self.phase = if reason == "recovery target exceeds filesystem capacity" {
-                    Phase::Blocked
+                let event = if reason == "recovery target exceeds filesystem capacity" {
+                    RecoveryObservationEvent::Blocked
                 } else {
-                    Phase::Unavailable
+                    RecoveryObservationEvent::Unavailable
                 };
+                self.phase.observe(event);
                 self.blocked_reason = Some(reason.into());
                 self.healthy_since = None;
             }
             Ok(false) => {
-                self.phase = Phase::Warning;
+                self.phase.observe(RecoveryObservationEvent::Warn);
                 self.healthy_since = None;
             }
             Ok(true) => {
                 let since = self.healthy_since.get_or_insert(now);
-                self.phase =
+                self.phase.observe(
                     if now.duration_since(*since).as_secs() >= config.recovery_stable_seconds {
-                        Phase::Recovered
+                        RecoveryObservationEvent::Stable
                     } else {
-                        Phase::Stabilizing
-                    };
+                        RecoveryObservationEvent::Headroom
+                    },
+                );
                 self.recovered_episode |= self.phase == Phase::Recovered;
             }
         }

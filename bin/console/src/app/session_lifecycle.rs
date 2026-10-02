@@ -57,7 +57,7 @@ impl App {
     pub(super) async fn shutdown_current_process(&mut self) {
         if let Some(process_id) = self.chat_widget.process_id() {
             // Clear any in-flight rollback guard when switching processes.
-            self.backtrack.pending_rollback = None;
+            self.backtrack.take_rollback();
             self.suppress_shutdown_complete = true;
             self.chat_widget.submit_op(Op::Shutdown);
             self.server.remove_process(&process_id).await;

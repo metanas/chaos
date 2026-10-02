@@ -13,7 +13,9 @@ mod render;
 
 mod confirmation;
 mod events;
+mod lifecycle;
 mod navigation;
+use lifecycle::{InputRequestEvent, RequestLifecycle};
 
 use crate::app_event_sender::AppEventSender;
 use crate::bottom_pane::ChatComposer;
@@ -76,7 +78,7 @@ pub struct RequestUserInputOverlay {
     answers: Vec<AnswerState>,
     current_idx: usize,
     focus: Focus,
-    done: bool,
+    lifecycle: RequestLifecycle,
     pending_submission_draft: Option<ComposerDraft>,
     confirm_unanswered: Option<ScrollState>,
 }
@@ -109,7 +111,7 @@ impl RequestUserInputOverlay {
             answers: Vec::new(),
             current_idx: 0,
             focus: Focus::Options,
-            done: false,
+            lifecycle: RequestLifecycle::default(),
             pending_submission_draft: None,
             confirm_unanswered: None,
         };
@@ -201,7 +203,15 @@ impl RequestUserInputOverlay {
     }
 
     fn confirm_unanswered_active(&self) -> bool {
-        self.confirm_unanswered.is_some()
+        self.lifecycle.confirming()
+    }
+
+    fn done(&self) -> bool {
+        self.lifecycle.done()
+    }
+
+    fn finish(&mut self) {
+        self.lifecycle.apply(InputRequestEvent::Finish);
     }
 
     pub(super) fn option_rows(&self) -> Vec<GenericDisplayRow> {

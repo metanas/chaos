@@ -1,5 +1,5 @@
 use super::tool::ApplyPatchWorkspace;
-use chaos_which::repo_root;
+use anyhow::Context;
 use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 use std::fs;
@@ -8,18 +8,15 @@ use std::path::PathBuf;
 
 #[test]
 fn test_apply_patch_scenarios() -> anyhow::Result<()> {
-    let scenarios_dir = repo_root()?
-        .join("lib")
-        .join("libfs")
-        .join("diff")
-        .join("tests")
-        .join("fixtures")
-        .join("scenarios");
-    for scenario in fs::read_dir(scenarios_dir)? {
+    let scenarios_dir = chaos_which::find_resource!("tests/fixtures/scenarios")?;
+    for scenario in fs::read_dir(&scenarios_dir)
+        .with_context(|| format!("read patch scenarios at {}", scenarios_dir.display()))?
+    {
         let scenario = scenario?;
         let path = scenario.path();
         if path.is_dir() {
-            run_apply_patch_scenario(&path)?;
+            run_apply_patch_scenario(&path)
+                .with_context(|| format!("run patch scenario {}", path.display()))?;
         }
     }
     Ok(())

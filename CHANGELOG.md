@@ -15,6 +15,9 @@ should. There is no patch level; the build timestamp is the patch.
   child entry.
 
 ### Changed
+- Replace hand-rolled kernel, UI, and HTTP transport lifecycles with the existing
+  `state-machines` crate while preserving persisted state formats and recovery
+  behavior.
 - Update the Skipper driver to 0.4.0 with PR watching, discussion/list resources,
   and workspace metadata. Building the driver now requires Rust 1.99.
 - Replace the Git fork dependencies for `ratatui-hypertile` and
@@ -22,6 +25,8 @@ should. There is no patch level; the build timestamp is the patch.
   adapting to the palette API while preserving pane filtering and selection handling.
 
 ### Fixed
+- Resolve patch scenario fixtures relative to their own crate for reliable QA
+  runs.
 - Keep request-only runtime guidance and machine warnings out of native resume
   checkpoints, preserving Claude and Antigravity tool history across turns while
   still delivering current guidance on every request.

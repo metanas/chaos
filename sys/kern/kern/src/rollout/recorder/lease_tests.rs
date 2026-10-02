@@ -123,8 +123,8 @@ async fn expired_idle_lease_is_reacquired_without_fencing() {
     writer.last_lease_refresh = Instant::now() - JOURNAL_LEASE_TTL;
 
     writer.ensure_lease().await.unwrap();
-    assert!(!writer.fenced);
-    assert!(writer.lease_confirmed);
+    assert!(!writer.lease.fenced());
+    assert!(writer.lease.confirmed());
     assert_ne!(writer.lease_token, old_token);
     writer
         .append_items(&[item("after recovery")])
@@ -140,8 +140,8 @@ async fn expiry_during_append_retains_batch_until_recovery() {
     journal.expire(writer.process_id).await;
     let batch = vec![item("pending")];
     assert!(writer.append_items(&batch).await.is_err());
-    assert!(!writer.fenced);
-    assert!(!writer.lease_confirmed);
+    assert!(!writer.lease.fenced());
+    assert!(!writer.lease.confirmed());
     assert_eq!(writer.pending_items.len(), 1);
     assert_item(&writer.pending_items[0], &batch[0]);
 
@@ -197,8 +197,7 @@ async fn recovery_never_steals_a_live_lease_or_skips_foreign_history() {
     let journal = TestJournal::new().await;
     let mut writer = journal.writer().await;
     journal.expire(writer.process_id).await;
-    writer.needs_reacquire = true;
-    writer.lease_confirmed = false;
+    writer.lease.apply(WriterLeaseEvent::Expire);
     let other = journal
         .client
         .acquire_lease(
@@ -210,7 +209,7 @@ async fn recovery_never_steals_a_live_lease_or_skips_foreign_history() {
         .unwrap();
     let error = writer.ensure_lease().await.unwrap_err();
     assert!(error.contains("other"));
-    assert!(writer.fenced);
+    assert!(writer.lease.fenced());
     journal
         .client
         .heartbeat_lease(
@@ -241,7 +240,7 @@ async fn recovery_never_steals_a_live_lease_or_skips_foreign_history() {
     journal.expire(stale.process_id).await;
     stale.last_lease_refresh = Instant::now() - JOURNAL_LEASE_TTL;
     assert!(stale.ensure_lease().await.unwrap_err().contains("changed"));
-    assert!(stale.fenced);
+    assert!(stale.lease.fenced());
     assert_eq!(stale.next_seq, 0);
 }
 
@@ -256,7 +255,7 @@ async fn writer_actor_survives_outage_and_conflict() {
         .await
         .unwrap();
     let mut sink = JournalSink::pending(journal.config());
-    sink.state = JournalSinkState::Active(active);
+    sink.activate(active);
     sink.breaker = AsyncCircuitBreaker::new(
         "lease-test",
         1,
@@ -383,9 +382,7 @@ async fn heartbeat_timeout_keeps_writer_retryable() {
         next_seq: 0,
         last_lease_refresh: Instant::now() - JOURNAL_LEASE_REFRESH_INTERVAL,
         pending_items: vec![item("pending")],
-        fenced: false,
-        lease_confirmed: true,
-        needs_reacquire: false,
+        lease: Lease::default(),
     };
     assert!(
         writer
@@ -394,8 +391,8 @@ async fn heartbeat_timeout_keeps_writer_retryable() {
             .unwrap_err()
             .contains("timed out")
     );
-    assert!(!writer.fenced);
-    assert!(!writer.lease_confirmed);
+    assert!(!writer.lease.fenced());
+    assert!(!writer.lease.confirmed());
     assert_eq!(writer.pending_items.len(), 1);
 }
 
@@ -426,9 +423,9 @@ async fn assert_shutdown_releases_lease(client: JournalClient, config: PendingJo
         }
         if scenario == "failed-flush" {
             // A history conflict can fence a writer while it still owns a lease.
-            writer.fenced = true;
+            writer.lease.apply(WriterLeaseEvent::Fence);
         }
-        sink.state = JournalSinkState::Active(writer);
+        sink.activate(writer);
         let (tx, rx) = mpsc::unbounded_channel();
         let actor = AbortOnDropHandle::new(tokio::spawn(rollout_writer(
             true,
@@ -530,7 +527,7 @@ async fn shutdown_reports_release_failure() {
         journal.socket.with_extension("missing"),
     ));
     let mut sink = JournalSink::pending(journal.config());
-    sink.state = JournalSinkState::Active(writer);
+    sink.activate(writer);
     let error = sink.shutdown().await.unwrap_err();
     assert!(error.to_string().contains("release_lease failed"));
 
@@ -569,8 +566,7 @@ async fn failed_resume_releases_lease_acquired_before_loading_journal() {
     .unwrap();
     let error = ActiveJournalWriter::connect_existing(journal.client.clone(), &config)
         .await
-        .err()
-        .expect("loading corrupt history should fail");
+        .expect_err("loading corrupt history should fail");
     assert!(error.to_string().contains("load_journal failed"));
     journal
         .client
@@ -588,8 +584,7 @@ async fn resumed_session_lease_conflict_preserves_type_and_diagnostics() {
     config.owner_id = "second-writer".into();
     let error = ActiveJournalWriter::connect_existing(journal.client.clone(), &config)
         .await
-        .err()
-        .expect("an active writer must block resume");
+        .expect_err("an active writer must block resume");
     assert!(matches!(
         error.downcast_ref::<ChaosErr>(),
         Some(ChaosErr::SessionInUse(id)) if *id == writer.process_id
@@ -634,10 +629,10 @@ async fn stale_shutdown_does_not_release_another_writers_lease() {
         .acquire_lease(process_id, "next-writer".into(), 30_000)
         .await
         .unwrap();
-    writer.fenced = true;
+    writer.lease.apply(WriterLeaseEvent::Fence);
     writer.defer_items(&[item("must not be written")]);
     let mut sink = JournalSink::pending(journal.config());
-    sink.state = JournalSinkState::Active(writer);
+    sink.activate(writer);
     sink.shutdown().await.unwrap();
     journal
         .client
@@ -672,9 +667,7 @@ async fn release_timeout_is_bounded_and_reported() {
         next_seq: 0,
         last_lease_refresh: Instant::now(),
         pending_items: Vec::new(),
-        fenced: false,
-        lease_confirmed: true,
-        needs_reacquire: false,
+        lease: Lease::default(),
     };
     let started = tokio::time::Instant::now();
     assert_eq!(

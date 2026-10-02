@@ -16,6 +16,7 @@ chaos-ipc = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 schemars = { workspace = true }
 serde_json = { workspace = true }
+state-machines = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }

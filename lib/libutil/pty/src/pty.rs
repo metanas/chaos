@@ -11,13 +11,13 @@ use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::Result;
-use portable_pty::CommandBuilder;
 use portable_pty::native_pty_system;
+use portable_pty::CommandBuilder;
 use tokio::sync::mpsc;
 
-use crate::helpers::ExitTracker;
 use crate::helpers::spawn_blocking_read_loop;
 use crate::helpers::spawn_blocking_writer;
+use crate::helpers::ExitTracker;
 use crate::process::ChildTerminator;
 use crate::process::ProcessHandle;
 use crate::process::PtyHandles;

@@ -1,3 +1,4 @@
+use super::lifecycle::{GoalLifecycleEvent, accepts};
 use super::*;
 use chaos_ipc::protocol::{GoalCheckpointItem, RolloutItem};
 use std::collections::HashMap;
@@ -96,35 +97,47 @@ impl Journal {
             && next.verdict_ref == old.verdict_ref;
         let resumable = matches!(old.status, Status::Active | Status::Checking)
             || (old.status == Status::Complete && self.interrupted);
-        if next.status == Status::Paused && same_attempt && resumable {
+        if next.status == Status::Paused
+            && accepts(
+                old.status,
+                GoalLifecycleEvent::Pause(same_attempt && resumable),
+            )
+        {
             return Ok(());
         }
         if !context.eligible || next.turn_id != context.turn_id || self.interrupted {
             return Err("goal turn is fenced".into());
         }
-        if old.status == Status::Complete
-            && next.status == Status::Active
-            && same_attempt
-            && old.evidence_digest.as_deref() != Some(&context.evidence_digest)
+        if next.status == Status::Active
+            && accepts(
+                old.status,
+                GoalLifecycleEvent::Reopen(
+                    same_attempt
+                        && old.evidence_digest.as_deref() != Some(&context.evidence_digest),
+                ),
+            )
         {
             return Ok(());
         }
-        if old.status == Status::Active
-            && next.status == Status::Checking
-            && old.checks < MAX_CHECKS
-            && next.checks == old.checks + 1
-            && next.attempt_id.is_some()
-            && next.attempt_id != old.attempt_id
-            && context.has_evidence
-            && next.evidence_digest.as_deref() == Some(&context.evidence_digest)
-            && next.evidence_digest != old.evidence_digest
-            && next.verdict_ref.is_none()
-            && permit.is_some_and(|p| p.tool == "check_goal")
+        if next.status == Status::Checking
+            && accepts(
+                old.status,
+                GoalLifecycleEvent::Check(
+                    old.checks < MAX_CHECKS
+                        && next.checks == old.checks + 1
+                        && next.attempt_id.is_some()
+                        && next.attempt_id != old.attempt_id
+                        && context.has_evidence
+                        && next.evidence_digest.as_deref() == Some(&context.evidence_digest)
+                        && next.evidence_digest != old.evidence_digest
+                        && next.verdict_ref.is_none()
+                        && permit.is_some_and(|p| p.tool == "check_goal"),
+                ),
+            )
         {
             return Ok(());
         }
-        if old.status == Status::Checking
-            && next.checks == old.checks
+        if next.checks == old.checks
             && next.attempt_id == old.attempt_id
             && next.evidence_digest == old.evidence_digest
             && next.evidence_digest.as_deref() == Some(&context.evidence_digest)
@@ -133,12 +146,14 @@ impl Journal {
             && old.evidence_digest.as_ref() == Some(&verdict.evidence_digest)
             && next.verdict_ref.as_ref() == Some(&verdict.reference)
         {
-            let status = match &verdict.evaluation {
-                Evaluation::Complete => Status::Complete,
-                Evaluation::Incomplete { .. } if old.checks < MAX_CHECKS => Status::Active,
-                _ => Status::Paused,
+            let event = match &verdict.evaluation {
+                Evaluation::Complete => GoalLifecycleEvent::Pass(next.status == Status::Complete),
+                Evaluation::Incomplete { .. } if old.checks < MAX_CHECKS => {
+                    GoalLifecycleEvent::Retry(next.status == Status::Active)
+                }
+                _ => GoalLifecycleEvent::Stop(next.status == Status::Paused),
             };
-            if next.status == status {
+            if accepts(old.status, event) {
                 return Ok(());
             }
         }

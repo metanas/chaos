@@ -139,6 +139,9 @@ impl BottomPaneView for RequestUserInputOverlay {
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) {
+        if self.done() {
+            return;
+        }
         if self.confirm_unanswered_active() {
             self.handle_confirm_unanswered_key_event(key_event);
             return;
@@ -152,7 +155,7 @@ impl BottomPaneView for RequestUserInputOverlay {
             // TODO: Emit interrupted request_user_input results (including committed answers)
             // once core supports persisting them reliably without follow-up turn issues.
             self.app_event_tx.send(AppEvent::ChaosOp(Op::Interrupt));
-            self.done = true;
+            self.finish();
             return;
         }
 
@@ -255,7 +258,7 @@ impl BottomPaneView for RequestUserInputOverlay {
                         self.clear_selection();
                     }
                     KeyCode::Tab if self.selected_option_index().is_some() => {
-                        self.focus = Focus::Notes;
+                        self.focus.notes();
                         self.ensure_selected_for_notes();
                     }
                     KeyCode::Tab => {}
@@ -290,7 +293,7 @@ impl BottomPaneView for RequestUserInputOverlay {
                     if let Some(answer) = self.current_answer_mut() {
                         answer.notes_visible = false;
                     }
-                    self.focus = Focus::Options;
+                    self.focus.options();
                     self.sync_composer_placeholder();
                     return;
                 }
@@ -362,12 +365,15 @@ impl BottomPaneView for RequestUserInputOverlay {
     }
 
     fn on_ctrl_c(&mut self) -> CancellationEvent {
+        if self.done() {
+            return CancellationEvent::Handled;
+        }
         if self.confirm_unanswered_active() {
             self.close_unanswered_confirmation();
             // TODO: Emit interrupted request_user_input results (including committed answers)
             // once core supports persisting them reliably without follow-up turn issues.
             self.app_event_tx.send(AppEvent::ChaosOp(Op::Interrupt));
-            self.done = true;
+            self.finish();
             return CancellationEvent::Handled;
         }
         if self.focus_is_notes() && !self.composer.current_text_with_pending().is_empty() {
@@ -378,21 +384,21 @@ impl BottomPaneView for RequestUserInputOverlay {
         // TODO: Emit interrupted request_user_input results (including committed answers)
         // once core supports persisting them reliably without follow-up turn issues.
         self.app_event_tx.send(AppEvent::ChaosOp(Op::Interrupt));
-        self.done = true;
+        self.finish();
         CancellationEvent::Handled
     }
 
     fn is_complete(&self) -> bool {
-        self.done
+        self.done()
     }
 
     fn handle_paste(&mut self, pasted: String) -> bool {
-        if pasted.is_empty() {
+        if self.done() || self.confirm_unanswered_active() || pasted.is_empty() {
             return false;
         }
         if matches!(self.focus, Focus::Options) {
             // Treat pastes the same as typing: switch into notes.
-            self.focus = Focus::Notes;
+            self.focus.notes();
         }
         self.ensure_selected_for_notes();
         if let Some(answer) = self.current_answer_mut() {

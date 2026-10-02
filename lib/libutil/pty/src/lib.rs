@@ -10,13 +10,13 @@ pub const DEFAULT_OUTPUT_BYTES_CAP: usize = 1024 * 1024;
 pub use pipe::spawn_process as spawn_pipe_process;
 /// Spawn a non-interactive process using regular pipes, but close stdin immediately.
 pub use pipe::spawn_process_no_stdin as spawn_pipe_process_no_stdin;
+/// Combine stdout/stderr receivers into a single broadcast receiver.
+pub use process::combine_output_receivers;
 /// Handle for interacting with a spawned process (PTY or pipe).
 pub use process::ProcessHandle;
 /// Bundle of process handles plus split output and exit receivers returned by spawn helpers.
 pub use process::SpawnedProcess;
 /// Terminal size in character cells used for PTY spawn and resize operations.
 pub use process::TerminalSize;
-/// Combine stdout/stderr receivers into a single broadcast receiver.
-pub use process::combine_output_receivers;
 /// Spawn a process attached to a PTY for interactive use.
 pub use pty::spawn_process as spawn_pty_process;

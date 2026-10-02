@@ -2187,7 +2187,7 @@ async fn backtrack_selection_with_duplicate_history_targets_unique_turn() {
     });
 
     app.backtrack.base_id = Some(base_id);
-    app.backtrack.primed = true;
+    app.backtrack.prime();
     app.backtrack.nth_user_message = user_count(&app.transcript_cells).saturating_sub(1);
 
     let selection = app
@@ -2510,7 +2510,7 @@ async fn queued_rollback_syncs_overlay_and_clears_deferred_history() {
     ];
     app.overlay = Some(Overlay::new_transcript(app.transcript_cells.clone()));
     app.deferred_history_lines = vec![Line::from("stale buffered line")];
-    app.backtrack.overlay_preview_active = true;
+    app.backtrack.preview();
     app.backtrack.nth_user_message = 1;
 
     let changed = app.apply_non_pending_process_rollback(1);
@@ -2704,8 +2704,8 @@ async fn clear_only_ui_reset_preserves_chat_session_state() {
     app.overlay = Some(Overlay::new_transcript(app.transcript_cells.clone()));
     app.deferred_history_lines = vec![Line::from("stale buffered line")];
     app.has_emitted_history_lines = true;
-    app.backtrack.primed = true;
-    app.backtrack.overlay_preview_active = true;
+    app.backtrack.prime();
+    app.backtrack.preview();
     app.backtrack.nth_user_message = 0;
     app.backtrack_render_pending = true;
 
@@ -2716,8 +2716,8 @@ async fn clear_only_ui_reset_preserves_chat_session_state() {
     assert!(app.transcript_cells.is_empty());
     assert!(app.deferred_history_lines.is_empty());
     assert!(!app.has_emitted_history_lines);
-    assert!(!app.backtrack.primed);
-    assert!(!app.backtrack.overlay_preview_active);
+    assert!(!app.backtrack.primed());
+    assert!(!app.backtrack.preview_active());
     assert!(app.backtrack.pending_rollback.is_none());
     assert!(!app.backtrack_render_pending);
     assert_eq!(app.chat_widget.process_id(), Some(process_id));

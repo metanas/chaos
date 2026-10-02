@@ -10,12 +10,16 @@ use super::UNANSWERED_CONFIRM_SUBMIT_DESC_SINGULAR;
 
 impl RequestUserInputOverlay {
     pub(super) fn open_unanswered_confirmation(&mut self) {
+        if !self.lifecycle.apply(super::InputRequestEvent::Confirm) {
+            return;
+        }
         let mut state = ScrollState::new();
         state.selected_idx = Some(0);
         self.confirm_unanswered = Some(state);
     }
 
     pub(super) fn close_unanswered_confirmation(&mut self) {
+        self.lifecycle.apply(super::InputRequestEvent::Back);
         self.confirm_unanswered = None;
     }
 

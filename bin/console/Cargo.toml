@@ -55,6 +55,7 @@ ratatui = { workspace = true, features = [
 ratatui-macros = { workspace = true }
 serde_json = { workspace = true, features = ["preserve_order"] }
 shlex = { workspace = true }
+state-machines = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = [

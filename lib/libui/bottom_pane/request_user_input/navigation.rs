@@ -85,7 +85,7 @@ impl RequestUserInputOverlay {
         self.composer
             .set_text_content(String::new(), Vec::new(), Vec::new());
         self.composer.move_cursor_to_end();
-        self.focus = Focus::Options;
+        self.focus.options();
         self.sync_composer_placeholder();
     }
 
@@ -113,6 +113,9 @@ impl RequestUserInputOverlay {
 
     /// Build the response payload and dispatch it to the app.
     pub(super) fn submit_answers(&mut self) {
+        if !self.lifecycle.apply(super::InputRequestEvent::Submit) {
+            return;
+        }
         self.confirm_unanswered = None;
         self.save_current_draft();
         let mut answers = HashMap::new();
@@ -166,7 +169,7 @@ impl RequestUserInputOverlay {
             self.ensure_focus_available();
             self.restore_current_draft();
         } else {
-            self.done = true;
+            self.finish();
         }
     }
 
@@ -176,20 +179,21 @@ impl RequestUserInputOverlay {
             return;
         }
         if !self.has_options() {
-            self.focus = Focus::Notes;
+            self.focus.notes();
             if let Some(answer) = self.current_answer_mut() {
                 answer.notes_visible = true;
             }
             return;
         }
         if matches!(self.focus, Focus::Notes) && !self.notes_ui_visible() {
-            self.focus = Focus::Options;
+            self.focus.options();
             self.sync_composer_placeholder();
         }
     }
 
     /// Rebuild local answer state from the current request.
     pub(super) fn reset_for_request(&mut self) {
+        self.lifecycle.apply(super::InputRequestEvent::Next);
         self.answers = self
             .request
             .questions
@@ -213,7 +217,7 @@ impl RequestUserInputOverlay {
             .collect();
 
         self.current_idx = 0;
-        self.focus = Focus::Options;
+        self.focus.options();
         self.composer
             .set_text_content(String::new(), Vec::new(), Vec::new());
         self.confirm_unanswered = None;

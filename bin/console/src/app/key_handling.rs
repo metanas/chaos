@@ -342,7 +342,7 @@ impl App {
                 code: KeyCode::Enter,
                 kind: KeyEventKind::Press,
                 ..
-            } if self.backtrack.primed
+            } if self.backtrack.primed()
                 && self.backtrack.nth_user_message != usize::MAX
                 && self.chat_widget.composer_is_empty() =>
             {
@@ -355,7 +355,7 @@ impl App {
                 ..
             } => {
                 // Any non-Esc key press should cancel a primed backtrack.
-                if key_event.code != KeyCode::Esc && self.backtrack.primed {
+                if key_event.code != KeyCode::Esc && self.backtrack.primed() {
                     self.reset_backtrack_state();
                 }
                 self.chat_widget.handle_key_event(key_event);

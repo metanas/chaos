@@ -18,6 +18,18 @@ use pretty_assertions::assert_eq;
 
 use super::*;
 
+#[test]
+fn late_configuration_and_submission_cannot_reopen_a_shutdown_frontend() {
+    let mut state = FrontendState::new();
+    state.apply_event_msg(EventMsg::ShutdownComplete);
+    state.apply_event_msg(EventMsg::SessionConfigured(session_configured()));
+    state.record_user_submission("late".into());
+    assert_eq!(state.status, SessionStatus::Shutdown);
+    assert_eq!(state.turn, TurnStatus::Idle);
+    assert!(!state.can_submit());
+    assert!(state.transcript.is_empty());
+}
+
 fn session_configured() -> SessionConfiguredEvent {
     SessionConfiguredEvent {
         session_id: ProcessId::default(),

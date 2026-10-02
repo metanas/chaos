@@ -50,11 +50,12 @@ use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyEventKind;
 
+mod lifecycle;
+
 /// Aggregates all backtrack-related state used by the App.
 #[derive(Default)]
 pub(crate) struct BacktrackState {
-    /// True when Esc has primed backtrack mode in the main view.
-    pub(crate) primed: bool,
+    navigation: lifecycle::NavigationWorkflow,
     /// Session id of the base thread to rollback.
     ///
     /// If the current thread changes, backtrack selections become invalid and must be ignored.
@@ -64,8 +65,6 @@ pub(crate) struct BacktrackState {
     /// This is an index into the filtered "user messages since the last session start" view,
     /// not an index into `transcript_cells`. `usize::MAX` indicates "no selection".
     pub(crate) nth_user_message: usize,
-    /// True when the transcript overlay is showing a backtrack preview.
-    pub(crate) overlay_preview_active: bool,
     /// Pending rollback request awaiting confirmation from core.
     ///
     /// This acts as a guardrail: once we request a rollback, we block additional backtrack
@@ -134,7 +133,7 @@ impl App {
             return Ok(true);
         }
 
-        if self.backtrack.overlay_preview_active {
+        if self.backtrack.preview_active() {
             match event {
                 TuiEvent::Key(KeyEvent {
                     code: KeyCode::Esc,
@@ -196,11 +195,11 @@ impl App {
             return;
         }
 
-        if !self.backtrack.primed {
+        if !self.backtrack.primed() {
             self.prime_backtrack();
         } else if self.overlay.is_none() {
             self.open_backtrack_preview(tui);
-        } else if self.backtrack.overlay_preview_active {
+        } else if self.backtrack.preview_active() {
             self.step_backtrack_and_highlight(tui);
         }
     }
@@ -235,7 +234,7 @@ impl App {
         let local_image_paths = selection.local_image_paths.clone();
         let remote_image_urls = selection.remote_image_urls.clone();
         let has_remote_image_urls = !remote_image_urls.is_empty();
-        self.backtrack.pending_rollback = Some(PendingBacktrackRollback {
+        self.backtrack.request_rollback(PendingBacktrackRollback {
             selection,
             process_id: self.chat_widget.process_id(),
         });
@@ -280,7 +279,7 @@ impl App {
     /// Close transcript overlay and restore normal UI.
     pub(crate) fn close_transcript_overlay(&mut self, tui: &mut tui::Tui) {
         let _ = tui.leave_alt_screen();
-        let was_backtrack = self.backtrack.overlay_preview_active;
+        let was_backtrack = self.backtrack.preview_active();
         if !self.deferred_history_lines.is_empty() {
             let lines = std::mem::take(&mut self.deferred_history_lines);
             if !self.tile_manager.chat_scrollback.is_scrolled() {
@@ -288,7 +287,7 @@ impl App {
             }
         }
         self.overlay = None;
-        self.backtrack.overlay_preview_active = false;
+        self.backtrack.close_preview();
         if was_backtrack {
             // Ensure backtrack state is fully reset when overlay closes (e.g. via 'q').
             self.reset_backtrack_state();
@@ -308,7 +307,7 @@ impl App {
 
     /// Initialize backtrack state and show composer hint.
     fn prime_backtrack(&mut self) {
-        self.backtrack.primed = true;
+        self.backtrack.prime();
         self.backtrack.nth_user_message = usize::MAX;
         self.backtrack.base_id = self.chat_widget.process_id();
         self.chat_widget.show_esc_backtrack_hint();
@@ -317,7 +316,7 @@ impl App {
     /// Open overlay and begin backtrack preview flow (first step + highlight).
     fn open_backtrack_preview(&mut self, tui: &mut tui::Tui) {
         self.open_transcript_overlay(tui, None);
-        self.backtrack.overlay_preview_active = true;
+        self.backtrack.preview();
         // Composer is hidden by overlay; clear its hint.
         self.chat_widget.clear_esc_backtrack_hint();
         self.step_backtrack_and_highlight(tui);
@@ -325,9 +324,9 @@ impl App {
 
     /// When overlay is already open, begin preview mode and select latest user message.
     fn begin_overlay_backtrack_preview(&mut self, tui: &mut tui::Tui) {
-        self.backtrack.primed = true;
+        self.backtrack.prime();
         self.backtrack.base_id = self.chat_widget.process_id();
-        self.backtrack.overlay_preview_active = true;
+        self.backtrack.preview();
         let count = user_count(&self.transcript_cells);
         if let Some(last) = count.checked_sub(1) {
             self.apply_backtrack_selection_internal(last);
@@ -581,7 +580,7 @@ impl App {
 
     /// Clear all backtrack-related state and composer hints.
     pub(crate) fn reset_backtrack_state(&mut self) {
-        self.backtrack.primed = false;
+        self.backtrack.unprime();
         self.backtrack.base_id = None;
         self.backtrack.nth_user_message = usize::MAX;
         // In case a hint is somehow still visible (e.g., race with overlay open/close).
@@ -622,7 +621,7 @@ impl App {
                 ..
             }) => {
                 // Core rejected the rollback; clear the guard so the user can retry.
-                self.backtrack.pending_rollback = None;
+                self.backtrack.take_rollback();
             }
             _ => {}
         }
@@ -646,7 +645,7 @@ impl App {
     /// We ignore events that do not correspond to the currently active thread to avoid applying
     /// stale updates after a session switch.
     fn finish_pending_backtrack(&mut self) {
-        let Some(pending) = self.backtrack.pending_rollback.take() else {
+        let Some(pending) = self.backtrack.take_rollback() else {
             return;
         };
         if pending.process_id != self.chat_widget.process_id() {
@@ -702,7 +701,7 @@ impl App {
         if let Some(Overlay::Transcript(t)) = &mut self.overlay {
             t.replace_cells(self.transcript_cells.clone());
         }
-        if self.backtrack.overlay_preview_active {
+        if self.backtrack.preview_active() {
             let total_users = user_count(&self.transcript_cells);
             let next_selection = if total_users == 0 {
                 usize::MAX

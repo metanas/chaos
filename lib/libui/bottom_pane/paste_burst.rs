@@ -40,7 +40,8 @@
 //!
 //! This state machine is encoded in a few fields with slightly different meanings:
 //!
-//! - `active`: true while we are still *actively* accepting characters into the current burst.
+//! - `classification`: the crate-backed Idle/Holding/Buffering lifecycle. Buffering states
+//!   actively accept characters; Holding retains an unrendered first ASCII character.
 //! - `buffer`: accumulated burst text that will eventually flush as a single `Paste(String)`.
 //!   A non-empty buffer is treated as "in burst context" even if `active` has been cleared.
 //! - `pending_first_char`: a single held ASCII char used for flicker suppression. The caller must
@@ -98,7 +99,7 @@
 //! - **Idle**: no buffered text, no pending char.
 //! - **Pending first char**: `pending_first_char` holds one ASCII char for up to
 //!   `PASTE_BURST_CHAR_INTERVAL` while we wait to see if a burst follows.
-//! - **Active buffer**: `active`/`buffer` holds paste-like content until it times out and flushes.
+//! - **Active buffer**: the Buffering classification holds paste-like content until it times out.
 //! - **Enter suppress window**: `burst_window_until` keeps Enter treated as newline briefly after
 //!   burst activity so multiline pastes stay grouped.
 //!
@@ -148,6 +149,9 @@
 use std::time::Duration;
 use std::time::Instant;
 
+mod lifecycle;
+use lifecycle::{BurstClassificationEvent, Classification};
+
 // Heuristic thresholds for detecting paste-like input bursts.
 // Detect quickly to avoid showing typed prefix before paste is recognized
 const PASTE_BURST_MIN_CHARS: u16 = 3;
@@ -165,7 +169,7 @@ pub struct PasteBurst {
     consecutive_plain_char_burst: u16,
     burst_window_until: Option<Instant>,
     buffer: String,
-    active: bool,
+    classification: Classification,
     // Hold first fast char briefly to avoid rendering flicker
     pending_first_char: Option<(char, Instant)>,
 }
@@ -213,7 +217,7 @@ impl PasteBurst {
     pub fn on_plain_char(&mut self, ch: char, now: Instant) -> CharDecision {
         self.note_plain_char(now);
 
-        if self.active {
+        if self.classification.buffering() {
             self.burst_window_until = Some(now + PASTE_ENTER_SUPPRESS_WINDOW);
             return CharDecision::BufferAppend;
         }
@@ -223,7 +227,8 @@ impl PasteBurst {
         if let Some((held, held_at)) = self.pending_first_char
             && now.duration_since(held_at) <= PASTE_BURST_CHAR_INTERVAL
         {
-            self.active = true;
+            self.classification
+                .apply(BurstClassificationEvent::CaptureHeld);
             // take() to clear pending; we already captured the held char above
             let _ = self.pending_first_char.take();
             self.buffer.push(held);
@@ -238,6 +243,7 @@ impl PasteBurst {
         }
 
         // Save the first fast char very briefly to see if a burst follows.
+        self.classification.apply(BurstClassificationEvent::Hold);
         self.pending_first_char = Some((ch, now));
         CharDecision::RetainFirstChar
     }
@@ -251,7 +257,7 @@ impl PasteBurst {
     pub fn on_plain_char_no_hold(&mut self, now: Instant) -> Option<CharDecision> {
         self.note_plain_char(now);
 
-        if self.active {
+        if self.classification.buffering() {
             self.burst_window_until = Some(now + PASTE_ENTER_SUPPRESS_WINDOW);
             return Some(CharDecision::BufferAppend);
         }
@@ -295,13 +301,16 @@ impl PasteBurst {
             .last_plain_char_time
             .is_some_and(|t| now.duration_since(t) > timeout);
         if timed_out && self.is_active_internal() {
-            self.active = false;
+            self.classification
+                .apply(BurstClassificationEvent::FlushBuffer);
             let out = std::mem::take(&mut self.buffer);
             FlushResult::Paste(out)
         } else if timed_out {
             // If we were saving a single fast char and no burst followed,
             // flush it as normal typed input.
             if let Some((ch, _at)) = self.pending_first_char.take() {
+                self.classification
+                    .apply(BurstClassificationEvent::FlushHeld);
                 FlushResult::Typed(ch)
             } else {
                 FlushResult::None
@@ -342,7 +351,7 @@ impl PasteBurst {
         if !grabbed.is_empty() {
             self.buffer.push_str(&grabbed);
         }
-        self.active = true;
+        self.classification.apply(BurstClassificationEvent::Begin);
         self.burst_window_until = Some(now + PASTE_ENTER_SUPPRESS_WINDOW);
     }
 
@@ -356,7 +365,7 @@ impl PasteBurst {
     ///
     /// Returns true when the char was captured into the existing burst, false otherwise.
     pub fn try_append_char_if_active(&mut self, ch: char, now: Instant) -> bool {
-        if self.active || !self.buffer.is_empty() {
+        if self.classification.buffering() || !self.buffer.is_empty() {
             self.append_char_to_buffer(ch, now);
             true
         } else {
@@ -402,7 +411,7 @@ impl PasteBurst {
         if !self.is_active() {
             return None;
         }
-        self.active = false;
+        self.classification.apply(BurstClassificationEvent::Reset);
         let mut out = std::mem::take(&mut self.buffer);
         if let Some((ch, _at)) = self.pending_first_char.take() {
             out.push(ch);
@@ -418,7 +427,7 @@ impl PasteBurst {
         self.consecutive_plain_char_burst = 0;
         self.last_plain_char_time = None;
         self.burst_window_until = None;
-        self.active = false;
+        self.classification.apply(BurstClassificationEvent::Reset);
         self.pending_first_char = None;
     }
 
@@ -430,14 +439,14 @@ impl PasteBurst {
     }
 
     fn is_active_internal(&self) -> bool {
-        self.active || !self.buffer.is_empty()
+        self.classification.buffering() || !self.buffer.is_empty()
     }
 
     pub fn clear_after_explicit_paste(&mut self) {
         self.last_plain_char_time = None;
         self.consecutive_plain_char_burst = 0;
         self.burst_window_until = None;
-        self.active = false;
+        self.classification.apply(BurstClassificationEvent::Reset);
         self.buffer.clear();
         self.pending_first_char = None;
     }

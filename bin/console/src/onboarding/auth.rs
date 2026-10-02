@@ -44,6 +44,7 @@ use chaos_kern::auth::AuthMode;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::sync::atomic::AtomicBool;
+use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use tokio::task::AbortHandle;
 
@@ -96,6 +97,7 @@ use std::path::PathBuf;
 use super::onboarding_screen::StepState;
 
 mod headless_chatgpt_login;
+mod lifecycle;
 
 #[derive(Clone)]
 pub(crate) enum SignInState {
@@ -274,7 +276,10 @@ impl KeyboardHandler for AccountsWidget {
                         self.handle_sign_in_option(self.highlighted_mode);
                     }
                     SignInState::ChatGptSuccessMessage => {
-                        *self.sign_in_state.write().unwrap() = SignInState::ChatGptSuccess;
+                        self.sign_in_state
+                            .write()
+                            .unwrap()
+                            .transition(SignInState::ChatGptSuccess);
                     }
                     _ => {}
                 }
@@ -288,12 +293,13 @@ impl KeyboardHandler for AccountsWidget {
                     | SignInState::XaiDeviceCode(_)
                     | SignInState::ApiKeyEntry(_) => {
                         sign_in_state.cancel_pending_login();
-                        *sign_in_state = self.back_destination_for_selected_provider();
+                        self.login_generation.fetch_add(1, Ordering::SeqCst);
+                        sign_in_state.transition(self.back_destination_for_selected_provider());
                         drop(sign_in_state);
                         self.request_frame.schedule_frame();
                     }
                     SignInState::PickMode => {
-                        *sign_in_state = SignInState::PickProvider;
+                        sign_in_state.transition(SignInState::PickProvider);
                         drop(sign_in_state);
                         self.request_frame.schedule_frame();
                     }
@@ -316,6 +322,7 @@ pub(crate) struct AccountsWidget {
     pub highlighted_mode: SignInOption,
     pub error: Arc<RwLock<Option<String>>>,
     pub sign_in_state: Arc<RwLock<SignInState>>,
+    login_generation: Arc<AtomicU64>,
     pub chaos_home: PathBuf,
     pub cli_auth_credentials_store_mode: AuthCredentialsStoreMode,
     pub auth_manager: Arc<AuthManager>,
@@ -344,6 +351,7 @@ impl AccountsWidget {
             highlighted_mode: SignInOption::ChatGpt,
             error: Arc::new(RwLock::new(None)),
             sign_in_state: Arc::new(RwLock::new(SignInState::PickProvider)),
+            login_generation: Arc::new(AtomicU64::new(0)),
             chaos_home,
             cli_auth_credentials_store_mode,
             auth_manager,
@@ -541,7 +549,10 @@ impl AccountsWidget {
             return;
         }
         self.highlighted_mode = options.first().copied().unwrap_or(SignInOption::ApiKey);
-        *self.sign_in_state.write().unwrap() = SignInState::PickMode;
+        self.sign_in_state
+            .write()
+            .unwrap()
+            .transition(SignInState::PickMode);
         self.set_error(None);
         self.request_frame.schedule_frame();
     }
@@ -588,7 +599,10 @@ impl AccountsWidget {
             .find(|option| *option != SignInOption::ApiKey)
             .unwrap_or(SignInOption::ChatGpt);
         self.set_error(Some(API_KEY_DISABLED_MESSAGE.to_string()));
-        *self.sign_in_state.write().unwrap() = SignInState::PickMode;
+        self.sign_in_state
+            .write()
+            .unwrap()
+            .transition(SignInState::PickMode);
         self.request_frame.schedule_frame();
     }
 
@@ -1052,13 +1066,17 @@ impl AccountsWidget {
         let provider = self.selected_provider();
         if provider.is_none() {
             self.set_error(Some("Choose a provider first.".to_string()));
-            *self.sign_in_state.write().unwrap() = SignInState::PickProvider;
+            self.sign_in_state
+                .write()
+                .unwrap()
+                .transition(SignInState::PickProvider);
             self.request_frame.schedule_frame();
         }
         provider
     }
 
     fn start_api_key_entry(&mut self) {
+        self.begin_login_attempt();
         let Some(provider) = self.provider_for_api_key_flow() else {
             return;
         };
@@ -1088,11 +1106,11 @@ impl AccountsWidget {
                 }
             }
             _ => {
-                *guard = SignInState::ApiKeyEntry(ApiKeyInputState {
+                guard.transition(SignInState::ApiKeyEntry(ApiKeyInputState {
                     provider: Some(provider),
                     value: prefill_from_env.clone().unwrap_or_default(),
                     prepopulated_from_env: prefill_from_env.is_some(),
-                });
+                }));
             }
         }
         drop(guard);
@@ -1112,7 +1130,10 @@ impl AccountsWidget {
             Ok(()) => {
                 self.set_error(None);
                 self.auth_manager.reload();
-                *self.sign_in_state.write().unwrap() = SignInState::ApiKeyConfigured(provider);
+                self.sign_in_state
+                    .write()
+                    .unwrap()
+                    .transition(SignInState::ApiKeyConfigured(provider));
             }
             Err(err) => {
                 self.set_error(Some(format!("Failed to save API key: {err}")));
@@ -1124,11 +1145,11 @@ impl AccountsWidget {
                     }
                     existing.prepopulated_from_env = false;
                 } else {
-                    *guard = SignInState::ApiKeyEntry(ApiKeyInputState {
+                    guard.transition(SignInState::ApiKeyEntry(ApiKeyInputState {
                         provider: Some(provider),
                         value: api_key,
                         prepopulated_from_env: false,
-                    });
+                    }));
                 }
             }
         }
@@ -1151,7 +1172,10 @@ impl AccountsWidget {
             .as_ref()
             .is_some_and(|auth| auth.auth_mode() == auth_mode)
         {
-            *self.sign_in_state.write().unwrap() = SignInState::ChatGptSuccess;
+            self.sign_in_state
+                .write()
+                .unwrap()
+                .transition(SignInState::ChatGptSuccess);
             self.request_frame.schedule_frame();
             true
         } else {
@@ -1170,6 +1194,7 @@ impl AccountsWidget {
 
     /// Kicks off the ChatGPT account flow and keeps the UI state consistent with the attempt.
     fn start_chatgpt_account_connection(&mut self) {
+        self.begin_login_attempt();
         // If we're already connected with ChatGPT, don't start a new flow –
         // just proceed to the success message flow.
         if self.handle_existing_chatgpt_connection() {
@@ -1179,16 +1204,21 @@ impl AccountsWidget {
         self.set_error(None);
         let handle = spawn_login_flow(self.chatgpt_server_options(), LoginFlowMode::Browser);
         let cancel = handle.cancel_handle();
-        *self.sign_in_state.write().unwrap() =
-            SignInState::ChatGptContinueInBrowser(ContinueInBrowserState {
-                auth_url: String::new(),
-                cancel: Some(cancel),
-            });
+        self.sign_in_state
+            .write()
+            .unwrap()
+            .transition(SignInState::ChatGptContinueInBrowser(
+                ContinueInBrowserState {
+                    auth_url: String::new(),
+                    cancel: Some(cancel),
+                },
+            ));
         self.request_frame.schedule_frame();
         self.consume_chatgpt_account_flow(handle);
     }
 
     fn start_device_code_connection(&mut self) {
+        self.begin_login_attempt();
         if self.handle_existing_chatgpt_connection() {
             return;
         }
@@ -1203,26 +1233,33 @@ impl AccountsWidget {
             },
         );
         let cancel = handle.cancel_handle();
-        *self.sign_in_state.write().unwrap() =
-            SignInState::ChatGptDeviceCode(ContinueWithDeviceCodeState {
-                device_code: None,
-                cancel: Some(cancel),
-            });
+        self.sign_in_state
+            .write()
+            .unwrap()
+            .transition(SignInState::ChatGptDeviceCode(
+                ContinueWithDeviceCodeState {
+                    device_code: None,
+                    cancel: Some(cancel),
+                },
+            ));
         self.request_frame.schedule_frame();
         self.consume_chatgpt_account_flow(handle);
     }
 
     fn start_xai_account_connection(&mut self) {
+        self.begin_login_attempt();
         if self.handle_existing_account_connection(AuthMode::Xai) {
             return;
         }
 
         self.set_error(None);
-        *self.sign_in_state.write().unwrap() =
-            SignInState::XaiDeviceCode(XaiDeviceCodeLoginState {
+        self.sign_in_state
+            .write()
+            .unwrap()
+            .transition(SignInState::XaiDeviceCode(XaiDeviceCodeLoginState {
                 device_code: None,
                 cancel: None,
-            });
+            }));
         self.request_frame.schedule_frame();
 
         let opts = XaiDeviceCodeOptions::new(
@@ -1236,15 +1273,21 @@ impl AccountsWidget {
         let auth_manager = self.auth_manager.clone();
         let fallback_state = self.back_destination_for_selected_provider();
         let task_cancelled = cancelled.clone();
+        let generation = self.login_generation.load(Ordering::SeqCst);
+        let login_generation = self.login_generation.clone();
 
         let join = tokio::spawn(async move {
-            let is_cancelled = || task_cancelled.load(Ordering::SeqCst);
+            let is_cancelled = || {
+                task_cancelled.load(Ordering::SeqCst)
+                    || login_generation.load(Ordering::SeqCst) != generation
+            };
             let fail = |message: String| {
+                let mut state = sign_in_state.write().unwrap();
                 if is_cancelled() {
                     return;
                 }
                 *error.write().unwrap() = Some(message);
-                *sign_in_state.write().unwrap() = fallback_state.clone();
+                state.transition(fallback_state.clone());
                 request_frame.schedule_frame();
             };
 
@@ -1259,6 +1302,9 @@ impl AccountsWidget {
             {
                 // A cancelled login has already moved the state elsewhere.
                 let mut guard = sign_in_state.write().unwrap();
+                if is_cancelled() {
+                    return;
+                }
                 let SignInState::XaiDeviceCode(state) = &mut *guard else {
                     return;
                 };
@@ -1268,12 +1314,13 @@ impl AccountsWidget {
 
             match complete_xai_device_code_login(opts, device_code).await {
                 Ok(()) => {
+                    let mut state = sign_in_state.write().unwrap();
                     if is_cancelled() {
                         return;
                     }
                     *error.write().unwrap() = None;
                     auth_manager.reload();
-                    *sign_in_state.write().unwrap() = SignInState::ChatGptSuccessMessage;
+                    state.transition(SignInState::ChatGptSuccessMessage);
                     request_frame.schedule_frame();
                 }
                 Err(err) => fail(format!("Failed to connect xAI account: {err}")),
@@ -1295,53 +1342,71 @@ impl AccountsWidget {
         let request_frame = self.request_frame.clone();
         let auth_manager = self.auth_manager.clone();
         let fallback_state = self.back_destination_for_selected_provider();
+        let generation = self.login_generation.load(Ordering::SeqCst);
+        let login_generation = self.login_generation.clone();
 
         tokio::spawn(async move {
             let cancel = handle.cancel_handle();
             while let Some(update) = handle.recv().await {
+                let mut state = sign_in_state.write().unwrap();
+                if login_generation.load(Ordering::SeqCst) != generation {
+                    break;
+                }
                 match update {
                     LoginFlowUpdate::DeviceCodePending => {
                         *error.write().unwrap() = None;
-                        *sign_in_state.write().unwrap() =
-                            SignInState::ChatGptDeviceCode(ContinueWithDeviceCodeState {
+                        state.transition(SignInState::ChatGptDeviceCode(
+                            ContinueWithDeviceCodeState {
                                 device_code: None,
                                 cancel: Some(cancel.clone()),
-                            });
+                            },
+                        ));
                     }
                     LoginFlowUpdate::DeviceCodeUnsupported => {}
                     LoginFlowUpdate::BrowserOpened { auth_url, .. } => {
                         *error.write().unwrap() = None;
-                        *sign_in_state.write().unwrap() =
-                            SignInState::ChatGptContinueInBrowser(ContinueInBrowserState {
+                        state.transition(SignInState::ChatGptContinueInBrowser(
+                            ContinueInBrowserState {
                                 auth_url,
                                 cancel: Some(cancel.clone()),
-                            });
+                            },
+                        ));
                     }
                     LoginFlowUpdate::DeviceCodeReady { device_code } => {
                         *error.write().unwrap() = None;
-                        *sign_in_state.write().unwrap() =
-                            SignInState::ChatGptDeviceCode(ContinueWithDeviceCodeState {
+                        state.transition(SignInState::ChatGptDeviceCode(
+                            ContinueWithDeviceCodeState {
                                 device_code: Some(device_code),
                                 cancel: Some(cancel.clone()),
-                            });
+                            },
+                        ));
                     }
                     LoginFlowUpdate::Succeeded { .. } => {
                         *error.write().unwrap() = None;
                         auth_manager.reload();
-                        *sign_in_state.write().unwrap() = SignInState::ChatGptSuccessMessage;
+                        state.transition(SignInState::ChatGptSuccessMessage);
                     }
                     LoginFlowUpdate::Failed { message } => {
                         *error.write().unwrap() = Some(message);
-                        *sign_in_state.write().unwrap() = fallback_state.clone();
+                        state.transition(fallback_state.clone());
                     }
                     LoginFlowUpdate::Cancelled => {
                         *error.write().unwrap() = None;
-                        *sign_in_state.write().unwrap() = fallback_state.clone();
+                        state.transition(fallback_state.clone());
                     }
                 }
                 request_frame.schedule_frame();
             }
         });
+    }
+}
+
+impl AccountsWidget {
+    /// Fence old async updates under the same lock used to publish UI transitions.
+    fn begin_login_attempt(&self) {
+        let state = self.sign_in_state.write().unwrap();
+        state.cancel_pending_login();
+        self.login_generation.fetch_add(1, Ordering::SeqCst);
     }
 }
 

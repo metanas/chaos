@@ -92,15 +92,7 @@ impl ActiveTurn {
 /// - `record_steered_input()` → `CurrentTurn` (new user input
 ///   always reopens delivery; called atomically from
 ///   `push_pending_input`)
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum MailboxDeliveryPhase {
-    /// Mailbox items are deliverable to the current turn.
-    #[default]
-    CurrentTurn,
-    /// The model already emitted a final answer; defer mailbox items
-    /// to the next turn.
-    NextTurn,
-}
+mod mailbox;
 
 /// Distinguishes the kind of approval so `call_id` cannot collide across
 /// different approval flows (exec vs patch). Each kind has its own namespace
@@ -130,7 +122,7 @@ pub(crate) struct TurnState {
     pending_elicitations: HashMap<(String, RequestId), oneshot::Sender<ElicitationResponse>>,
     pending_dynamic_tools: HashMap<String, oneshot::Sender<DynamicToolResponse>>,
     pending_input: Vec<ResponseInputItem>,
-    mailbox_delivery_phase: MailboxDeliveryPhase,
+    mailbox_delivery_phase: mailbox::Mailbox,
     granted_permissions: Option<PermissionProfile>,
     pub(crate) tool_calls: u64,
     pub(crate) token_usage_at_turn_start: TokenUsage,
@@ -257,7 +249,7 @@ impl TurnState {
     /// Returns `true` when mailbox items should be delivered to the
     /// current turn.
     pub(crate) fn accepts_mailbox_delivery(&self) -> bool {
-        self.mailbox_delivery_phase == MailboxDeliveryPhase::CurrentTurn
+        self.mailbox_delivery_phase.accepts_delivery()
     }
 
     /// Called when the model completes a final answer item. Defers
@@ -265,9 +257,8 @@ impl TurnState {
     /// is empty — if the user has already steered input the turn
     /// must stay open.
     pub(crate) fn record_answer_emitted(&mut self) {
-        if self.pending_input.is_empty() {
-            self.mailbox_delivery_phase = MailboxDeliveryPhase::NextTurn;
-        }
+        self.mailbox_delivery_phase
+            .answer(self.pending_input.is_empty());
         // If pending_input is non-empty, the user steered input
         // before the answer boundary; keep CurrentTurn so it is
         // consumed on the next follow-up iteration.
@@ -276,14 +267,14 @@ impl TurnState {
     /// Called when a tool call is emitted. Reopens mailbox delivery
     /// for the current turn.
     pub(crate) fn record_tool_call_emitted(&mut self) {
-        self.mailbox_delivery_phase = MailboxDeliveryPhase::CurrentTurn;
+        self.mailbox_delivery_phase.reopen();
     }
 
     /// Called atomically from `push_pending_input`. Any steered
     /// input reopens delivery for the current turn, preventing a
     /// stale `NextTurn` phase from hiding the new input.
     fn record_steered_input(&mut self) {
-        self.mailbox_delivery_phase = MailboxDeliveryPhase::CurrentTurn;
+        self.mailbox_delivery_phase.reopen();
     }
 
     // ── Pending input ─────────────────────────────────────────────

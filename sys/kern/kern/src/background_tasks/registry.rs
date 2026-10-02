@@ -7,6 +7,10 @@ use chaos_ipc::protocol::RolloutItem;
 use serde_json::Value;
 use tokio::sync::{Mutex, Notify, watch};
 
+mod delivery;
+mod lifecycle;
+use delivery::TaskDeliveryEvent;
+
 #[derive(Default)]
 struct RegistryState {
     tasks: BTreeMap<String, BackgroundTask>,
@@ -91,6 +95,10 @@ impl TaskRegistry {
         task.result = task.result.map(bound_result);
         let mut state = self.state.lock().await;
         if let Some(previous) = state.tasks.get(&task.id) {
+            let mut validated = previous.clone();
+            if !lifecycle::transition(&mut validated, task.state) {
+                return;
+            }
             task.origin_turn_id = task
                 .origin_turn_id
                 .or_else(|| previous.origin_turn_id.clone());
@@ -116,9 +124,11 @@ impl TaskRegistry {
         if task.source != Some(TaskSource::MachineRecovery) {
             return;
         }
-        task.state = TaskState::Cancelled;
+        if !lifecycle::transition(&mut task, TaskState::Cancelled) {
+            return;
+        }
         task.notify = false;
-        task.delivered = true;
+        delivery::apply(&mut task, TaskDeliveryEvent::Deliver);
         self.register(task).await;
     }
 
@@ -168,7 +178,9 @@ impl TaskRegistry {
         if task.state.is_terminal() {
             return Some(task.clone());
         }
-        task.state = task_state;
+        if !lifecycle::transition(task, task_state) {
+            return Some(task.clone());
+        }
         task.status_message = message;
         task.updated_at = jiff::Timestamp::now().to_string();
         if result.is_some() {
@@ -186,7 +198,7 @@ impl TaskRegistry {
         let mut state = self.state.lock().await;
         if let Some(task) = state.tasks.get_mut(id) {
             task.origin_call_id = Some(call_id.to_owned());
-            task.ready = false;
+            delivery::apply(task, TaskDeliveryEvent::BindOrigin);
             let task = task.clone();
             state.journal.push(TaskJournalEvent::Upsert {
                 task: Box::new(task),
@@ -226,10 +238,10 @@ impl TaskRegistry {
                 if task.state == TaskState::Submitting {
                     // An error response does not establish whether a remote
                     // server accepted the submission. Never retry it implicitly.
-                    task.state = TaskState::SubmissionUnknown;
+                    lifecycle::transition(task, TaskState::SubmissionUnknown);
                     task.notify = false;
                 }
-                task.ready = true;
+                delivery::apply(task, TaskDeliveryEvent::CommitOrigin);
                 updates.push(TaskJournalEvent::Upsert {
                     task: Box::new(task.clone()),
                 });
@@ -241,7 +253,7 @@ impl TaskRegistry {
                 if let Some(task) = state.tasks.get_mut(&id)
                     && !task.delivered
                 {
-                    task.delivered = true;
+                    delivery::apply(task, TaskDeliveryEvent::Deliver);
                     delivered.push(id);
                 }
             }
@@ -295,7 +307,7 @@ impl TaskRegistry {
                 && task.state.is_terminal()
                 && !task.delivered
             {
-                task.delivered = true;
+                delivery::apply(task, TaskDeliveryEvent::Deliver);
                 delivered.push(id.clone());
             }
         }
@@ -313,8 +325,7 @@ impl TaskRegistry {
             self.observer_cancel.cancel();
         }
         let mut state = self.state.lock().await;
-        if state.policy != policy {
-            state.policy = policy;
+        if state.policy != policy && lifecycle::set_policy(&mut state.policy, policy) {
             state.journal.push(TaskJournalEvent::WakePolicy { policy });
             self.publish(&state);
         }
@@ -444,19 +455,19 @@ impl TaskRegistry {
         // Never blindly replay a model continuation which may already have
         // performed side effects before its owner crashed.
         if state.continuation.is_some() && state.policy == WakePolicy::Enabled {
-            state.policy = WakePolicy::Interrupted;
+            lifecycle::set_policy(&mut state.policy, WakePolicy::Interrupted);
         }
         // A saved handle without a committed tool response needs owner
         // reconciliation, not an out-of-order automatic notification.
         if state.tasks.values().any(|task| !task.ready) && state.policy == WakePolicy::Enabled {
-            state.policy = WakePolicy::Interrupted;
+            lifecycle::set_policy(&mut state.policy, WakePolicy::Interrupted);
         }
         self.publish(&state);
     }
 }
 
 fn is_pending(task: &BackgroundTask) -> bool {
-    task.state.is_terminal() && task.ready && task.notify && !task.delivered
+    delivery::pending(task)
 }
 
 /// Keep a bounded diagnostic result, not an unbounded copy of producer output.

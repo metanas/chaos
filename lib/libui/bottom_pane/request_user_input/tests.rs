@@ -293,7 +293,7 @@ fn interrupt_discards_queued_requests_and_emits_interrupt() {
 
     overlay.handle_key_event(KeyEvent::from(KeyCode::Esc));
 
-    assert!(overlay.done, "expected overlay to be done");
+    assert!(overlay.done(), "expected overlay to be done");
     expect_interrupt_only(&mut rx);
 }
 
@@ -660,7 +660,7 @@ fn esc_in_notes_mode_without_options_interrupts() {
 
     overlay.handle_key_event(KeyEvent::from(KeyCode::Esc));
 
-    assert_eq!(overlay.done, true);
+    assert_eq!(overlay.done(), true);
     expect_interrupt_only(&mut rx);
 }
 
@@ -676,7 +676,7 @@ fn esc_in_options_mode_interrupts() {
 
     overlay.handle_key_event(KeyEvent::from(KeyCode::Esc));
 
-    assert_eq!(overlay.done, true);
+    assert_eq!(overlay.done(), true);
     expect_interrupt_only(&mut rx);
 }
 
@@ -697,7 +697,7 @@ fn esc_in_notes_mode_clears_notes_and_hides_ui() {
     overlay.handle_key_event(KeyEvent::from(KeyCode::Esc));
 
     let answer = overlay.current_answer().expect("answer missing");
-    assert_eq!(overlay.done, false);
+    assert_eq!(overlay.done(), false);
     assert!(matches!(overlay.focus, Focus::Options));
     assert_eq!(overlay.notes_ui_visible(), false);
     assert_eq!(overlay.composer.current_text_with_pending(), "");
@@ -725,7 +725,7 @@ fn esc_in_notes_mode_with_text_clears_notes_and_hides_ui() {
     overlay.handle_key_event(KeyEvent::from(KeyCode::Esc));
 
     let answer = overlay.current_answer().expect("answer missing");
-    assert_eq!(overlay.done, false);
+    assert_eq!(overlay.done(), false);
     assert!(matches!(overlay.focus, Focus::Options));
     assert_eq!(overlay.notes_ui_visible(), false);
     assert_eq!(overlay.composer.current_text_with_pending(), "");
