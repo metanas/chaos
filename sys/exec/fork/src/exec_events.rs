@@ -1,4 +1,5 @@
 use chaos_ipc::models::WebSearchAction;
+pub use chaos_ipc::protocol::CollabAgentStatus;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value as JsonValue;
@@ -251,19 +252,6 @@ pub enum CollabTool {
     SendInput,
     Wait,
     CloseAgent,
-}
-
-/// The status of a collab agent.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum CollabAgentStatus {
-    PendingInit,
-    Running,
-    Interrupted,
-    Completed,
-    Errored,
-    Shutdown,
-    NotFound,
 }
 
 /// Last known state of a collab agent.

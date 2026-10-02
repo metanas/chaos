@@ -57,11 +57,10 @@ impl Session {
     /// allocating for ordinary streaming events. Select the branch synchronously
     /// so even its temporary status value cannot enlarge the caller's future.
     pub(crate) fn deliver_event_raw(&self, event: Event) -> impl Future<Output = ()> + Send + '_ {
-        let next_status = agent_status_from_event(&event.msg);
-        if next_status.is_some() || matches!(event.msg, EventMsg::SessionConfigured(_)) {
+        if let Some(status) = agent_status_from_event(&event.msg) {
             Either::Left(
                 async move {
-                    self.publish_agent_status(next_status).await;
+                    self.publish_agent_status(Some(status)).await;
                     self.deliver_client_event(event).await;
                 }
                 .boxed(),
@@ -71,7 +70,7 @@ impl Session {
         }
     }
 
-    async fn deliver_client_event(&self, event: Event) {
+    pub(crate) async fn deliver_client_event(&self, event: Event) {
         if let Err(e) = self.tx_event.send(event).await {
             debug!("dropping event because channel is closed: {e}");
         }
@@ -79,14 +78,17 @@ impl Session {
 
     /// Publish only committed state, never raw completion/error payloads.
     ///
-    /// Initial configuration is delivered before the submission loop can start
-    /// the first turn. Serialize commits with publication so even a fast turn
-    /// cannot publish a stale initial/running state after its completion.
-    async fn publish_agent_status(&self, next_status: Option<chaos_ipc::protocol::AgentStatus>) {
+    /// Initial status is published after successful initialization, before the
+    /// submission loop can start a turn. Serialize commits with publication so
+    /// even a fast turn cannot publish stale initial/running state after completion.
+    pub(super) async fn publish_agent_status(
+        &self,
+        next_status: Option<chaos_ipc::protocol::AgentStatus>,
+    ) {
         let _publication = self.agent_status_publication.lock().await;
         if let Some(status) = next_status {
             self.agent_status.send_modify(|current| {
-                *current = crate::minions::preserve_turn_failure(current, status);
+                *current = crate::minions::transition_agent_status(current, status);
             });
         }
         let status = CollabAgentStatus::from(&*self.agent_status.borrow());

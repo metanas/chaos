@@ -728,6 +728,10 @@ impl Session {
             state.set_pending_session_start_source(Some(session_start_source));
         }
 
+        // SessionConfigured precedes fallible startup (notably required MCP
+        // servers). Publish only once startup succeeds, so failed spawns cannot
+        // leave an unregistered child stuck in PendingInit on the parent stream.
+        Box::pin(sess.publish_agent_status(None)).await;
         Ok(sess)
     }
 }

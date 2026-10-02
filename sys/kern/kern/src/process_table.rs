@@ -471,19 +471,8 @@ impl ProcessTable {
         let (session, turn) = crate::chaos::make_session_and_context().await;
         let process_id = session.conversation_id;
         let (status_tx, agent_status) = tokio::sync::watch::channel(status);
-        let chaos = Chaos {
-            tx_sub: async_channel::bounded(1).0,
-            rx_event: async_channel::bounded(1).1,
-            agent_status,
-            session: Arc::new(session),
-            session_loop_termination: crate::chaos::completed_session_loop_termination(),
-        };
-        let process = Process::new(chaos, self.state.file_watcher.register_config(&turn.config));
-        self.state
-            .processes
-            .write()
-            .await
-            .insert(process_id, Arc::new(process));
+        self.insert_session_for_tests(session, &turn, agent_status)
+            .await;
         (process_id, status_tx)
     }
 

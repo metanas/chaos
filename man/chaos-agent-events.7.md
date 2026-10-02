@@ -24,7 +24,7 @@ routing.
 
 `status` is one of:
 
-- `pending_init`: initial state, before a turn starts;
+- `pending_init`: initialized and awaiting its first turn;
 - `running`: processing a turn;
 - `interrupted`: the current turn was interrupted;
 - `completed`: the current turn completed;
@@ -35,6 +35,8 @@ routing.
 Completion is not permanent termination. Sending new input can make the same
 child run again. Reopening a closed child alone does not mean new work has
 started. Shutdown does not retrospectively classify a completed turn as failed.
+Late events cannot reopen a shutdown session; resume initializes a new session
+for that child.
 Consumers needing the last work outcome should preserve that separately from
 whether the child is still open.
 
@@ -59,3 +61,7 @@ already-active children; subsequent child status publications can still arrive
 while the parent is registered. End-of-stream is not evidence that a child completed:
 consumers should display unresolved activity as unknown or disconnected, not
 successful. Existing tool-call events are unchanged.
+
+The first status is published only after session initialization succeeds.
+Failed initialization, including a required MCP server failing to start, is
+reported by the spawn tool without creating a pending child lifecycle entry.

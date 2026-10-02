@@ -9,6 +9,11 @@ should. There is no patch level; the build timestamp is the patch.
 
 ## [Unreleased]
 
+### Added
+- Payload-free direct-child lifecycle updates in `chaos exec --json`, independent
+  of collaboration tool results. Failed initialization does not create a pending
+  child entry.
+
 ### Changed
 - Replace the Git fork dependencies for `ratatui-hypertile` and
   `ratatui-hypertile-extras` with their upstream crates.io 0.4.2 releases,

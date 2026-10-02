@@ -184,11 +184,10 @@ impl AgentControl {
         }
         // Send directly, bypassing rollout persistence and model-facing result
         // delivery. The update describes the child, never the parent's status.
-        let _ = parent
+        parent
             .chaos
             .session
-            .tx_event
-            .send(chaos_ipc::protocol::Event {
+            .deliver_client_event(chaos_ipc::protocol::Event {
                 id: String::new(),
                 msg: chaos_ipc::protocol::EventMsg::CollabAgentStatusChanged(update),
             })

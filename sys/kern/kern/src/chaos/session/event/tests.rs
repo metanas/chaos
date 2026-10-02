@@ -5,7 +5,6 @@ use crate::ProcessTable;
 use crate::chaos::make_session_and_context_with_home;
 use crate::minions::AgentStatus;
 use chaos_ipc::protocol::ErrorEvent;
-use chaos_ipc::protocol::SessionConfiguredEvent;
 use chaos_ipc::protocol::TurnAbortReason;
 use chaos_ipc::protocol::TurnAbortedEvent;
 use chaos_ipc::protocol::TurnCompleteEvent;
@@ -90,30 +89,12 @@ impl LifecycleHarness {
         assert_eq!(update.agent_nickname.as_deref(), Some("Ada"));
         assert_eq!(update.agent_role.as_deref(), Some("worker"));
         assert_eq!(update.status, status);
+        assert!(
+            !serde_json::to_string(&update)
+                .expect("serialize")
+                .contains("private")
+        );
         update
-    }
-
-    async fn configured(&self) -> EventMsg {
-        let state = self.child.state.lock().await;
-        let config = &state.session_configuration;
-        EventMsg::SessionConfigured(SessionConfiguredEvent {
-            session_id: self.child.conversation_id,
-            forked_from_id: None,
-            process_name: None,
-            model: config.collaboration_mode.model().to_string(),
-            model_provider_id: "test".into(),
-            service_tier: None,
-            approval_policy: config.approval_policy.value(),
-            approvals_reviewer: config.approvals_reviewer,
-            vfs_policy: config.vfs_policy.clone(),
-            socket_policy: config.socket_policy,
-            cwd: config.cwd.clone(),
-            reasoning_effort: config.collaboration_mode.reasoning_effort(),
-            history_log_id: 0,
-            history_entry_count: 0,
-            initial_messages: None,
-            network_proxy: None,
-        })
     }
 }
 
@@ -136,7 +117,7 @@ fn completed(message: Option<&str>) -> EventMsg {
 async fn initial_fast_completion_reactivation_and_close_publish_without_waiting() {
     let harness = LifecycleHarness::new().await;
     let receivers = harness.child.agent_status.receiver_count();
-    harness.emit(harness.configured().await).await;
+    harness.child.publish_agent_status(None).await;
     let initial = harness.next_update(CollabAgentStatus::PendingInit);
     let effective_model = harness
         .child
@@ -153,12 +134,7 @@ async fn initial_fast_completion_reactivation_and_close_publish_without_waiting(
     harness.emit(started()).await;
     harness.emit(completed(Some("private child output"))).await;
     harness.next_update(CollabAgentStatus::Running);
-    let completion = harness.next_update(CollabAgentStatus::Completed);
-    assert!(
-        !serde_json::to_string(&completion)
-            .expect("serialize")
-            .contains("private")
-    );
+    harness.next_update(CollabAgentStatus::Completed);
 
     // Completion is not process termination; later input starts another turn.
     harness.emit(started()).await;
@@ -167,6 +143,12 @@ async fn initial_fast_completion_reactivation_and_close_publish_without_waiting(
     harness.next_update(CollabAgentStatus::Completed);
     harness.emit(EventMsg::ShutdownComplete).await;
     harness.next_update(CollabAgentStatus::Shutdown);
+    // Late events cannot resurrect a closed process or overwrite its status.
+    for event in [started(), completed(Some("private late result"))] {
+        harness.emit(event).await;
+        harness.next_update(CollabAgentStatus::Shutdown);
+    }
+    assert_eq!(*harness.child.agent_status.borrow(), AgentStatus::Shutdown);
     assert!(harness.parent_events.is_empty());
     assert_eq!(harness.child.agent_status.receiver_count(), receivers);
     assert!(
@@ -187,7 +169,7 @@ async fn initial_fast_completion_reactivation_and_close_publish_without_waiting(
 }
 
 #[tokio::test]
-async fn publication_uses_preserved_failure_and_configuration_never_resets_status() {
+async fn publication_uses_preserved_failure_and_observation_never_resets_status() {
     let harness = LifecycleHarness::new().await;
     harness.emit(started()).await;
     harness.next_update(CollabAgentStatus::Running);
@@ -197,12 +179,7 @@ async fn publication_uses_preserved_failure_and_configuration_never_resets_statu
             chaos_error_info: None,
         }))
         .await;
-    let failure = harness.next_update(CollabAgentStatus::Errored);
-    assert!(
-        !serde_json::to_string(&failure)
-            .expect("serialize")
-            .contains("private")
-    );
+    harness.next_update(CollabAgentStatus::Errored);
     harness.emit(completed(None)).await;
     harness.next_update(CollabAgentStatus::Errored);
     assert_eq!(
@@ -225,7 +202,7 @@ async fn publication_uses_preserved_failure_and_configuration_never_resets_statu
     harness.next_update(CollabAgentStatus::Running);
     harness.emit(completed(Some("private result"))).await;
     harness.next_update(CollabAgentStatus::Completed);
-    harness.emit(harness.configured().await).await;
+    harness.child.publish_agent_status(None).await;
     harness.next_update(CollabAgentStatus::Completed);
 }
 
@@ -275,7 +252,6 @@ async fn missing_closed_or_shutdown_parent_does_not_invent_completion_or_subscri
         .send_replace(AgentStatus::Running);
     harness.parent_events.close();
     harness.emit(completed(Some("done"))).await;
-    harness.emit(EventMsg::ShutdownComplete).await;
     assert!(harness.parent_events.is_empty());
     assert_eq!(harness.parent.agent_status().await, AgentStatus::Running);
     assert_eq!(harness.child.agent_status.receiver_count(), child_receivers);
@@ -326,4 +302,66 @@ async fn only_process_spawn_children_publish_and_other_child_events_stay_private
         *harness.child.agent_status.borrow(),
         AgentStatus::Completed(Some("private result".into()))
     );
+}
+
+#[tokio::test]
+async fn initial_status_requires_successful_session_initialization() {
+    let harness = LifecycleHarness::new().await;
+    let mut config = (*harness.child.get_config().await).clone();
+    let broken: crate::config::types::McpServerConfig = toml::from_str(
+        r#"
+command = "/nonexistent-chaos-lifecycle-test-server"
+required = true
+startup_timeout_sec = 1
+"#,
+    )
+    .expect("MCP config");
+    config
+        .mcp_servers
+        .set(std::collections::HashMap::from([("broken".into(), broken)]))
+        .expect("configure required server");
+    let source = harness
+        .child
+        .state
+        .lock()
+        .await
+        .session_configuration
+        .session_source
+        .clone();
+    let control = harness.manager.agent_control();
+    let error = control
+        .spawn_agent(config.clone(), Vec::new(), Some(source.clone()))
+        .await
+        .expect_err("required MCP startup must fail");
+    assert!(error.to_string().contains("required MCP servers failed"));
+    assert!(
+        harness.parent_events.is_empty(),
+        "failed initialization must not advertise a pending child"
+    );
+
+    // A successful spawn must still publish its initial status before any turn,
+    // without requiring a parent wait or a model request.
+    config
+        .mcp_servers
+        .set(Default::default())
+        .expect("clear MCP");
+    let child_id = control
+        .spawn_agent(config, Vec::new(), Some(source))
+        .await
+        .expect("spawn child");
+    let EventMsg::CollabAgentStatusChanged(update) = harness
+        .parent_events
+        .try_recv()
+        .expect("initial status")
+        .msg
+    else {
+        panic!("expected child status");
+    };
+    assert_eq!(update.child_process_id, child_id);
+    assert_eq!(
+        update.parent_process_id,
+        harness.parent.chaos.session.conversation_id
+    );
+    assert_eq!(update.status, CollabAgentStatus::PendingInit);
+    control.shutdown_agent(child_id).await.expect("close child");
 }

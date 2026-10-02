@@ -1,5 +1,44 @@
 use chaos_ipc::protocol::AgentStatus;
 use chaos_ipc::protocol::EventMsg;
+use state_machines::state_machine;
+
+state_machine! {
+    name: AgentLifecycle,
+    dynamic: true,
+    initial: PendingInit,
+    states: [
+        superstate Open {
+            superstate Healthy {
+                state PendingInit,
+                state Running,
+                state Completed,
+            }
+            state Interrupted,
+            state Errored,
+        },
+        Shutdown,
+    ],
+    events {
+        start {
+            transition: { from: Open, to: Running }
+        }
+        complete {
+            transition: { from: Open, to: Completed }
+        }
+        complete_empty {
+            transition: { from: Healthy, to: Completed }
+        }
+        interrupt {
+            transition: { from: Open, to: Interrupted }
+        }
+        fail {
+            transition: { from: Open, to: Errored }
+        }
+        shutdown {
+            transition: { from: Open, to: Shutdown }
+        }
+    }
+}
 
 /// Derive the next agent status from a single emitted event.
 /// Returns `None` when the event does not affect status tracking.
@@ -24,14 +63,37 @@ pub(crate) fn is_final(status: &AgentStatus) -> bool {
     )
 }
 
-/// Empty completions must not erase turn failures.
-pub(crate) fn preserve_turn_failure(current: &AgentStatus, next: AgentStatus) -> AgentStatus {
-    if matches!(next, AgentStatus::Completed(None))
-        && matches!(current, AgentStatus::Errored(_) | AgentStatus::Interrupted)
+/// Validate a status update without keeping a second copy of session state.
+///
+/// Empty completions cannot erase failures/interruption, and late events cannot
+/// reopen a shutdown process. Resume creates a new session in PendingInit.
+/// NotFound is a lookup result, never a live process transition.
+pub(crate) fn transition_agent_status(current: &AgentStatus, next: AgentStatus) -> AgentStatus {
+    let state = match current {
+        AgentStatus::PendingInit => AgentLifecycleState::PendingInit,
+        AgentStatus::Running => AgentLifecycleState::Running,
+        AgentStatus::Completed(_) => AgentLifecycleState::Completed,
+        AgentStatus::Interrupted => AgentLifecycleState::Interrupted,
+        AgentStatus::Errored(_) => AgentLifecycleState::Errored,
+        AgentStatus::Shutdown => AgentLifecycleState::Shutdown,
+        AgentStatus::NotFound => return current.clone(),
+    };
+    let event = match &next {
+        AgentStatus::Running => AgentLifecycleEvent::Start,
+        AgentStatus::Completed(Some(_)) => AgentLifecycleEvent::Complete,
+        AgentStatus::Completed(None) => AgentLifecycleEvent::CompleteEmpty,
+        AgentStatus::Interrupted => AgentLifecycleEvent::Interrupt,
+        AgentStatus::Errored(_) => AgentLifecycleEvent::Fail,
+        AgentStatus::Shutdown => AgentLifecycleEvent::Shutdown,
+        AgentStatus::PendingInit | AgentStatus::NotFound => return current.clone(),
+    };
+    if DynamicAgentLifecycle::new_init_state((), state)
+        .handle(event)
+        .is_ok()
     {
-        current.clone()
-    } else {
         next
+    } else {
+        current.clone()
     }
 }
 
