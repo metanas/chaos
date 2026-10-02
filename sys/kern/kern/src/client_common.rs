@@ -25,8 +25,12 @@ pub const REVIEW_EXIT_INTERRUPTED_TMPL: &str =
 /// API request payload for a single model turn
 #[derive(Debug, Clone)]
 pub struct Prompt {
-    /// Conversation context input items.
+    /// Conversation context followed by any request-local input items.
     pub input: Vec<ResponseItem>,
+
+    /// Start of the request-local suffix, which is sent but never persisted in
+    /// canonical history. Native resume checkpoints must exclude this suffix.
+    pub(crate) request_local_start: Option<usize>,
 
     /// Tools available to the model, including additional tools sourced from
     /// external MCP servers.
@@ -48,6 +52,7 @@ impl Default for Prompt {
     fn default() -> Self {
         Self {
             input: Vec::new(),
+            request_local_start: None,
             tools: Vec::new(),
             parallel_tool_calls: false,
             base_instructions: BaseInstructions {

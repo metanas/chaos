@@ -161,6 +161,10 @@ invocations. Chaos stores owner-only, per-process checkpoints under
 fingerprints, not transcript contents. Ephemeral Chaos sessions keep checkpoints
 only in memory.
 
+Request-local runtime guidance and machine warnings are sent on every request,
+but are excluded from the durable history fingerprint. Refreshed guidance therefore
+does not invalidate an otherwise compatible native conversation.
+
 A checkpoint is reused only when the model, base instructions, working directory,
 and completed Chaos history prefix still match. New/forked sessions, rewritten
 history, changed instructions, and absent checkpoints bootstrap from the current
