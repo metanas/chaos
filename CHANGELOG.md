@@ -9,6 +9,8 @@ should. There is no patch level; the build timestamp is the patch.
 
 ## [Unreleased]
 
+## [47.10.1] - 2026-10-02
+
 ### Added
 - Payload-free direct-child lifecycle updates in `chaos exec --json`, independent
   of collaboration tool results. Failed initialization does not create a pending
