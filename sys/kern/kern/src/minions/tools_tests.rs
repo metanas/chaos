@@ -586,8 +586,8 @@ async fn send_input_interrupts_before_prompt() {
         .filter_map(|(id, op)| (*id == agent_id).then_some(op))
         .collect();
     assert_eq!(ops_for_agent.len(), 2);
-    assert!(matches!(ops_for_agent[0], Op::Interrupt));
-    assert!(matches!(ops_for_agent[1], Op::UserTurn { .. }));
+    std::assert_matches!(ops_for_agent[0], Op::Interrupt);
+    std::assert_matches!(ops_for_agent[1], Op::UserTurn { .. });
 
     let _ = thread
         .process
@@ -1382,7 +1382,7 @@ async fn assert_spawn_validates_models_against_clamp_init_list() {
     )
     .await
     .expect_err("an effort level Claude Code did not advertise must be rejected");
-    assert!(matches!(err, FunctionCallError::RespondToModel(_)));
+    std::assert_matches!(err, FunctionCallError::RespondToModel(_));
 }
 
 async fn assert_spawn_transport_follows_live_parent_and_explicit_provider() {
@@ -1436,5 +1436,5 @@ async fn assert_spawn_transport_follows_live_parent_and_explicit_provider() {
     let mut config = base(Some("gpt-6.1-sol"), true);
     let err = resolve_spawn_agent_transport(&session, &turn, &mut config)
         .expect_err("non-Claude model on the Claude Code transport must fail closed");
-    assert!(matches!(err, FunctionCallError::RespondToModel(_)));
+    std::assert_matches!(err, FunctionCallError::RespondToModel(_));
 }

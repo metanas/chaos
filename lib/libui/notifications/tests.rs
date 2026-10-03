@@ -44,18 +44,18 @@ pub(crate) fn notifications_suite() {
 }
 #[cfg(test)]
 fn selects_osc9_method() {
-    assert!(matches!(
+    std::assert_matches!(
         detect_backend(NotificationMethod::Osc9),
         super::DesktopNotificationBackend::Osc9(_)
-    ));
+    );
 }
 
 #[cfg(test)]
 fn selects_bel_method() {
-    assert!(matches!(
+    std::assert_matches!(
         detect_backend(NotificationMethod::Bel),
         super::DesktopNotificationBackend::Bel(_)
-    ));
+    );
 }
 
 fn auto_prefers_bel_without_hints() {
@@ -63,10 +63,10 @@ fn auto_prefers_bel_without_hints() {
     let _term_program = EnvVarGuard::remove("TERM_PROGRAM");
     let _iterm = EnvVarGuard::remove("ITERM_SESSION_ID");
     let _wt = EnvVarGuard::remove("WT_SESSION");
-    assert!(matches!(
+    std::assert_matches!(
         detect_backend(NotificationMethod::Auto),
         super::DesktopNotificationBackend::Bel(_)
-    ));
+    );
 }
 
 fn auto_uses_osc9_for_iterm() {
@@ -74,8 +74,8 @@ fn auto_uses_osc9_for_iterm() {
     let _term_program = EnvVarGuard::remove("TERM_PROGRAM");
     let _iterm = EnvVarGuard::set("ITERM_SESSION_ID", "abc");
     let _wt = EnvVarGuard::remove("WT_SESSION");
-    assert!(matches!(
+    std::assert_matches!(
         detect_backend(NotificationMethod::Auto),
         super::DesktopNotificationBackend::Osc9(_)
-    ));
+    );
 }

@@ -27,10 +27,10 @@ fn resume_rejects_model_flag_after_subcommand() {
     ])
     .expect_err("--model is a root exec override, not a resume flag");
 
-    assert!(matches!(
+    std::assert_matches!(
         err,
         usage::Error::UnknownFlag { .. } | usage::Error::UnexpectedArg { .. }
-    ));
+    );
 }
 
 #[test]

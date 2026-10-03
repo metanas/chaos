@@ -71,10 +71,10 @@ fn yes_no_text_parsing_tolerates_decoration_and_rationale() {
     assert_eq!(unwrap(yes_no_from_text("b", "Yes")), 1.0);
     assert_eq!(unwrap(yes_no_from_text("b", "  no.")), 0.0);
     assert_eq!(unwrap(yes_no_from_text("b", "**Yes**\nStep 1: ...")), 1.0);
-    assert!(matches!(
+    std::assert_matches!(
         yes_no_from_text("b", "Maybe"),
         Err(ReflexError::Malformed { .. })
-    ));
+    );
 }
 
 #[test]
@@ -277,10 +277,10 @@ async fn router_reports_unsupported_judgments() {
             instructions: None,
         })
         .await;
-    assert!(matches!(
+    std::assert_matches!(
         result,
         Err(ReflexError::Unsupported(JudgmentKind::ActionRisk))
-    ));
+    );
     assert!(Reflex::default().is_empty());
 }
 
@@ -436,15 +436,15 @@ async fn local_chat_surfaces_http_failures_and_empty_choices() {
         claim: "c".into(),
     };
     let broken = MiniCheckBackend::new("broken", local(&server, "broken"));
-    assert!(matches!(
+    std::assert_matches!(
         broken.judge(judgment.clone()).await,
         Err(ReflexError::Backend { message, .. }) if message.contains("503") && message.contains("model not loaded")
-    ));
+    );
     let empty = MiniCheckBackend::new("empty", local(&server, "empty"));
-    assert!(matches!(
+    std::assert_matches!(
         empty.judge(judgment).await,
         Err(ReflexError::Malformed { .. })
-    ));
+    );
 }
 
 #[tokio::test]
@@ -572,7 +572,7 @@ async fn jev_missing_answer_is_malformed_and_http_failure_is_backend_error() {
         .mount(&server)
         .await;
     let backend = jev(&server);
-    assert!(matches!(
+    std::assert_matches!(
         backend
             .judge(Judgment::Grounding {
                 document: "d".into(),
@@ -580,11 +580,11 @@ async fn jev_missing_answer_is_malformed_and_http_failure_is_backend_error() {
             })
             .await,
         Err(ReflexError::Malformed { .. })
-    ));
-    assert!(matches!(
+    );
+    std::assert_matches!(
         backend
             .judge(Judgment::Grounding { document: "d".into(), claim: "denied".into() })
             .await,
         Err(ReflexError::Backend { message, .. }) if message.contains("unauthorized")
-    ));
+    );
 }

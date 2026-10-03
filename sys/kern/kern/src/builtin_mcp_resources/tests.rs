@@ -64,10 +64,10 @@ fn rejects_invalid_session_detail_uri() {
 
 #[test]
 fn resolves_manual_page_uri() {
-    assert!(matches!(
+    std::assert_matches!(
         resolve_resource_uri("chaos://man/chaos-mcp.7").expect("resolve manual page"),
         Some(ResolvedChaosBuiltinResource::ManualPage(page)) if page.id == "chaos-mcp.7"
-    ));
+    );
 }
 
 #[test]

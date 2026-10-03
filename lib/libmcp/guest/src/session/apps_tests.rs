@@ -234,10 +234,10 @@ async fn invalid_ui_uri_is_rejected_before_sending_a_request() -> Result<(), Gue
         "ui://",
         "ui://bad view",
     ] {
-        assert!(matches!(
+        std::assert_matches!(
             session.read_ui_resource(uri).await,
             Err(GuestError::InvalidParams(_))
-        ));
+        );
     }
     assert_eq!(transport.request_count("resources/read").await, 0);
     session.disconnect().await?;
@@ -257,10 +257,10 @@ async fn missing_mismatched_ambiguous_and_non_apps_contents_are_rejected() -> Re
     ] {
         let transport = AppsTransport::new(json!({"contents": contents}), vec![]);
         let session = transport.connect(false).await?;
-        assert!(matches!(
+        std::assert_matches!(
             session.read_ui_resource(URI).await,
             Err(GuestError::Protocol(_))
-        ));
+        );
         session.disconnect().await?;
     }
     Ok(())

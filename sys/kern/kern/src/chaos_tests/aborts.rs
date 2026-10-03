@@ -116,13 +116,13 @@ async fn task_finish_emits_turn_item_lifecycle_for_leftover_pending_user_input()
         .await
         .expect("expected raw response item event")
         .expect("channel open");
-    assert!(matches!(first.msg, EventMsg::RawResponseItem(_)));
+    std::assert_matches!(first.msg, EventMsg::RawResponseItem(_));
 
     let second = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
         .await
         .expect("expected item started event")
         .expect("channel open");
-    assert!(matches!(
+    std::assert_matches!(
         second.msg,
         EventMsg::ItemStarted(ItemStartedEvent {
             item: TurnItem::UserMessage(UserMessageItem { content, .. }),
@@ -131,13 +131,13 @@ async fn task_finish_emits_turn_item_lifecycle_for_leftover_pending_user_input()
             text: "late pending input".to_string(),
             text_elements: Vec::new(),
         }]
-    ));
+    );
 
     let third = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
         .await
         .expect("expected item completed event")
         .expect("channel open");
-    assert!(matches!(
+    std::assert_matches!(
         third.msg,
         EventMsg::ItemCompleted(ItemCompletedEvent {
             item: TurnItem::UserMessage(UserMessageItem { content, .. }),
@@ -146,19 +146,19 @@ async fn task_finish_emits_turn_item_lifecycle_for_leftover_pending_user_input()
             text: "late pending input".to_string(),
             text_elements: Vec::new(),
         }]
-    ));
+    );
 
     let fourth = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
         .await
         .expect("expected turn complete event")
         .expect("channel open");
-    assert!(matches!(
+    std::assert_matches!(
         fourth.msg,
         EventMsg::TurnComplete(TurnCompleteEvent {
             turn_id,
             last_agent_message: None,
         }) if turn_id == tc.sub_id
-    ));
+    );
 }
 
 #[tokio::test]
@@ -174,7 +174,7 @@ async fn steer_input_requires_active_turn() {
         .await
         .expect_err("steering without active turn should fail");
 
-    assert!(matches!(err, SteerInputError::NoActiveTurn(_)));
+    std::assert_matches!(err, SteerInputError::NoActiveTurn(_));
 }
 
 #[tokio::test]

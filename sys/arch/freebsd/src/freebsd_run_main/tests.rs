@@ -61,11 +61,9 @@ fn resolve_sandbox_policies_rejects_mismatched_sandbox_and_split_inputs() {
         Some(SocketPolicy::Enabled),
     )
     .expect_err("mismatched sandbox and split policies should fail");
-    assert!(
-        matches!(
-            err,
-            ResolveSandboxPoliciesError::MismatchedSandboxPolicy { .. }
-        ),
+    std::assert_matches!(
+        err,
+        ResolveSandboxPoliciesError::MismatchedSandboxPolicy { .. },
         "{err}"
     );
 }

@@ -118,7 +118,7 @@ async fn postgres_vfs_selects_direct_journal_client() {
         .expect("create lazy PostgreSQL pool");
     let client = direct_journal_client_for_vfs(chaos_vfs::Vfs::Postgres(pool))
         .expect("PostgreSQL should have a direct journal client");
-    assert!(matches!(client, JournalClient::Postgres(_)));
+    std::assert_matches!(client, JournalClient::Postgres(_));
 }
 
 #[test]

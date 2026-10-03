@@ -88,7 +88,6 @@ chaos-cli = { workspace = true }
 chaos-kern = { workspace = true }
 chaos-which = { workspace = true }
 chaos-pty = { workspace = true }
-assert_matches = { workspace = true }
 insta = { workspace = true }
 libui = { workspace = true, features = ["testing"] }
 pretty_assertions = { workspace = true }

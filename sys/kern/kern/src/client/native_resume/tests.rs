@@ -276,8 +276,8 @@ fn rendered_delta_delivers_new_hook_and_system_items_without_replaying_consumed_
             "transient instructions must not enter the next durable checkpoint"
         );
         // No new user message is needed, and canonical roles remain intact.
-        assert!(
-            matches!(&prompt.input[3], ResponseItem::Message { role, .. } if role == "developer")
+        std::assert_matches!(
+            &prompt.input[3], ResponseItem::Message { role, .. } if role == "developer"
         );
         let cp = Checkpoint::completed(
             backend,

@@ -112,8 +112,8 @@ async fn resize_burst_debounces_to_single_draw() {
     let key = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE);
     handle.send(Ok(Event::Key(key)));
 
-    assert!(matches!(stream.next().await, Some(TuiEvent::Key(k)) if k == key));
-    assert!(matches!(stream.next().await, Some(TuiEvent::Draw)));
+    std::assert_matches!(stream.next().await, Some(TuiEvent::Key(k)) if k == key);
+    std::assert_matches!(stream.next().await, Some(TuiEvent::Draw));
     let after = timeout(Duration::from_millis(50), stream.next()).await;
     assert!(after.is_err(), "expected no further events, got {after:?}");
 }
@@ -175,7 +175,7 @@ async fn lagged_draw_maps_to_draw() {
     let _ = draw_tx.send(());
 
     let first = stream.next().await;
-    assert!(matches!(first, Some(TuiEvent::Draw)));
+    std::assert_matches!(first, Some(TuiEvent::Draw));
 }
 
 async fn error_or_eof_ends_stream() {

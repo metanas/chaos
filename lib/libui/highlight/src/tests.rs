@@ -288,7 +288,7 @@ fn style_conversion_uses_indexed_color_when_alpha_is_zero_high_index() {
         font_style: FontStyle::empty(),
     };
     let rt = convert_style(syn);
-    assert!(matches!(rt.fg, Some(RtColor::Indexed(0x9a))));
+    std::assert_matches!(rt.fg, Some(RtColor::Indexed(0x9a)));
 }
 
 #[test]
@@ -330,7 +330,7 @@ fn style_conversion_unexpected_alpha_falls_back_to_rgb() {
         font_style: FontStyle::empty(),
     };
     let rt = convert_style(syn);
-    assert!(matches!(rt.fg, Some(RtColor::Rgb(10, 20, 30))));
+    std::assert_matches!(rt.fg, Some(RtColor::Rgb(10, 20, 30)));
 }
 
 #[test]

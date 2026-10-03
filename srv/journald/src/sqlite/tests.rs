@@ -475,8 +475,5 @@ async fn initialize_process_atomically_creates_row_lease_and_entries() {
         })
         .await
         .expect_err("empty-batch initialize_process should fail");
-    assert!(matches!(
-        empty_err,
-        crate::error::JournalError::InvalidRequest(_)
-    ));
+    std::assert_matches!(empty_err, crate::error::JournalError::InvalidRequest(_));
 }

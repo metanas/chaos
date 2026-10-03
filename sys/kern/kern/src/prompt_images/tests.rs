@@ -55,10 +55,7 @@ fn wraps_remote_and_local_images_in_order() -> Result<()> {
             text: local_image_open_tag_text(2),
         }
     );
-    assert!(matches!(
-        content.get(4),
-        Some(ContentItem::InputImage { .. })
-    ));
+    std::assert_matches!(content.get(4), Some(ContentItem::InputImage { .. }));
     assert_eq!(
         content[5],
         ContentItem::InputText {

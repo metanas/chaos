@@ -163,7 +163,7 @@ fn responses_options_apply_request_level_overrides() {
             .and_then(|value| value.to_str().ok()),
         Some("override")
     );
-    assert!(matches!(resolved.compression, Compression::Zstd));
+    std::assert_matches!(resolved.compression, Compression::Zstd);
     assert!(
         resolved
             .turn_state

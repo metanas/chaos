@@ -14,13 +14,10 @@ pub(crate) fn paste_burst_suite() {
 fn ascii_first_char_is_held_then_flushes_as_typed() {
     let mut burst = PasteBurst::default();
     let t0 = Instant::now();
-    assert!(matches!(
-        burst.on_plain_char('a', t0),
-        CharDecision::RetainFirstChar
-    ));
+    std::assert_matches!(burst.on_plain_char('a', t0), CharDecision::RetainFirstChar);
 
     let t1 = t0 + PasteBurst::recommended_flush_delay() + Duration::from_millis(1);
-    assert!(matches!(burst.flush_if_due(t1), FlushResult::Typed('a')));
+    std::assert_matches!(burst.flush_if_due(t1), FlushResult::Typed('a'));
     assert!(!burst.is_active());
 }
 
@@ -29,23 +26,20 @@ fn ascii_first_char_is_held_then_flushes_as_typed() {
 fn ascii_two_fast_chars_start_buffer_from_pending_and_flush_as_paste() {
     let mut burst = PasteBurst::default();
     let t0 = Instant::now();
-    assert!(matches!(
-        burst.on_plain_char('a', t0),
-        CharDecision::RetainFirstChar
-    ));
+    std::assert_matches!(burst.on_plain_char('a', t0), CharDecision::RetainFirstChar);
 
     let t1 = t0 + Duration::from_millis(1);
-    assert!(matches!(
+    std::assert_matches!(
         burst.on_plain_char('b', t1),
         CharDecision::BeginBufferFromPending
-    ));
+    );
     burst.append_char_to_buffer('b', t1);
 
     let t2 = t1 + PasteBurst::recommended_active_flush_delay() + Duration::from_millis(1);
-    assert!(matches!(
+    std::assert_matches!(
         burst.flush_if_due(t2),
         FlushResult::Paste(ref s) if s == "ab"
-    ));
+    );
 }
 
 /// Behavior: when non-char input is about to be applied, we flush any transient burst state
@@ -53,10 +47,7 @@ fn ascii_two_fast_chars_start_buffer_from_pending_and_flush_as_paste() {
 fn flush_before_modified_input_includes_pending_first_char() {
     let mut burst = PasteBurst::default();
     let t0 = Instant::now();
-    assert!(matches!(
-        burst.on_plain_char('a', t0),
-        CharDecision::RetainFirstChar
-    ));
+    std::assert_matches!(burst.on_plain_char('a', t0), CharDecision::RetainFirstChar);
 
     assert_eq!(burst.flush_before_modified_input(), Some("a".to_string()));
     assert!(!burst.is_active());
@@ -84,20 +75,17 @@ fn decide_begin_buffer_only_triggers_for_pastey_prefixes() {
 fn newline_suppression_window_outlives_buffer_flush() {
     let mut burst = PasteBurst::default();
     let t0 = Instant::now();
-    assert!(matches!(
-        burst.on_plain_char('a', t0),
-        CharDecision::RetainFirstChar
-    ));
+    std::assert_matches!(burst.on_plain_char('a', t0), CharDecision::RetainFirstChar);
 
     let t1 = t0 + Duration::from_millis(1);
-    assert!(matches!(
+    std::assert_matches!(
         burst.on_plain_char('b', t1),
         CharDecision::BeginBufferFromPending
-    ));
+    );
     burst.append_char_to_buffer('b', t1);
 
     let t2 = t1 + PasteBurst::recommended_active_flush_delay() + Duration::from_millis(1);
-    assert!(matches!(burst.flush_if_due(t2), FlushResult::Paste(ref s) if s == "ab"));
+    std::assert_matches!(burst.flush_if_due(t2), FlushResult::Paste(ref s) if s == "ab");
     assert!(!burst.is_active());
 
     assert!(burst.newline_should_insert_instead_of_submit(t2));

@@ -134,7 +134,7 @@ async fn sequence_runs_actions_once_in_order() {
         .run(CancellationToken::new())
         .await;
 
-    assert!(matches!(outcome, Ok(Outcome::Success)));
+    std::assert_matches!(outcome, Ok(Outcome::Success));
     assert_eq!(
         executor.events(),
         vec![
@@ -158,7 +158,7 @@ async fn fallback_runs_after_failure() {
         .run(CancellationToken::new())
         .await;
 
-    assert!(matches!(outcome, Ok(Outcome::Success)));
+    std::assert_matches!(outcome, Ok(Outcome::Success));
     assert_eq!(
         executor.events(),
         vec![
@@ -183,7 +183,7 @@ async fn parallel_all_runs_concurrently() {
         .run(CancellationToken::new())
         .await;
 
-    assert!(matches!(outcome, Ok(Outcome::Success)));
+    std::assert_matches!(outcome, Ok(Outcome::Success));
     assert_eq!(started_at.elapsed(), Duration::from_millis(50));
 
     let events = executor.events();
@@ -214,7 +214,7 @@ async fn parallel_failure_cancels_remaining_actions() {
         .run(CancellationToken::new())
         .await;
 
-    assert!(matches!(outcome, Ok(Outcome::Failure)));
+    std::assert_matches!(outcome, Ok(Outcome::Failure));
     let events = executor.events();
     assert!(events.contains(&MockEvent::Cancelled(id("slow"))));
 }
@@ -231,7 +231,7 @@ async fn race_cancels_slow_loser() {
         .run(CancellationToken::new())
         .await;
 
-    assert!(matches!(outcome, Ok(Outcome::Success)));
+    std::assert_matches!(outcome, Ok(Outcome::Success));
     let events = executor.events();
     assert!(events.contains(&MockEvent::Cancelled(id("loser"))));
     assert!(!events.contains(&MockEvent::Completed(id("loser"), ActionOutcome::Success)));
@@ -246,7 +246,7 @@ async fn running_action_is_not_launched_twice() {
         .run(CancellationToken::new())
         .await;
 
-    assert!(matches!(outcome, Ok(Outcome::Success)));
+    std::assert_matches!(outcome, Ok(Outcome::Success));
     assert_eq!(executor.started_count("single"), 1);
 }
 
@@ -265,7 +265,7 @@ async fn abandoned_nested_race_branch_is_cancelled_before_next_action_finishes()
         .run(CancellationToken::new())
         .await;
 
-    assert!(matches!(outcome, Ok(Outcome::Success)));
+    std::assert_matches!(outcome, Ok(Outcome::Success));
     let events = executor.events();
     let cancelled = events
         .iter()
@@ -304,7 +304,7 @@ async fn external_cancellation_stops_all_actions() {
     let Ok(outcome) = joined else {
         panic!("runner task should join");
     };
-    assert!(matches!(outcome, Ok(Outcome::Cancelled)));
+    std::assert_matches!(outcome, Ok(Outcome::Cancelled));
 
     let events = executor.events();
     assert!(events.contains(&MockEvent::Cancelled(id("left"))));
@@ -318,10 +318,10 @@ fn rejects_empty_composites_duplicate_ids_and_blank_ids() {
         Synopsis::new(Node::Sequence(Vec::new())),
         Arc::clone(&executor),
     );
-    assert!(matches!(
-        empty,
-        Err(ValidationError::EmptyComposite(CompositeKind::Sequence))
-    ));
+    std::assert_matches!(
+        empty.err(),
+        Some(ValidationError::EmptyComposite(CompositeKind::Sequence))
+    );
 
     let duplicate = Runner::new(
         Synopsis::new(Node::parallel_all([
@@ -330,17 +330,17 @@ fn rejects_empty_composites_duplicate_ids_and_blank_ids() {
         ])),
         Arc::clone(&executor),
     );
-    assert!(matches!(
-        duplicate,
-        Err(ValidationError::DuplicateActionId(action_id))
+    std::assert_matches!(
+        duplicate.err(),
+        Some(ValidationError::DuplicateActionId(action_id))
             if action_id == id("same")
-    ));
+    );
 
     let blank = Runner::new(
         Synopsis::new(action("  ", MockAction::succeeds_after(1))),
         executor,
     );
-    assert!(matches!(blank, Err(ValidationError::EmptyActionId)));
+    std::assert_matches!(blank.err(), Some(ValidationError::EmptyActionId));
 }
 
 #[test]

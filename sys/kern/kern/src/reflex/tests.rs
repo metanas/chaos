@@ -107,18 +107,18 @@ fn decide_allows_calm_confident_verdicts() {
 #[test]
 fn decide_cancels_on_exfiltration_regardless_of_risk() {
     let outcome = decide(&verdict(0.1, 0.9, &[(ActionRiskSignals::EXFILTRATES, 0.9)]));
-    assert!(
-        matches!(outcome, ArcMonitorOutcome::SteerModel(reason) if reason.contains("private data"))
+    std::assert_matches!(
+        outcome, ArcMonitorOutcome::SteerModel(reason) if reason.contains("private data")
     );
 }
 
 #[test]
 fn decide_asks_about_exfiltration_below_the_block_threshold() {
     for probability in [0.6, 0.7, 0.8499] {
-        assert!(matches!(
+        std::assert_matches!(
             decide(&verdict(0.1, 0.9, &[(ActionRiskSignals::EXFILTRATES, probability)])),
             ArcMonitorOutcome::AskUser(reason) if reason.contains("private data")
-        ));
+        );
     }
     assert_eq!(
         decide(&verdict(
@@ -128,42 +128,42 @@ fn decide_asks_about_exfiltration_below_the_block_threshold() {
         )),
         ArcMonitorOutcome::Ok
     );
-    assert!(matches!(
+    std::assert_matches!(
         decide(&verdict(
             0.1,
             0.9,
             &[(ActionRiskSignals::EXFILTRATES, 0.85)]
         )),
         ArcMonitorOutcome::SteerModel(_)
-    ));
+    );
 }
 
 #[test]
 fn decide_cancels_on_confident_destructive_risk_only() {
-    assert!(matches!(
+    std::assert_matches!(
         decide(&verdict(0.9, 0.7, &[])),
         ArcMonitorOutcome::SteerModel(reason) if reason.contains("destructive")
-    ));
-    assert!(matches!(
+    );
+    std::assert_matches!(
         decide(&verdict(0.9, 0.3, &[])),
         ArcMonitorOutcome::AskUser(reason) if reason.contains("risky")
-    ));
+    );
 }
 
 #[test]
 fn decide_asks_on_secondary_signals_and_low_confidence() {
-    assert!(matches!(
+    std::assert_matches!(
         decide(&verdict(0.2, 0.9, &[(ActionRiskSignals::IRREVERSIBLE, 0.7)])),
         ArcMonitorOutcome::AskUser(reason) if reason.contains("hard to reverse")
-    ));
-    assert!(matches!(
+    );
+    std::assert_matches!(
         decide(&verdict(0.2, 0.9, &[(ActionRiskSignals::BEYOND_REQUEST, 0.65)])),
         ArcMonitorOutcome::AskUser(reason) if reason.contains("beyond the request")
-    ));
-    assert!(matches!(
+    );
+    std::assert_matches!(
         decide(&verdict(0.2, 0.1, &[])),
         ArcMonitorOutcome::AskUser(reason) if reason.contains("could not place")
-    ));
+    );
 }
 
 #[test]
@@ -345,8 +345,8 @@ async fn monitor_action_uses_reflex_verdict_before_remote_monitor() {
         json!({ "type": "mcp_tool_call", "tool_name": "http_post" }),
     )
     .await;
-    assert!(
-        matches!(outcome, ArcMonitorOutcome::SteerModel(reason) if reason.contains("private data"))
+    std::assert_matches!(
+        outcome, ArcMonitorOutcome::SteerModel(reason) if reason.contains("private data")
     );
 }
 
@@ -448,10 +448,10 @@ async fn broken_primary_does_not_select_another_backend_or_implicit_remote_fallb
         .expect(0)
         .mount(&server)
         .await;
-    assert!(matches!(
+    std::assert_matches!(
         monitor_action(&session, &context, json!({"tool": "test"})).await,
         ArcMonitorOutcome::Unavailable(_)
-    ));
+    );
 }
 
 #[tokio::test]

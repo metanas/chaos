@@ -10,7 +10,7 @@ async fn fire_and_forget_round_trip() {
     let (adapter, mut rx) = Adapter::<PingOp>::bounded(4);
     adapter.send(PingOp::Ping).await.expect("send");
     let pkt = rx.recv().await.expect("recv");
-    assert!(matches!(pkt.op, PingOp::Ping));
+    std::assert_matches!(pkt.op, PingOp::Ping);
     assert!(pkt.reply.is_none());
     assert!(pkt.path.is_none());
 }
@@ -53,7 +53,7 @@ async fn closed_router_returns_closed_error() {
     let (adapter, rx) = Adapter::<PingOp>::bounded(4);
     drop(rx);
     let err = adapter.send(PingOp::Ping).await.unwrap_err();
-    assert!(matches!(err, AdapterError::Closed));
+    std::assert_matches!(err, AdapterError::Closed);
 }
 
 #[tokio::test]
@@ -64,7 +64,7 @@ async fn dropped_reply_sender_surfaces_error() {
         drop(pkt.reply);
     });
     let err = adapter.call(PingOp::Ping).await.unwrap_err();
-    assert!(matches!(err, AdapterError::ReplyDropped));
+    std::assert_matches!(err, AdapterError::ReplyDropped);
     server.await.expect("server task");
 }
 
@@ -78,8 +78,5 @@ async fn bounded_channel_backpressures_rather_than_drops() {
     let _ = rx.recv().await.expect("drain");
     assert!(send.is_woken(), "draining capacity must wake the sender");
     tokio_test::assert_ready!(send.poll()).expect("unblocked send");
-    assert!(matches!(
-        rx.try_recv().expect("second packet").op,
-        PingOp::Ping
-    ));
+    std::assert_matches!(rx.try_recv().expect("second packet").op, PingOp::Ping);
 }

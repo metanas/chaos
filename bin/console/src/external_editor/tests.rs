@@ -46,10 +46,7 @@ fn resolve_editor_prefers_visual_and_errors_when_unset() {
         env::remove_var("VISUAL");
         env::remove_var("EDITOR");
     }
-    assert!(matches!(
-        resolve_editor_command(),
-        Err(EditorError::MissingEditor)
-    ));
+    std::assert_matches!(resolve_editor_command(), Err(EditorError::MissingEditor));
 }
 
 pub(crate) async fn run_editor_returns_updated_content() {

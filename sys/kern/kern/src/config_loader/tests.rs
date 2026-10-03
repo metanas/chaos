@@ -785,10 +785,10 @@ async fn project_root_dot_mcp_json_loads_when_project_is_trusted() -> std::io::R
         .get()
         .get("docs")
         .expect("trusted project .mcp.json should load");
-    assert!(matches!(
+    std::assert_matches!(
         server.transport,
         crate::config::types::McpServerTransportConfig::Stdio { .. }
-    ));
+    );
 
     Ok(())
 }
@@ -1228,10 +1228,10 @@ prefix_rules = [
         let parsed: RequirementsExecPolicyToml = from_str(toml_str)?;
         let err = parsed.to_policy().expect_err("missing decision");
 
-        assert!(matches!(
+        std::assert_matches!(
             err,
             RequirementsExecPolicyParseError::MissingDecision { rule_index: 0 }
-        ));
+        );
         Ok(())
     }
 
@@ -1246,10 +1246,10 @@ prefix_rules = [
         let parsed: RequirementsExecPolicyToml = from_str(toml_str)?;
         let err = parsed.to_policy().expect_err("allow decision not allowed");
 
-        assert!(matches!(
+        std::assert_matches!(
             err,
             RequirementsExecPolicyParseError::AllowDecisionNotAllowed { rule_index: 0, .. }
-        ));
+        );
         Ok(())
     }
 
@@ -1262,10 +1262,7 @@ prefix_rules = []
         let parsed: RequirementsExecPolicyToml = from_str(toml_str)?;
         let err = parsed.to_policy().expect_err("empty prefix rules");
 
-        assert!(matches!(
-            err,
-            RequirementsExecPolicyParseError::EmptyPrefixRules
-        ));
+        std::assert_matches!(err, RequirementsExecPolicyParseError::EmptyPrefixRules);
         Ok(())
     }
 

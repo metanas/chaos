@@ -246,6 +246,6 @@ async fn initialize_process_round_trip_over_http() {
         other => panic!("unexpected load result: {other:?}"),
     };
     assert_eq!(loaded.items.len(), 2);
-    assert!(matches!(loaded.items[0].item, RolloutItem::SessionMeta(_)));
-    assert!(matches!(loaded.items[1].item, RolloutItem::Compacted(_)));
+    std::assert_matches!(loaded.items[0].item, RolloutItem::SessionMeta(_));
+    std::assert_matches!(loaded.items[1].item, RolloutItem::Compacted(_));
 }

@@ -1058,7 +1058,7 @@ impl ActiveJournalWriter {
         config: PendingJournalConfig,
         items: &[RolloutItem],
     ) -> Result<Self, String> {
-        debug_assert!(matches!(config.mode, JournalSinkMode::Create));
+        std::debug_assert_matches!(config.mode, JournalSinkMode::Create);
         let client = journal_client_for_mounted_backend().await?;
 
         let create_input = JournalCreateProcessInput {
@@ -1124,7 +1124,7 @@ impl ActiveJournalWriter {
         config: PendingJournalConfig,
         items: &[RolloutItem],
     ) -> anyhow::Result<Self> {
-        debug_assert!(matches!(config.mode, JournalSinkMode::Resume));
+        std::debug_assert_matches!(config.mode, JournalSinkMode::Resume);
         let client = journal_client_for_mounted_backend()
             .await
             .map_err(anyhow::Error::msg)?;

@@ -15,11 +15,11 @@ fn resolves_index_and_page_uris() {
                 .expect("embedded page")
         ))
     );
-    assert!(matches!(
+    std::assert_matches!(
         resolve_resource_uri("chaos://man/chaos-modes.7#switching")
             .expect("resolve anchored page"),
         Some(ResolvedManualResource::Page(page)) if page.id == "chaos-modes.7"
-    ));
+    );
 }
 
 #[test]

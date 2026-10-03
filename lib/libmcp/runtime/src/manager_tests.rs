@@ -686,14 +686,11 @@ async fn server_startup_statuses_report_pending_and_failed_without_blocking() {
             .await
             .expect("status snapshot should not wait for pending clients");
 
-    assert!(matches!(
-        statuses.get("pending"),
-        Some(McpStartupStatus::Starting)
-    ));
-    assert!(matches!(
+    std::assert_matches!(statuses.get("pending"), Some(McpStartupStatus::Starting));
+    std::assert_matches!(
         statuses.get("failed"),
         Some(McpStartupStatus::Failed { error }) if error == "401 Unauthorized"
-    ));
+    );
 }
 
 #[test]

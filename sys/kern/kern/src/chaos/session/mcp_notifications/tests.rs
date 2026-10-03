@@ -78,7 +78,7 @@ async fn resource_updates_are_safely_framed_and_delivered() {
         .await;
 
     let history = session.clone_history().await;
-    assert!(matches!(
+    std::assert_matches!(
         history.raw_items().last(),
         Some(ResponseItem::Message {
             role,
@@ -91,7 +91,7 @@ async fn resource_updates_are_safely_framed_and_delivered() {
                     if text.contains("server: \"coordinator\"")
                         && text.contains("uri: \"agent://inbox\"")
             )
-    ));
+    );
 
     *session.active_turn.lock().await = Some(crate::state::ActiveTurn::default());
 
@@ -102,7 +102,7 @@ async fn resource_updates_are_safely_framed_and_delivered() {
         })
         .await;
 
-    assert!(matches!(
+    std::assert_matches!(
         session.get_pending_input().await.as_slice(),
         [ResponseInputItem::Message {
             role,
@@ -114,5 +114,5 @@ async fn resource_updates_are_safely_framed_and_delivered() {
                     if text.contains("server: \"coordinator\"")
                         && text.contains("uri: \"agent://inbox\"")
             )
-    ));
+    );
 }

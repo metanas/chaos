@@ -30,7 +30,6 @@ url = { workspace = true }
 [dev-dependencies]
 chaos-test-fixtures = { workspace = true }
 anyhow = { workspace = true }
-assert_matches = { workspace = true }
 base64 = { workspace = true }
 pretty_assertions = { workspace = true }
 sha1 = { workspace = true }

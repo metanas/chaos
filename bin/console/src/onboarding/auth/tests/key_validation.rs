@@ -14,10 +14,7 @@ fn anthropic_entry_widget() -> (AccountsWidget, TempDir) {
         .position(|provider| provider.id == "anthropic")
         .unwrap();
     widget.select_provider_by_index(index);
-    assert!(matches!(
-        widget.sign_in_state(),
-        SignInState::ApiKeyEntry(_)
-    ));
+    std::assert_matches!(widget.sign_in_state(), SignInState::ApiKeyEntry(_));
     (widget, home)
 }
 
@@ -123,7 +120,7 @@ fn accounts_custom_provider_accepts_its_own_key_format() {
 fn accounts_picker_does_not_autodetect_pasted_keys() {
     let (mut widget, home) = widget_with_model_providers(built_in_model_providers());
     widget.handle_paste("sk-kimi-do-not-autodetect".into());
-    assert!(matches!(widget.sign_in_state(), SignInState::PickProvider));
+    std::assert_matches!(widget.sign_in_state(), SignInState::PickProvider);
     assert!(widget.selected_provider_id.read().unwrap().is_none());
     assert!(!home.path().join("auth.json").exists());
 }

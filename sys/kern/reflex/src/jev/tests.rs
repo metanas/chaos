@@ -158,10 +158,10 @@ fn response_deserializes_documented_wire_shape() {
             .and_then(|answer| answer.probability_of("technical")),
         Some(0.159)
     );
-    assert!(matches!(
+    std::assert_matches!(
         response.answer("frustration"),
         Ok(Answer::Score { legend, .. }) if legend.len() == 3
-    ));
+    );
 }
 
 #[test]
@@ -190,21 +190,19 @@ fn response_validation_rejects_incomplete_or_incompatible_answers() {
         let mut payload = ticket_answers();
         *payload.pointer_mut(pointer).expect("fixture field") = value;
         let response: SystemOneResponse = serde_json::from_value(payload).expect_or_panic();
-        assert!(
-            matches!(
-                response.validate(&ticket_questions()),
-                Err(JevError::Decode(_))
-            ),
+        std::assert_matches!(
+            response.validate(&ticket_questions()),
+            Err(JevError::Decode(_)),
             "{pointer}"
         );
     }
     let mut response: SystemOneResponse =
         serde_json::from_value(ticket_answers()).expect_or_panic();
     response.answers.remove("is_urgent");
-    assert!(matches!(
+    std::assert_matches!(
         response.validate(&ticket_questions()),
         Err(JevError::MissingAnswer(key)) if key == "is_urgent"
-    ));
+    );
 }
 
 #[test]
@@ -274,27 +272,21 @@ fn response_validation_rejects_invalid_numbers_without_clamping() {
 #[test]
 fn typed_accessors_reject_mismatched_answer_types() {
     let response: SystemOneResponse = serde_json::from_value(ticket_answers()).expect_or_panic();
-    assert!(matches!(
-        response.noul("department"),
-        Err(JevError::Decode(_))
-    ));
-    assert!(matches!(
-        response.score("is_urgent"),
-        Err(JevError::Decode(_))
-    ));
-    assert!(matches!(
+    std::assert_matches!(response.noul("department"), Err(JevError::Decode(_)));
+    std::assert_matches!(response.score("is_urgent"), Err(JevError::Decode(_)));
+    std::assert_matches!(
         response.choice("missing"),
         Err(JevError::MissingAnswer(key)) if key == "missing"
-    ));
+    );
 }
 
 #[test]
 fn validation_rejects_malformed_questions() {
     let empty_instructions = Question::noul("   ");
-    assert!(matches!(
+    std::assert_matches!(
         empty_instructions.validate("q"),
         Err(JevError::InvalidQuestion { key, .. }) if key == "q"
-    ));
+    );
 
     let too_many = Question::choice(
         "pick",
@@ -329,7 +321,7 @@ async fn evaluate_rejects_empty_question_set_without_a_request() {
     let result = client(&server)
         .evaluate(json!("state"), Questions::new())
         .await;
-    assert!(matches!(result, Err(JevError::NoQuestions)));
+    std::assert_matches!(result, Err(JevError::NoQuestions));
 }
 
 #[tokio::test]
@@ -396,7 +388,7 @@ async fn evaluate_does_not_retry_unauthorized() {
     let result = client(&server)
         .evaluate(json!("state"), ticket_questions())
         .await;
-    assert!(matches!(result, Err(JevError::Unauthorized)));
+    std::assert_matches!(result, Err(JevError::Unauthorized));
 }
 
 #[tokio::test]
@@ -413,10 +405,10 @@ async fn evaluate_surfaces_validation_body() {
     let result = client(&server)
         .evaluate(json!("state"), ticket_questions())
         .await;
-    assert!(matches!(
+    std::assert_matches!(
         result,
         Err(JevError::Validation(body)) if body.contains("questions.department")
-    ));
+    );
 }
 
 #[tokio::test]
@@ -454,7 +446,7 @@ async fn evaluate_gives_up_after_max_attempts() {
     let result = client(&server)
         .evaluate(json!("state"), ticket_questions())
         .await;
-    assert!(matches!(result, Err(JevError::Overloaded)));
+    std::assert_matches!(result, Err(JevError::Overloaded));
 }
 
 #[tokio::test]

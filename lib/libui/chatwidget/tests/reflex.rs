@@ -10,11 +10,11 @@ pub(super) async fn run() {
     for command in [SlashCommand::Accounts, SlashCommand::Reflex] {
         chat.dispatch_command(command);
         let event = rx.try_recv().unwrap();
-        assert!(matches!(
+        assert_matches!(
             (command, event),
             (SlashCommand::Accounts, AppEvent::OpenAccountsPopup)
                 | (SlashCommand::Reflex, AppEvent::OpenReflexPopup)
-        ));
+        );
         assert!(chat.bottom_pane.composer_text().is_empty());
         assert!(ops.try_recv().is_err());
     }

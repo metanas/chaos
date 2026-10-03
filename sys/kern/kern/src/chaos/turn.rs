@@ -936,7 +936,7 @@ mod hook_agent_context_tests {
             serde_json::from_slice(&fs::read(&path).expect("read snapshot"))
                 .expect("parse rollout snapshot");
         assert_eq!(rollout_items.len(), 1);
-        assert!(matches!(rollout_items[0], RolloutItem::ResponseItem(_)));
+        std::assert_matches!(rollout_items[0], RolloutItem::ResponseItem(_));
 
         drop(snapshot);
         assert!(!path.exists());

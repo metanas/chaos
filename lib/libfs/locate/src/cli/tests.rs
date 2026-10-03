@@ -23,8 +23,8 @@ fn parses_defaults_and_repeated_excludes() {
 fn rejects_unknown_flags() {
     let argv = [OsStr::new("--unknown")];
 
-    assert!(matches!(
-        Cli::parse_from(&argv),
-        Err(usage::Error::UnknownFlag { .. })
-    ));
+    std::assert_matches!(
+        Cli::parse_from(&argv).err(),
+        Some(usage::Error::UnknownFlag { .. })
+    );
 }

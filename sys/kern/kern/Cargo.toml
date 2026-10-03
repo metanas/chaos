@@ -158,7 +158,6 @@ chaos-keyring = { workspace = true }
 chaos-test-fixtures = { workspace = true }
 assert_cmd = { workspace = true }
 chaos-model-catalog = { workspace = true, features = ["test-support"] }
-assert_matches = { workspace = true }
 keyring-core = { workspace = true }
 chaos-argv = { workspace = true }
 chaos-snitch = { workspace = true, features = [

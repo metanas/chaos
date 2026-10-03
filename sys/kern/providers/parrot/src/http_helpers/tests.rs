@@ -28,7 +28,7 @@ fn helpers_compose_into_a_full_header_map() {
 fn bearer_helper_rejects_blank_keys() {
     let mut headers = HeaderMap::new();
     let err = insert_bearer_auth(&mut headers, "   ", "ChatCompletions").unwrap_err();
-    assert!(matches!(err, AbiError::InvalidRequest { .. }));
+    std::assert_matches!(err, AbiError::InvalidRequest { .. });
     assert!(headers.is_empty());
 }
 

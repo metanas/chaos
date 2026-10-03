@@ -183,11 +183,11 @@ async fn kimi_discovery_and_reasoning_tool_round_trip_use_the_selected_endpoint(
             event,
             TurnEvent::ReasoningSummaryDelta { delta, .. } if delta == "Inspect the files."
         )));
-        assert!(matches!(events.last(),
+        std::assert_matches!(events.last(),
             Some(TurnEvent::Completed { token_usage: Some(usage), .. })
                 if usage.total_tokens == 37 && usage.reasoning_output_tokens == 8
                     && usage.cached_input_tokens == 10
-        ));
+        );
         let mut history: Vec<ResponseItem> = events
             .into_iter()
             .filter_map(|event| match event {
@@ -248,10 +248,10 @@ async fn kimi_discovery_and_reasoning_tool_round_trip_use_the_selected_endpoint(
             .expect(1)
             .mount(&gateway)
             .await;
-        assert!(matches!(
-            adapter.stream(turn(model, vec![])).await,
-            Err(AbiError::Transport { status: 401, .. })
-        ));
+        std::assert_matches!(
+            adapter.stream(turn(model, vec![])).await.err(),
+            Some(AbiError::Transport { status: 401, .. })
+        );
         gateway.verify().await;
     }
 }

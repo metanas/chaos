@@ -98,6 +98,15 @@ pub enum RuntimeDbHandle {
     Sqlite(Arc<StateRuntime>),
 }
 
+impl std::fmt::Debug for RuntimeDbHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Postgres(_) => "Postgres(..)",
+            Self::Sqlite(_) => "Sqlite(..)",
+        })
+    }
+}
+
 #[derive(Clone)]
 pub struct PostgresRuntime {
     chaos_home: PathBuf,

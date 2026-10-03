@@ -91,10 +91,10 @@ fn rollout_item_discards_retired_undo_events() -> Result<()> {
                 "message": null
             }
         }))?;
-        assert!(matches!(
+        std::assert_matches!(
             item,
             RolloutItem::ResponseItem(crate::models::ResponseItem::Other)
-        ));
+        );
     }
 
     let snapshot: RolloutItem = serde_json::from_value(json!({
@@ -109,10 +109,10 @@ fn rollout_item_discards_retired_undo_events() -> Result<()> {
             }
         }
     }))?;
-    assert!(matches!(
+    std::assert_matches!(
         snapshot,
         RolloutItem::ResponseItem(crate::models::ResponseItem::Other)
-    ));
+    );
 
     Ok(())
 }

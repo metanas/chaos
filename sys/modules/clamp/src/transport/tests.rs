@@ -24,10 +24,7 @@ fn explicit_missing_cli_path_is_distinguishable() {
         ..Default::default()
     };
 
-    assert!(matches!(
-        find_claude_cli(&config),
-        Err(ClampError::CliNotFound(_))
-    ));
+    std::assert_matches!(find_claude_cli(&config), Err(ClampError::CliNotFound(_)));
 }
 
 #[test]

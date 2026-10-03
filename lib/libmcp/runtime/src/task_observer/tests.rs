@@ -23,10 +23,7 @@ async fn terminal_observation_does_not_poll_again() {
             Ok(task(TaskStatus::Working))
         },
     );
-    assert!(matches!(
-        events.recv().await,
-        Some(TaskObservation::Status(_))
-    ));
+    std::assert_matches!(events.recv().await, Some(TaskObservation::Status(_)));
     assert!(events.recv().await.is_none());
 }
 
@@ -36,14 +33,8 @@ async fn observation_failure_is_not_a_task_outcome_and_cancel_stops_polling() {
     let mut events = observe_task(task(TaskStatus::Working), cancel.clone(), || async {
         anyhow::bail!("disconnected")
     });
-    assert!(matches!(
-        events.recv().await,
-        Some(TaskObservation::Status(_))
-    ));
-    assert!(matches!(
-        events.recv().await,
-        Some(TaskObservation::Unavailable(_))
-    ));
+    std::assert_matches!(events.recv().await, Some(TaskObservation::Status(_)));
+    std::assert_matches!(events.recv().await, Some(TaskObservation::Unavailable(_)));
     cancel.cancel();
     assert!(events.recv().await.is_none());
 }

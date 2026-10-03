@@ -55,20 +55,20 @@ fn pending_approvals_reject_duplicates_across_kinds_independently() {
     let (tx_c, _rx_c) = oneshot::channel();
 
     // First exec insert for call_id=foo — accepted.
-    assert!(matches!(
+    std::assert_matches!(
         ts.insert_pending_approval(ApprovalKind::Exec, "foo".into(), tx_a),
         PendingInsert::Inserted
-    ));
+    );
     // Duplicate exec insert for the same call_id — rejected.
-    assert!(matches!(
+    std::assert_matches!(
         ts.insert_pending_approval(ApprovalKind::Exec, "foo".into(), tx_b),
         PendingInsert::Duplicate(_)
-    ));
+    );
     // Patch with the same textual id — accepted (separate namespace).
-    assert!(matches!(
+    std::assert_matches!(
         ts.insert_pending_approval(ApprovalKind::Patch, "foo".into(), tx_c),
         PendingInsert::Inserted
-    ));
+    );
     // Removing by the wrong kind must not find the entry.
     assert!(
         ts.remove_pending_approval(ApprovalKind::Patch, "nope")

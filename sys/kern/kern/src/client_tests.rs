@@ -293,10 +293,7 @@ fn resolve_anthropic_auth_errors_when_provider_has_no_static_auth() {
         .resolve_anthropic_auth()
         .expect_err("missing auth should fail locally");
 
-    assert!(matches!(
-        err,
-        crate::error::ChaosErr::ProviderAuthMissing(_)
-    ));
+    std::assert_matches!(err, crate::error::ChaosErr::ProviderAuthMissing(_));
 }
 
 #[tokio::test]
@@ -345,10 +342,10 @@ async fn chat_completions_uses_resolved_provider_credentials() {
                 "test-target-key"
             );
         } else {
-            assert!(matches!(
-                setup,
-                Err(crate::error::ChaosErr::ProviderAuthMissing(_))
-            ));
+            std::assert_matches!(
+                setup.err(),
+                Some(crate::error::ChaosErr::ProviderAuthMissing(_))
+            );
         }
     }
 }

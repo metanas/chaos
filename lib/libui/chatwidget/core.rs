@@ -195,7 +195,7 @@ pub fn get_limits_duration(windows_minutes: i64) -> String {
 
 // ── State machine enums ───────────────────────────────────────────────────────
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub(super) enum RateLimitSwitchPromptState {
     #[default]
     Idle,

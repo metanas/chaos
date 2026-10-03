@@ -1052,19 +1052,19 @@ fn monitor_outcomes_respect_prompt_policy() {
             ArcMonitorOutcome::AskUser("review this action".into()),
             ArcMonitorOutcome::SteerModel("unsafe".into()),
         ] {
-            assert!(matches!(
+            std::assert_matches!(
                 monitor_approval(outcome, policy),
                 Err(McpToolApprovalDecision::BlockedBySafetyMonitor(_))
-            ));
+            );
         }
     }
-    assert!(matches!(
+    std::assert_matches!(
         monitor_approval(
             ArcMonitorOutcome::Unavailable("remote_http"),
             ApprovalPolicy::Interactive
         ),
         Ok(Some(reason)) if reason.contains("One-time approval")
-    ));
+    );
 }
 
 #[test]
@@ -1181,14 +1181,14 @@ async fn required_monitor_precedes_headless_annotation_and_approval_shortcuts() 
         for read_only in [true, false] {
             let mut metadata = approval_metadata(None, None, None, None, None);
             metadata.annotations = Some(annotations(Some(read_only), None, None));
-            assert!(matches!(
+            std::assert_matches!(
                 maybe_request_mcp_tool_approval(
                     &session, &context, "test", &invocation, Some(&metadata), mode,
                 ).await,
                 Some(McpToolApprovalDecision::BlockedBySafetyMonitor(reason))
                     if reason.contains("Safety check unavailable")
                         && reason.contains("Approval prompts are disabled")
-            ));
+            );
         }
     }
 }

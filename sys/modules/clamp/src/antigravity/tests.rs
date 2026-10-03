@@ -62,7 +62,7 @@ async fn rejects_stdout_beyond_the_stream_limit() {
     let error = read_events(oversized.as_slice(), None)
         .await
         .expect_err("oversized stdout should be rejected");
-    assert!(matches!(error, AntigravityError::Protocol(_)), "{error}");
+    std::assert_matches!(error, AntigravityError::Protocol(_), "{error}");
 }
 
 #[test]
@@ -73,17 +73,18 @@ fn rejects_unknown_effort_and_unsafe_resume_ids() {
         bridge: Some(test_bridge(directory.path())),
         ..Default::default()
     };
-    assert!(matches!(
+    std::assert_matches!(
         AntigravityTransport::new(AntigravityConfig {
             effort: Some("ultra".to_string()),
             ..base.clone()
-        }),
-        Err(AntigravityError::Protocol(_))
-    ));
-    assert!(matches!(
-        AntigravityTransport::with_conversation_id(base, "../other-session".to_string()),
-        Err(AntigravityError::Protocol(_))
-    ));
+        })
+        .err(),
+        Some(AntigravityError::Protocol(_))
+    );
+    std::assert_matches!(
+        AntigravityTransport::with_conversation_id(base, "../other-session".to_string()).err(),
+        Some(AntigravityError::Protocol(_))
+    );
 }
 
 #[test]
@@ -109,10 +110,7 @@ fn non_executable_cli_paths_are_rejected() {
         bridge: Some(test_bridge(directory.path())),
         ..Default::default()
     };
-    assert!(matches!(
-        find_agy_cli(&config),
-        Err(AntigravityError::CliNotFound(_))
-    ));
+    std::assert_matches!(find_agy_cli(&config), Err(AntigravityError::CliNotFound(_)));
 }
 
 #[cfg(unix)]
@@ -408,10 +406,10 @@ fn managed_config_initializes_placeholders_but_rejects_invalid_existing_data() {
     }
     for invalid in ["{", "[]", "null", "42", "\u{00a0}"] {
         std::fs::write(&path, invalid).unwrap();
-        assert!(matches!(
+        std::assert_matches!(
             read_json_object_or_empty(&path),
             Err(AntigravityError::Protocol(_))
-        ));
+        );
         assert_eq!(std::fs::read_to_string(&path).unwrap(), invalid);
     }
     std::fs::write(&path, r#"{"theme":"dark"}"#).unwrap();

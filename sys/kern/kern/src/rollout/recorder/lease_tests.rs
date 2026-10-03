@@ -361,8 +361,8 @@ async fn concurrent_recovery_claims_have_one_winner() {
         (Ok(_), Err(error)) | (Err(error), Ok(_)) => error,
         other => panic!("expected exactly one lease owner: {other:?}"),
     };
-    assert!(matches!(error, JournalClientError::Remote(payload)
-        if payload.code == JournalErrorCode::LeaseConflict));
+    std::assert_matches!(error, JournalClientError::Remote(payload)
+        if payload.code == JournalErrorCode::LeaseConflict);
 }
 
 #[tokio::test(start_paused = true)]
@@ -585,10 +585,10 @@ async fn resumed_session_lease_conflict_preserves_type_and_diagnostics() {
     let error = ActiveJournalWriter::connect_existing(journal.client.clone(), &config)
         .await
         .expect_err("an active writer must block resume");
-    assert!(matches!(
+    std::assert_matches!(
         error.downcast_ref::<ChaosErr>(),
         Some(ChaosErr::SessionInUse(id)) if *id == writer.process_id
-    ));
+    );
     let diagnostic = format!("{error:#}");
     assert!(diagnostic.contains("LeaseConflict"));
     assert!(diagnostic.contains(&writer.owner_id));
@@ -601,7 +601,7 @@ async fn resumed_session_lease_conflict_preserves_type_and_diagnostics() {
         &anyhow::Error::new(io_error),
         journal._dir.path(),
     );
-    assert!(matches!(mapped, ChaosErr::SessionInUse(id) if id == writer.process_id));
+    std::assert_matches!(mapped, ChaosErr::SessionInUse(id) if id == writer.process_id);
     assert!(!mapped.to_string().contains("ErrorPayload"));
 
     // Formatting must not change ownership or release the other writer's lease.

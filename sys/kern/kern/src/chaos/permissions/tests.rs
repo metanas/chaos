@@ -27,13 +27,13 @@ fn revision_conflicts_do_not_mutate_state() {
             false,
         )
         .expect_err("revision conflict");
-    assert!(matches!(
+    std::assert_matches!(
         err,
         PermissionUpdateError::RevisionConflict {
             expected: 4,
             actual: 0
         }
-    ));
+    );
     assert_eq!(layer.approval_policy, ApprovalPolicy::Interactive);
     assert_eq!(layer.revision, 0);
 }

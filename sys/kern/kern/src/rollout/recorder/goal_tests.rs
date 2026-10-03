@@ -58,7 +58,7 @@ async fn goal_checkpoint_waits_for_confirm_and_reconciles_a_failed_ack() {
     let Some(RolloutCmd::AddItems(items)) = rx.recv().await else {
         panic!("expected structural checkpoint")
     };
-    assert!(matches!(&items[..], [RolloutItem::GoalCheckpoint(_)]));
+    std::assert_matches!(&items[..], [RolloutItem::GoalCheckpoint(_)]);
     let Some(RolloutCmd::Persist { ack }) = rx.recv().await else {
         panic!("expected materialization")
     };

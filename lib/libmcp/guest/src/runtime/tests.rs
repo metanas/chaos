@@ -81,12 +81,12 @@ async fn handshake_accepts_previous_version_and_replies_to_ping() {
 
     let sent = transport.sent.lock().await;
     assert_eq!(sent.len(), 3);
-    assert!(matches!(&sent[0], JsonRpcMessage::Request(request) if request.method == "initialize"));
-    assert!(
-        matches!(&sent[1], JsonRpcMessage::Response(response) if response.id == Some(serde_json::json!("ping-1")))
+    std::assert_matches!(&sent[0], JsonRpcMessage::Request(request) if request.method == "initialize");
+    std::assert_matches!(
+        &sent[1], JsonRpcMessage::Response(response) if response.id == Some(serde_json::json!("ping-1"))
     );
-    assert!(
-        matches!(&sent[2], JsonRpcMessage::Notification(notification) if notification.method == "notifications/initialized")
+    std::assert_matches!(
+        &sent[2], JsonRpcMessage::Notification(notification) if notification.method == "notifications/initialized"
     );
 }
 
@@ -119,7 +119,7 @@ async fn connect_times_out_when_server_never_answers_initialize() {
     )
     .await;
 
-    assert!(matches!(result, Err(GuestError::Timeout(_))));
+    std::assert_matches!(result.err(), Some(GuestError::Timeout(_)));
 }
 
 struct SlowSendTransport {

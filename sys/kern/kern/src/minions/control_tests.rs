@@ -7,7 +7,6 @@ use crate::config::Config;
 use crate::config::ConfigBuilder;
 use crate::config_loader::LoaderOverrides;
 use crate::minions::agent_status_from_event;
-use assert_matches::assert_matches;
 use chaos_ipc::config_types::ModeKind;
 use chaos_ipc::models::ContentItem;
 use chaos_ipc::models::ResponseItem;
@@ -20,6 +19,7 @@ use chaos_ipc::protocol::TurnAbortedEvent;
 use chaos_ipc::protocol::TurnCompleteEvent;
 use chaos_ipc::protocol::TurnStartedEvent;
 use pretty_assertions::assert_eq;
+use std::assert_matches;
 use tempfile::TempDir;
 use tokio::time::Duration;
 use tokio::time::sleep;
@@ -864,10 +864,10 @@ async fn resume_process_subagent_restores_stored_nickname_and_role() {
             agent_role: Some("scout".into()),
         })
     );
-    assert!(matches!(
-        guards.reserve_spawn_slot(Some(1)),
-        Err(ChaosErr::AgentLimitReached { max_threads: 1 })
-    ));
+    assert_matches!(
+        guards.reserve_spawn_slot(Some(1)).err(),
+        Some(ChaosErr::AgentLimitReached { max_threads: 1 })
+    );
 }
 
 #[tokio::test]

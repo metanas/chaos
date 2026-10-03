@@ -108,6 +108,7 @@ pub(crate) enum ApprovalKind {
 /// oneshot — the unused sender is handed back to the caller to synthesize
 /// an immediate abort response.
 #[must_use]
+#[derive(Debug)]
 pub(crate) enum PendingInsert<T> {
     Inserted,
     Duplicate(oneshot::Sender<T>),

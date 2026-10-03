@@ -138,20 +138,20 @@ fn initial_replay_event_msgs_converts_response_items_for_resume() {
         .expect("expected replay events");
 
     assert_eq!(replay.len(), 2);
-    assert!(matches!(
+    std::assert_matches!(
         &replay[0],
         EventMsg::ItemCompleted(ItemCompletedEvent {
             item: TurnItem::UserMessage(_),
             ..
         })
-    ));
-    assert!(matches!(
+    );
+    std::assert_matches!(
         &replay[1],
         EventMsg::ItemCompleted(ItemCompletedEvent {
             item: TurnItem::AgentMessage(_),
             ..
         })
-    ));
+    );
 }
 
 #[test]
@@ -233,27 +233,27 @@ fn initial_replay_event_msgs_preserves_non_message_response_items() {
         .expect("expected replay events");
 
     assert_eq!(replay.len(), 3);
-    assert!(matches!(
+    std::assert_matches!(
         &replay[0],
         EventMsg::ItemCompleted(ItemCompletedEvent {
             item: TurnItem::Reasoning(_),
             ..
         })
-    ));
-    assert!(matches!(
+    );
+    std::assert_matches!(
         &replay[1],
         EventMsg::ItemCompleted(ItemCompletedEvent {
             item: TurnItem::WebSearch(_),
             ..
         })
-    ));
-    assert!(matches!(
+    );
+    std::assert_matches!(
         &replay[2],
         EventMsg::ItemCompleted(ItemCompletedEvent {
             item: TurnItem::ImageGeneration(_),
             ..
         })
-    ));
+    );
 }
 
 fn test_tool_runtime(session: Arc<Session>, turn_context: Arc<TurnContext>) -> ToolCallRuntime {

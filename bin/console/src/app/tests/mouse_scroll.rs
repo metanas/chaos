@@ -5,6 +5,17 @@ use pretty_assertions::assert_eq;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
+impl std::fmt::Debug for Overlay {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Transcript(_) => "Transcript(..)",
+            Self::Static(_) => "Static(..)",
+            Self::Accounts(_) => "Accounts(..)",
+            Self::Settings(_) => "Settings(..)",
+        })
+    }
+}
+
 fn wheel(kind: MouseEventKind) -> TuiEvent {
     TuiEvent::Mouse(MouseEvent {
         kind,
@@ -196,7 +207,7 @@ async fn mouse_scroll_routes_into_thread_and_reaches_both_ends() {
         KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL),
     )
     .await;
-    assert!(matches!(app.overlay, Some(Overlay::Transcript(_))));
+    assert_matches!(app.overlay, Some(Overlay::Transcript(_)));
     app.close_transcript_overlay(&mut tui);
     assert_eq!(first_thread_row(&mut app), format!("thread {}", bottom - 3));
 }

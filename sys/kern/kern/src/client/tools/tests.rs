@@ -42,7 +42,7 @@ fn chaos_mcp_bridge_tools_are_allowed_at_claude_permission_layer() {
 #[test]
 fn non_bridge_mcp_tools_are_not_implicitly_allowed() {
     assert!(!is_clamp_mcp_tool("mcp__other__git_repo"));
-    assert!(matches!(
+    std::assert_matches!(
         clamp_tool_permission_decision(
             "mcp__other__git_repo",
             &serde_json::json!({}),
@@ -50,5 +50,5 @@ fn non_bridge_mcp_tools_are_not_implicitly_allowed() {
             &VfsPolicy::default(),
         ),
         ClampToolPermissionDecision::Deny(_)
-    ));
+    );
 }

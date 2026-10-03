@@ -214,8 +214,9 @@ async fn request_permissions_tool_is_auto_denied_when_granular_request_permissio
         )
     })
     .await;
-    assert!(
-        matches!(event, EventMsg::TurnComplete(_)),
+    std::assert_matches!(
+        event,
+        EventMsg::TurnComplete(_),
         "request_permissions should not emit a prompt when granular.request_permissions is false: {event:?}"
     );
 

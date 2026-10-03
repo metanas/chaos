@@ -88,8 +88,5 @@ fn rustls_config_reports_invalid_ca_file() {
     )
     .expect_err("invalid CA");
 
-    assert!(matches!(
-        error,
-        BuildCustomCaTransportError::InvalidCaFile { .. }
-    ));
+    std::assert_matches!(error, BuildCustomCaTransportError::InvalidCaFile { .. });
 }

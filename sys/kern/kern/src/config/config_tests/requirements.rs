@@ -24,11 +24,9 @@ fn test_untrusted_project_gets_unless_trusted_approval_policy() -> anyhow::Resul
         "Expected Supervised approval policy for untrusted project"
     );
 
-    assert!(
-        matches!(
-            config.permissions.sandbox_policy.get(),
-            SandboxPolicy::WorkspaceWrite { .. }
-        ),
+    std::assert_matches!(
+        config.permissions.sandbox_policy.get(),
+        SandboxPolicy::WorkspaceWrite { .. },
         "Expected WorkspaceWrite sandbox for untrusted project"
     );
 

@@ -31,14 +31,14 @@ fn init_repo(dir: &Path) {
 #[test]
 fn git_errors_use_upstream_classification() {
     let missing = gix::Error::from_error(gix::error::not_found("missing reference"));
-    assert!(matches!(GitError::from(missing), GitError::RefNotFound(_)));
+    std::assert_matches!(GitError::from(missing), GitError::RefNotFound(_));
 
     let invalid = gix::Error::from_error(gix::error::validation("invalid revision"));
-    assert!(matches!(GitError::from(invalid), GitError::InvalidInput(_)));
+    std::assert_matches!(GitError::from(invalid), GitError::InvalidInput(_));
 
     let corrupt = gix::Error::from_error(gix::error::corruption("damaged object"));
     let error = GitError::from(corrupt);
-    assert!(matches!(error, GitError::Operation(_)));
+    std::assert_matches!(error, GitError::Operation(_));
     assert!(error.to_string().contains("damaged object"));
 }
 
@@ -50,7 +50,7 @@ fn revision_lookup_reports_missing_references() {
 
     let error =
         crate::log(dir, Some(1), Some("refs/heads/missing")).expect_err("missing log reference");
-    assert!(matches!(error, GitError::RefNotFound(_)), "{error}");
+    std::assert_matches!(error, GitError::RefNotFound(_), "{error}");
 
     let error = diff_report(
         dir,
@@ -61,7 +61,7 @@ fn revision_lookup_reports_missing_references() {
         false,
     )
     .expect_err("missing diff reference");
-    assert!(matches!(error, GitError::RefNotFound(_)), "{error}");
+    std::assert_matches!(error, GitError::RefNotFound(_), "{error}");
 }
 
 #[test]
@@ -124,7 +124,7 @@ fn diff_report_returns_scoped_formats_and_whitespace_checks() {
         false,
     )
     .expect_err("worktree base must be rejected");
-    assert!(matches!(error, GitError::InvalidInput(_)));
+    std::assert_matches!(error, GitError::InvalidInput(_));
     assert!(
         error
             .to_string()
@@ -156,7 +156,7 @@ fn diff_report_name_only_skips_oversized_blob_content() {
 
     let error = diff_report(dir, DiffScope::Staged, DiffFormat::Patch, None, None, false)
         .expect_err("patch generation must reject oversized content");
-    assert!(matches!(error, GitError::DiffLimit(_)));
+    std::assert_matches!(error, GitError::DiffLimit(_));
     assert!(error.to_string().contains("generated.txt"));
 }
 

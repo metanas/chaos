@@ -10,6 +10,7 @@ use tokio::time::Instant;
 
 pub const DEFAULT_BACKGROUND_TIMEOUT: Duration = Duration::from_secs(600);
 
+#[derive(Debug)]
 pub enum WaitEvent {
     Event(Box<Event>),
     Complete,

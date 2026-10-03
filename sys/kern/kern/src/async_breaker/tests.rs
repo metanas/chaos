@@ -19,7 +19,7 @@ async fn opens_after_failure_and_rejects_without_running_operation() {
             Err::<(), _>("down")
         })
         .await;
-    assert!(matches!(first, Err(BreakerError::Operation("down"))));
+    std::assert_matches!(first, Err(BreakerError::Operation("down")));
 
     let second = breaker
         .call(|| async {
@@ -27,7 +27,7 @@ async fn opens_after_failure_and_rejects_without_running_operation() {
             Ok::<(), &str>(())
         })
         .await;
-    assert!(matches!(second, Err(BreakerError::Open)));
+    std::assert_matches!(second, Err(BreakerError::Open));
     assert_eq!(calls.load(Ordering::Relaxed), 1);
 }
 
@@ -42,20 +42,20 @@ async fn timeout_allows_a_probe_that_closes_the_breaker() {
     );
 
     let first = breaker.call(|| async { Err::<(), _>("down") }).await;
-    assert!(matches!(first, Err(BreakerError::Operation("down"))));
+    std::assert_matches!(first, Err(BreakerError::Operation("down")));
     assert_eq!(breaker.retry_after(), Some(Duration::from_millis(10)));
 
     tokio::time::advance(Duration::from_millis(9)).await;
     let rejected: Result<(), BreakerError<&str>> = breaker
         .call(|| async { panic!("probe must not run before the deadline") })
         .await;
-    assert!(matches!(rejected, Err(BreakerError::Open)));
+    std::assert_matches!(rejected, Err(BreakerError::Open));
     assert_eq!(breaker.retry_after(), Some(Duration::from_millis(1)));
 
     tokio::time::advance(Duration::from_millis(1)).await;
     assert_eq!(breaker.retry_after(), Some(Duration::ZERO));
     let recovered = breaker.call(|| async { Ok::<_, &str>("up") }).await;
 
-    assert!(matches!(recovered, Ok("up")));
+    std::assert_matches!(recovered, Ok("up"));
     assert_eq!(breaker.retry_after(), None);
 }

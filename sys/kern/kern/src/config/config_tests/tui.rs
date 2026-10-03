@@ -1,6 +1,6 @@
 use super::*;
-use assert_matches::assert_matches;
 use serde::Deserialize;
+use std::assert_matches;
 
 #[derive(Deserialize, Debug, PartialEq)]
 struct TuiTomlTest {

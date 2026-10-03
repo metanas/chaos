@@ -385,7 +385,7 @@ fn for_prompt_strips_images_when_model_does_not_support_images() {
     assert_eq!(preserved.len(), 1);
     if let ResponseItem::Message { content, .. } = &preserved[0] {
         assert_eq!(content.len(), 2);
-        assert!(matches!(content[1], ContentItem::InputImage { .. }));
+        std::assert_matches!(content[1], ContentItem::InputImage { .. });
     } else {
         panic!("expected Message");
     }

@@ -32,8 +32,9 @@ async fn open_runtime_db_with_config_uses_storage_url() {
     .await
     .expect("open runtime db from config storage_url");
 
-    assert!(
-        matches!(runtime, RuntimeDbHandle::Sqlite(_)),
+    std::assert_matches!(
+        runtime,
+        RuntimeDbHandle::Sqlite(_),
         "sqlite storage_url should create a sqlite runtime"
     );
     assert!(

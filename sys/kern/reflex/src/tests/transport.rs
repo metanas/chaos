@@ -56,15 +56,15 @@ async fn policy_validation_precedes_routing_and_http() {
                 policy: policy.into(),
             };
             for backend in &backends {
-                assert!(matches!(
+                std::assert_matches!(
                     backend.judge(judgment.clone()).await,
                     Err(ReflexError::MissingPolicy)
-                ));
+                );
             }
-            assert!(matches!(
+            std::assert_matches!(
                 router.judge(judgment).await,
                 Err(ReflexError::MissingPolicy)
-            ));
+            );
         }
     }
     assert_eq!(calls.load(Ordering::SeqCst), 0);
@@ -101,7 +101,7 @@ async fn jev_reuses_http_retry_classification_and_attempt_limits() {
 async fn malformed_json_is_not_retried() {
     let (http, calls) = scripted_http(vec![200], "not json".into());
     let result = client(http, 3).list_models().await;
-    assert!(matches!(result, Err(JevError::Decode(_))));
+    std::assert_matches!(result, Err(JevError::Decode(_)));
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
 
@@ -136,7 +136,7 @@ async fn invalid_action_risk_values_are_malformed_not_clamped() {
                 instructions: None,
             })
             .await;
-        assert!(matches!(result, Err(ReflexError::Malformed { .. })));
+        std::assert_matches!(result, Err(ReflexError::Malformed { .. }));
         assert_eq!(calls.load(Ordering::SeqCst), 1);
     }
 }
@@ -157,7 +157,7 @@ async fn incomplete_successful_responses_are_rejected_without_retry() {
             [("q".into(), Question::noul("supported?"))].into(),
         )
         .await;
-    assert!(matches!(result, Err(JevError::MissingAnswer(key)) if key == "q"));
+    std::assert_matches!(result, Err(JevError::MissingAnswer(key)) if key == "q");
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
 
@@ -180,12 +180,12 @@ async fn both_clients_enforce_the_timeout_after_headers_arrive() {
         .with_timeout(timeout)
         .list_models()
         .await;
-    assert!(matches!(result, Err(JevError::Timeout(value)) if value == timeout));
+    std::assert_matches!(result, Err(JevError::Timeout(value)) if value == timeout);
 
     let chat = LocalChat::new(stalled_body_http(), "http://example.invalid", "model")
         .with_timeout(timeout);
-    assert!(matches!(
+    std::assert_matches!(
         chat.yes_no("local", &[]).await,
         Err(ReflexError::Backend { message, .. }) if message.contains("timeout")
-    ));
+    );
 }

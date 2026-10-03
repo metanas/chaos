@@ -280,8 +280,8 @@ fn wannabe_representer_used_via_turn_request_conversion() {
     };
     let api_req = turn_request_to_api_request(req, &OpenwAInnabeRepresenter);
     assert_eq!(api_req.input.len(), 1, "Reasoning item must be dropped");
-    assert!(
-        matches!(&api_req.input[0], ResponseItem::Message { role, .. } if role == "system"),
+    std::assert_matches!(
+        &api_req.input[0], ResponseItem::Message { role, .. } if role == "system",
         "system role must pass through unchanged for wannabe"
     );
 }
@@ -291,7 +291,7 @@ fn response_event_roundtrips_through_turn_event() {
     let event = ResponseEvent::OutputTextDelta("hello".to_string());
     let turn: TurnEvent = event.into();
     let back: ResponseEvent = turn.into();
-    assert!(matches!(back, ResponseEvent::OutputTextDelta(ref s) if s == "hello"));
+    std::assert_matches!(back, ResponseEvent::OutputTextDelta(ref s) if s == "hello");
 }
 
 #[test]
@@ -305,10 +305,10 @@ fn api_error_semantics_are_preserved_in_abi_error() {
     .into();
 
     let abi: AbiError = err.into();
-    assert!(matches!(
+    std::assert_matches!(
         abi,
         AbiError::Transport { status: 401, message } if message == "unauthorized"
-    ));
+    );
 
     let outage: crate::error::ApiError = crate::TransportError::Http {
         status: rama::http::StatusCode::NOT_FOUND,
@@ -320,9 +320,9 @@ fn api_error_semantics_are_preserved_in_abi_error() {
         body: None,
     }
     .into();
-    assert!(matches!(outage, crate::error::ApiError::ServiceUnavailable));
+    std::assert_matches!(outage, crate::error::ApiError::ServiceUnavailable);
     let abi: AbiError = outage.into();
-    assert!(matches!(abi, AbiError::ServiceUnavailable));
+    std::assert_matches!(abi, AbiError::ServiceUnavailable);
 
     for transport in [
         crate::TransportError::Http {
@@ -338,10 +338,10 @@ fn api_error_semantics_are_preserved_in_abi_error() {
             body: Some(r#"{"error":{"message":"not found"}}"#.to_string()),
         },
     ] {
-        assert!(matches!(
+        std::assert_matches!(
             crate::error::ApiError::from(transport),
             crate::error::ApiError::Transport(_)
-        ));
+        );
     }
 }
 

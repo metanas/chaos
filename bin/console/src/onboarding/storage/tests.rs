@@ -33,10 +33,10 @@ fn postgres_is_recommended_and_selected_by_default() {
 fn sqlite_requires_an_explicit_choice() {
     let mut screen = StorageScreen::default();
     press(&mut screen, KeyCode::Down);
-    assert!(matches!(
+    std::assert_matches!(
         press(&mut screen, KeyCode::Enter),
         Some(StorageChoice::Sqlite)
-    ));
+    );
     assert!(screen.page == Page::Connecting);
 }
 
@@ -101,10 +101,10 @@ fn connection_failure_can_be_retried_or_changed_to_sqlite() {
     // Escape while connecting drops the pending future in the event loop.
     press(&mut screen, KeyCode::Esc);
     press(&mut screen, KeyCode::Down);
-    assert!(matches!(
+    std::assert_matches!(
         press(&mut screen, KeyCode::Enter),
         Some(StorageChoice::Sqlite)
-    ));
+    );
 }
 
 #[test]

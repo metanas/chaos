@@ -922,10 +922,10 @@ fn profile_sandbox_mode_overrides_base() -> std::io::Result<()> {
         chaos_home.path().to_path_buf(),
     )?;
 
-    assert!(matches!(
+    std::assert_matches!(
         config.permissions.sandbox_policy.get(),
         &SandboxPolicy::RootAccess
-    ));
+    );
 
     Ok(())
 }
@@ -958,10 +958,10 @@ fn cli_override_takes_precedence_over_profile_sandbox_mode() -> std::io::Result<
         chaos_home.path().to_path_buf(),
     )?;
 
-    assert!(matches!(
+    std::assert_matches!(
         config.permissions.sandbox_policy.get(),
         SandboxPolicy::WorkspaceWrite { .. }
-    ));
+    );
 
     Ok(())
 }

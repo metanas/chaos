@@ -1,10 +1,10 @@
 use super::*;
-use assert_matches::assert_matches;
 #[cfg(feature = "tui")]
 use chaos_ipc::ProcessId;
 #[cfg(feature = "tui")]
 use chaos_ipc::protocol::TokenUsage;
 use pretty_assertions::assert_eq;
+use std::assert_matches;
 use std::ffi::OsStr;
 
 fn try_parse_cli<'v>(args: &[&'v str]) -> Result<MultitoolCli, usage::Error<'static, 'v>> {
@@ -148,10 +148,10 @@ fn auto_exec_flags_do_not_leak_to_unrelated_subcommands() {
         &["chaos", "completion", "--full-auto"][..],
     ] {
         let err = try_parse_cli(args).expect_err("parse should fail");
-        assert!(matches!(
+        assert_matches!(
             err,
             usage::Error::UnknownFlag { .. } | usage::Error::UnexpectedArg { .. }
-        ));
+        );
     }
 }
 

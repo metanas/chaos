@@ -1,5 +1,5 @@
-use assert_matches::assert_matches;
 use chaos_test_fixtures::TEST_MODEL;
+use std::assert_matches;
 use std::sync::Arc;
 use std::time::Duration;
 

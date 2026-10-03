@@ -80,7 +80,7 @@ async fn list_tools_rejects_a_server_that_repeats_cursors() {
     .unwrap();
 
     let error = session.list_tools().await.unwrap_err();
-    assert!(matches!(error, GuestError::Protocol(_)), "got {error:?}");
+    std::assert_matches!(error, GuestError::Protocol(_), "got {error:?}");
     assert!(session.tools().await.is_none());
 
     session.disconnect().await.unwrap();

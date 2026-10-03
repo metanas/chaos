@@ -462,8 +462,9 @@ fn esc_repeat_and_release_after_dismissing_agent_picker_do_not_interrupt_task() 
         "expected Esc press to dismiss the agent picker"
     );
     pane.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert!(
-        matches!(rx.try_recv(), Ok(AppEvent::ChaosOp(Op::Interrupt))),
+    std::assert_matches!(
+        rx.try_recv(),
+        Ok(AppEvent::ChaosOp(Op::Interrupt)),
         "a fresh Esc press should still interrupt"
     );
 }
@@ -475,8 +476,9 @@ fn esc_interrupts_running_task_when_no_popup() {
 
     pane.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
 
-    assert!(
-        matches!(rx.try_recv(), Ok(AppEvent::ChaosOp(Op::Interrupt))),
+    std::assert_matches!(
+        rx.try_recv(),
+        Ok(AppEvent::ChaosOp(Op::Interrupt)),
         "expected Esc to send Op::Interrupt while a task is running"
     );
 }

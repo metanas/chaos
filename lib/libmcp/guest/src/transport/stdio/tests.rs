@@ -59,7 +59,7 @@ async fn read_line_bounded_rejects_oversized_lines() {
     let data = vec![b'a'; 4096];
     let mut reader: &[u8] = &data;
     let error = read_line_bounded(&mut reader, 100).await.unwrap_err();
-    assert!(matches!(error, GuestError::Protocol(_)), "got {error:?}");
+    std::assert_matches!(error, GuestError::Protocol(_), "got {error:?}");
 }
 
 #[tokio::test]
@@ -116,10 +116,7 @@ async fn write_failure_closes_the_transport() {
     }
     assert!(failed, "writes to a dead child must eventually fail");
     assert!(transport.closed.load(Ordering::Acquire));
-    assert!(matches!(
-        transport.send(message).await,
-        Err(GuestError::Disconnected)
-    ));
+    std::assert_matches!(transport.send(message).await, Err(GuestError::Disconnected));
 
     transport.force_shutdown().await.expect("shutdown");
 }

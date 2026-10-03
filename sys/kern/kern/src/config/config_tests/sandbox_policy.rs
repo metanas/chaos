@@ -13,8 +13,9 @@ fn test_untrusted_project_gets_workspace_write_sandbox() -> anyhow::Result<()> {
         None,
     );
 
-    assert!(
-        matches!(resolution, SandboxPolicy::WorkspaceWrite { .. }),
+    std::assert_matches!(
+        resolution,
+        SandboxPolicy::WorkspaceWrite { .. },
         "Expected WorkspaceWrite for untrusted project, got {resolution:?}"
     );
 

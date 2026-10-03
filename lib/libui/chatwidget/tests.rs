@@ -38,7 +38,6 @@ use crate::test_backend::VT100Backend;
 use crate::test_support::make_app_event_sender;
 use crate::test_support::make_app_event_sender_with_rx;
 use crate::tui::FrameRequester;
-use assert_matches::assert_matches;
 use chaos_ipc::ProcessId;
 use chaos_ipc::account::PlanType;
 use chaos_ipc::config_types::CollaborationMode;
@@ -78,6 +77,7 @@ use chaos_ipc::protocol::ExitedReviewModeEvent;
 use chaos_ipc::protocol::FileChange;
 use chaos_ipc::protocol::RateLimitSnapshot;
 use chaos_ipc::protocol::ReasoningContentDeltaEvent;
+use std::assert_matches;
 
 use crate::test_render::render_to_trimmed_string;
 use chaos_ipc::protocol::ImageGenerationEndEvent;
@@ -2785,10 +2785,10 @@ async fn rate_limit_switch_prompt_skips_when_on_lower_cost_model() {
 
     chat.on_rate_limit_snapshot(Some(snapshot(95.0)));
 
-    assert!(matches!(
+    assert_matches!(
         chat.rate_limit_switch_prompt,
         RateLimitSwitchPromptState::Idle
-    ));
+    );
 }
 
 #[cfg(test)]
@@ -2810,10 +2810,10 @@ async fn rate_limit_switch_prompt_skips_non_codex_limit() {
         plan_type: None,
     }));
 
-    assert!(matches!(
+    assert_matches!(
         chat.rate_limit_switch_prompt,
         RateLimitSwitchPromptState::Idle
-    ));
+    );
 }
 
 #[cfg(test)]
@@ -2825,10 +2825,10 @@ async fn rate_limit_switch_prompt_respects_hidden_notice() {
 
     chat.on_rate_limit_snapshot(Some(snapshot(95.0)));
 
-    assert!(matches!(
+    assert_matches!(
         chat.rate_limit_switch_prompt,
         RateLimitSwitchPromptState::Idle
-    ));
+    );
 }
 
 #[cfg(test)]
@@ -5612,8 +5612,9 @@ async fn plan_slash_command_switches_to_plan_mode() {
     chat.dispatch_command(SlashCommand::Plan);
 
     while let Ok(event) = rx.try_recv() {
-        assert!(
-            matches!(event, AppEvent::InsertHistoryCell(_)),
+        assert_matches!(
+            event,
+            AppEvent::InsertHistoryCell(_),
             "plan should not emit a non-history app event: {event:?}"
         );
     }

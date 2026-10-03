@@ -1,4 +1,3 @@
-use assert_matches::assert_matches;
 use chaos_ipc::plan_tool::StepStatus;
 use chaos_ipc::protocol::ApprovalPolicy;
 use chaos_ipc::protocol::EventMsg;
@@ -20,6 +19,7 @@ use core_test_support::test_chaos::test_chaos;
 use core_test_support::wait_for_event;
 use serde_json::Value;
 use serde_json::json;
+use std::assert_matches;
 fn call_output(req: &ResponsesRequest, call_id: &str) -> (String, Option<bool>) {
     let raw = req.function_call_output(call_id);
     assert_eq!(

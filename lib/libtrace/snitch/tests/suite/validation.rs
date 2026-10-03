@@ -16,11 +16,11 @@ fn invalid_tag_component_is_rejected() -> Result<()> {
     )
     .with_tag("bad key", "value")
     .unwrap_err();
-    assert!(matches!(
+    std::assert_matches!(
         err,
         MetricsError::InvalidTagComponent { label, value }
             if label == "tag key" && value == "bad key"
-    ));
+    );
     Ok(())
 }
 
@@ -31,11 +31,11 @@ fn counter_rejects_invalid_tag_key() -> Result<()> {
     let err = metrics
         .counter("chaos.turns", 1, &[("bad key", "value")])
         .unwrap_err();
-    assert!(matches!(
+    std::assert_matches!(
         err,
         MetricsError::InvalidTagComponent { label, value }
             if label == "tag key" && value == "bad key"
-    ));
+    );
     metrics.shutdown()?;
     Ok(())
 }
@@ -47,11 +47,11 @@ fn histogram_rejects_invalid_tag_value() -> Result<()> {
     let err = metrics
         .histogram("chaos.request_latency", 3, &[("route", "bad value")])
         .unwrap_err();
-    assert!(matches!(
+    std::assert_matches!(
         err,
         MetricsError::InvalidTagComponent { label, value }
             if label == "tag value" && value == "bad value"
-    ));
+    );
     metrics.shutdown()?;
     Ok(())
 }
@@ -61,10 +61,10 @@ fn histogram_rejects_invalid_tag_value() -> Result<()> {
 fn counter_rejects_invalid_metric_name() -> Result<()> {
     let (metrics, _exporter) = build_metrics_with_defaults(&[])?;
     let err = metrics.counter("bad name", 1, &[]).unwrap_err();
-    assert!(matches!(
+    std::assert_matches!(
         err,
         MetricsError::InvalidMetricName { name } if name == "bad name"
-    ));
+    );
     metrics.shutdown()?;
     Ok(())
 }
@@ -73,10 +73,10 @@ fn counter_rejects_invalid_metric_name() -> Result<()> {
 fn counter_rejects_negative_increment() -> Result<()> {
     let (metrics, _exporter) = build_metrics_with_defaults(&[])?;
     let err = metrics.counter("chaos.turns", -1, &[]).unwrap_err();
-    assert!(matches!(
+    std::assert_matches!(
         err,
         MetricsError::NegativeCounterIncrement { name, inc } if name == "chaos.turns" && inc == -1
-    ));
+    );
     metrics.shutdown()?;
     Ok(())
 }

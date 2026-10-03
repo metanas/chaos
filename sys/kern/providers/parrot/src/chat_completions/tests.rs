@@ -16,7 +16,7 @@ fn completion_fixture() -> Value {
 #[test]
 fn complete_json_preserves_lifecycle_and_usage() {
     let events = parse_completion(&completion_fixture()).unwrap();
-    assert!(matches!(events.as_slice(), [
+    std::assert_matches!(events.as_slice(), [
             TurnEvent::Created,
             TurnEvent::ServerModel(model),
             TurnEvent::OutputItemAdded(ResponseItem::Message { .. }),
@@ -29,7 +29,7 @@ fn complete_json_preserves_lifecycle_and_usage() {
             && response_id == "chatcmpl-test"
             && usage.input_tokens == 10
             && usage.output_tokens == 5
-            && usage.total_tokens == 17));
+            && usage.total_tokens == 17);
 }
 
 #[test]
@@ -48,7 +48,7 @@ fn complete_json_preserves_multiple_tool_calls_without_indexes() {
     });
     json["usage"] = Value::Null;
     let events = parse_completion(&json).unwrap();
-    assert!(matches!(events.as_slice(), [
+    std::assert_matches!(events.as_slice(), [
             TurnEvent::Created,
             TurnEvent::ServerModel(_),
             TurnEvent::OutputItemDone(ResponseItem::FunctionCall { call_id: first_id, name: first_name, arguments, provider_metadata: Some(metadata), .. }),
@@ -56,7 +56,7 @@ fn complete_json_preserves_multiple_tool_calls_without_indexes() {
             TurnEvent::Completed { token_usage: None, .. },
         ] if first_id == "a" && first_name == "first" && arguments == "{\"x\":1}"
             && metadata["google"]["thought_signature"] == "signature"
-            && second_id == "b" && second_name == "second"));
+            && second_id == "b" && second_name == "second");
 }
 
 #[test]
@@ -66,16 +66,16 @@ fn complete_json_handles_absent_usage_and_missing_total() {
         .as_object_mut()
         .unwrap()
         .remove("total_tokens");
-    assert!(matches!(parse_completion(&json).unwrap().last(),
-            Some(TurnEvent::Completed { token_usage: Some(usage), .. }) if usage.total_tokens == 15));
+    std::assert_matches!(parse_completion(&json).unwrap().last(),
+            Some(TurnEvent::Completed { token_usage: Some(usage), .. }) if usage.total_tokens == 15);
     json.as_object_mut().unwrap().remove("usage");
-    assert!(matches!(
+    std::assert_matches!(
         parse_completion(&json).unwrap().last(),
         Some(TurnEvent::Completed {
             token_usage: None,
             ..
         })
-    ));
+    );
 }
 
 #[test]
@@ -113,7 +113,7 @@ async fn json_body_errors_do_not_emit_success() {
         tx,
     )
     .await;
-    assert!(matches!(result, Err(AbiError::Stream(_))));
+    std::assert_matches!(result, Err(AbiError::Stream(_)));
     assert!(rx.recv().await.is_none());
 }
 
@@ -177,9 +177,9 @@ async fn adapter_selects_json_for_schema_and_sse_otherwise() {
         {
             events.push(event.unwrap());
         }
-        assert!(matches!(events.first(), Some(TurnEvent::Created)));
-        assert!(matches!(events.last(),
-                Some(TurnEvent::Completed { token_usage: Some(usage), .. }) if usage.total_tokens == 17));
+        std::assert_matches!(events.first(), Some(TurnEvent::Created));
+        std::assert_matches!(events.last(),
+                Some(TurnEvent::Completed { token_usage: Some(usage), .. }) if usage.total_tokens == 17);
         assert_eq!(
             events
                 .iter()
@@ -428,7 +428,7 @@ fn parse_chunk_tracks_parallel_tool_calls_by_index() {
     .expect("chunk should parse");
 
     assert_eq!(finish_events.len(), 2);
-    assert!(matches!(
+    std::assert_matches!(
         &finish_events[0],
         TurnEvent::OutputItemDone(ResponseItem::FunctionCall {
             name,
@@ -436,8 +436,8 @@ fn parse_chunk_tracks_parallel_tool_calls_by_index() {
             call_id,
             ..
         }) if name == "first" && arguments == "{\"a\":1}" && call_id == "call_1"
-    ));
-    assert!(matches!(
+    );
+    std::assert_matches!(
         &finish_events[1],
         TurnEvent::OutputItemDone(ResponseItem::FunctionCall {
             name,
@@ -445,7 +445,7 @@ fn parse_chunk_tracks_parallel_tool_calls_by_index() {
             call_id,
             ..
         }) if name == "second" && arguments == "{\"b\":2}" && call_id == "call_2"
-    ));
+    );
 }
 
 #[test]

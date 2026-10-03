@@ -447,7 +447,7 @@ fn typing_in_options_does_not_open_notes() {
     overlay.handle_key_event(KeyEvent::from(KeyCode::Char('x')));
     assert_eq!(overlay.current_index(), 0);
     assert_eq!(overlay.notes_ui_visible(), false);
-    assert!(matches!(overlay.focus, Focus::Options));
+    std::assert_matches!(overlay.focus, Focus::Options);
     assert_eq!(overlay.composer.current_text_with_pending(), "");
 }
 
@@ -577,7 +577,7 @@ fn tab_opens_notes_when_option_selected() {
     assert_eq!(overlay.notes_ui_visible(), false);
     overlay.handle_key_event(KeyEvent::from(KeyCode::Tab));
     assert_eq!(overlay.notes_ui_visible(), true);
-    assert!(matches!(overlay.focus, Focus::Notes));
+    std::assert_matches!(overlay.focus, Focus::Notes);
 }
 
 fn switching_to_options_resets_notes_focus_when_notes_hidden() {
@@ -596,10 +596,10 @@ fn switching_to_options_resets_notes_focus_when_notes_hidden() {
         false,
     );
 
-    assert!(matches!(overlay.focus, Focus::Notes));
+    std::assert_matches!(overlay.focus, Focus::Notes);
     overlay.move_question(true);
 
-    assert!(matches!(overlay.focus, Focus::Options));
+    std::assert_matches!(overlay.focus, Focus::Options);
     assert_eq!(overlay.notes_ui_visible(), false);
 }
 
@@ -626,7 +626,7 @@ fn switching_from_freeform_with_text_resets_focus_and_keeps_last_option_empty() 
 
     overlay.move_question(true);
 
-    assert!(matches!(overlay.focus, Focus::Options));
+    std::assert_matches!(overlay.focus, Focus::Options);
     assert_eq!(overlay.notes_ui_visible(), false);
 
     overlay.handle_key_event(KeyEvent::from(KeyCode::Enter));
@@ -698,7 +698,7 @@ fn esc_in_notes_mode_clears_notes_and_hides_ui() {
 
     let answer = overlay.current_answer().expect("answer missing");
     assert_eq!(overlay.done(), false);
-    assert!(matches!(overlay.focus, Focus::Options));
+    std::assert_matches!(overlay.focus, Focus::Options);
     assert_eq!(overlay.notes_ui_visible(), false);
     assert_eq!(overlay.composer.current_text_with_pending(), "");
     assert_eq!(answer.draft.text, "");
@@ -726,7 +726,7 @@ fn esc_in_notes_mode_with_text_clears_notes_and_hides_ui() {
 
     let answer = overlay.current_answer().expect("answer missing");
     assert_eq!(overlay.done(), false);
-    assert!(matches!(overlay.focus, Focus::Options));
+    std::assert_matches!(overlay.focus, Focus::Options);
     assert_eq!(overlay.notes_ui_visible(), false);
     assert_eq!(overlay.composer.current_text_with_pending(), "");
     assert_eq!(answer.draft.text, "");
@@ -795,13 +795,13 @@ fn backspace_on_empty_notes_closes_notes_ui() {
     answer.options_state.selected_idx = Some(0);
 
     overlay.handle_key_event(KeyEvent::from(KeyCode::Tab));
-    assert!(matches!(overlay.focus, Focus::Notes));
+    std::assert_matches!(overlay.focus, Focus::Notes);
     assert_eq!(overlay.notes_ui_visible(), true);
 
     overlay.handle_key_event(KeyEvent::from(KeyCode::Backspace));
 
     let answer = overlay.current_answer().expect("answer missing");
-    assert!(matches!(overlay.focus, Focus::Options));
+    std::assert_matches!(overlay.focus, Focus::Options);
     assert_eq!(overlay.notes_ui_visible(), false);
     assert_eq!(answer.options_state.selected_idx, Some(0));
     assert!(rx.try_recv().is_err());
@@ -827,7 +827,7 @@ fn tab_in_notes_clears_notes_and_hides_ui() {
     overlay.handle_key_event(KeyEvent::from(KeyCode::Tab));
 
     let answer = overlay.current_answer().expect("answer missing");
-    assert!(matches!(overlay.focus, Focus::Options));
+    std::assert_matches!(overlay.focus, Focus::Options);
     assert_eq!(overlay.notes_ui_visible(), false);
     assert_eq!(overlay.composer.current_text_with_pending(), "");
     assert_eq!(answer.draft.text, "");

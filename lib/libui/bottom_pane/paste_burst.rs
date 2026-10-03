@@ -174,6 +174,7 @@ pub struct PasteBurst {
     pending_first_char: Option<(char, Instant)>,
 }
 
+#[derive(Debug)]
 pub enum CharDecision {
     /// Start buffering and retroactively capture some already-inserted chars.
     BeginBuffer { retro_chars: u16 },
@@ -191,6 +192,7 @@ pub struct RetroGrab {
     pub grabbed: String,
 }
 
+#[derive(Debug)]
 pub enum FlushResult {
     Paste(String),
     Typed(char),

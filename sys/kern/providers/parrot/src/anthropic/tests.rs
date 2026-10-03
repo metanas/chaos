@@ -167,11 +167,11 @@ fn streamed_usage_combines_message_start_cache_usage_and_message_delta_output() 
     )
     .expect("message_start should parse");
     assert_eq!(start_events.len(), 2);
-    assert!(matches!(start_events[0], TurnEvent::Created));
-    assert!(matches!(
+    std::assert_matches!(start_events[0], TurnEvent::Created);
+    std::assert_matches!(
         &start_events[1],
         TurnEvent::ServerModel(model) if model == "claude-test"
-    ));
+    );
 
     let completed = parse_sse_event(
         "message_delta",
@@ -210,7 +210,7 @@ async fn process_sse_data_stream_times_out_when_idle() {
         .await
         .expect_err("idle stream should time out");
 
-    assert!(matches!(err, AbiError::Stream(message) if message == "idle timeout waiting for SSE"));
+    std::assert_matches!(err, AbiError::Stream(message) if message == "idle timeout waiting for SSE");
 }
 
 #[test]

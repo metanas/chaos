@@ -193,9 +193,9 @@ async fn shutdown_complete_cascades_cancel_to_drain_ops() {
 
     // Both events reached the client.
     let first = client_event_rx.recv().await.expect("first event");
-    assert!(matches!(first.msg, EventMsg::Warning(_)));
+    std::assert_matches!(first.msg, EventMsg::Warning(_));
     let second = client_event_rx.recv().await.expect("shutdown event");
-    assert!(matches!(second.msg, EventMsg::ShutdownComplete));
+    std::assert_matches!(second.msg, EventMsg::ShutdownComplete);
 
     // op_tx is still alive here — and yet drain_ops is gone. This is
     // the explicit footgun the module docs warn about: submissions after
@@ -280,7 +280,7 @@ async fn forward_events_cascade_on_event_rx_drop_and_on_next_event_error() {
 
     // The healthy event still reached the client; the error was swallowed.
     let first = client_event_rx2.recv().await.expect("first event");
-    assert!(matches!(first.msg, EventMsg::Warning(_)));
+    std::assert_matches!(first.msg, EventMsg::Warning(_));
     assert!(
         client_event_rx2.try_recv().is_err(),
         "errors from drive_next_event are not forwarded"
@@ -357,6 +357,6 @@ async fn op_forwarder_from_sender_drop_does_not_touch_caller_sender() {
     // The original tx is still alive and reachable.
     tx.send(Op::Interrupt)
         .expect("original sender survives drop");
-    assert!(matches!(rx.recv().await, Some(Op::Interrupt)));
-    assert!(matches!(rx.recv().await, Some(Op::Interrupt)));
+    std::assert_matches!(rx.recv().await, Some(Op::Interrupt));
+    std::assert_matches!(rx.recv().await, Some(Op::Interrupt));
 }

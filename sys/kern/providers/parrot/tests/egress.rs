@@ -197,8 +197,9 @@ async fn every_wire_format_sends_vendor_authenticated_requests_through_egress() 
                 }
             },
         };
-        assert!(
-            matches!(error, AbiError::Transport { status: 402, .. }),
+        std::assert_matches!(
+            error,
+            AbiError::Transport { status: 402, .. },
             "{upstream}: {error:?}"
         );
         gateway.verify().await;
@@ -279,10 +280,10 @@ async fn batch_requests_use_the_same_egress() {
             .expect(1)
             .mount(&gateway)
             .await;
-        assert!(matches!(
+        std::assert_matches!(
             backend.poll("batch-id").await,
             Err(chaos_abi::SpoolError::Auth)
-        ));
+        );
     }
     gateway.verify().await;
 }

@@ -17,7 +17,7 @@ syntax = ["dep:chaos-highlight"]
 # Gate verbose debug logging inside the TUI implementation.
 debug-logs = []
 # Expose test-support helpers (chatwidget::tests, test_render, etc.) to downstream crates.
-testing = ["dep:assert_matches", "dep:insta", "dep:pretty_assertions", "dep:rustls"]
+testing = ["dep:insta", "dep:pretty_assertions", "dep:rustls"]
 
 [lints]
 workspace = true
@@ -106,7 +106,6 @@ unicode-width = { workspace = true }
 url = { workspace = true }
 vt100 = { workspace = true, optional = true }
 # testing feature — test-support helpers visible to downstream crates
-assert_matches = { workspace = true, optional = true }
 insta = { workspace = true, optional = true }
 pretty_assertions = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
@@ -116,7 +115,6 @@ libc = { workspace = true }
 
 [dev-dependencies]
 chaos-test-fixtures = { workspace = true }
-assert_matches = { workspace = true }
 insta = { workspace = true }
 pretty_assertions = { workspace = true }
 rand = { workspace = true }

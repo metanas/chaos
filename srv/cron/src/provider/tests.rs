@@ -9,6 +9,15 @@ use chaos_vfs::Vfs;
 
 const TEST_DATABASE_URL_ENV: &str = "TEST_DATABASE_URL";
 
+impl std::fmt::Debug for BackendCronStorage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Postgres(_) => "Postgres(..)",
+            Self::Sqlite(_) => "Sqlite(..)",
+        })
+    }
+}
+
 fn daily_schedule_json() -> String {
     Schedule::Interval { seconds: 86_400 }.to_json()
 }
@@ -29,8 +38,9 @@ async fn backend_cron_storage_selects_sqlite_provider() {
         .expect("open sqlite home");
 
     let storage = BackendCronStorage::from_provider(&vfs);
-    assert!(
-        matches!(storage, BackendCronStorage::Sqlite(_)),
+    std::assert_matches!(
+        storage,
+        BackendCronStorage::Sqlite(_),
         "a sqlite mount should resolve to sqlite storage"
     );
 
@@ -54,14 +64,16 @@ async fn postgres_backend_cron_storage_selects_postgres_provider() {
     let vfs = ChaosVfs::from_config(MountConfig::postgres_url(database_url))
         .await
         .expect("open postgres mount");
-    assert!(
-        matches!(vfs.pool(), Vfs::Postgres(_)),
+    std::assert_matches!(
+        vfs.pool(),
+        Vfs::Postgres(_),
         "a postgres mount should hand back a postgres pool"
     );
 
     let storage = BackendCronStorage::from_provider(&vfs);
-    assert!(
-        matches!(storage, BackendCronStorage::Postgres(_)),
+    std::assert_matches!(
+        storage,
+        BackendCronStorage::Postgres(_),
         "a postgres mount should resolve to postgres storage"
     );
 

@@ -61,10 +61,10 @@ fn full_turn_lifecycle_reduces_to_transcript_state() {
 
     state.record_user_submission("hello".to_string());
     assert_eq!(TurnStatus::InFlight, state.turn);
-    assert!(matches!(
+    std::assert_matches!(
         state.transcript.last(),
         Some(TranscriptEntry::User { text }) if text == "hello"
-    ));
+    );
 
     state.apply_event_msg(EventMsg::AgentMessageContentDelta(
         AgentMessageContentDeltaEvent {
@@ -74,19 +74,19 @@ fn full_turn_lifecycle_reduces_to_transcript_state() {
             delta: "hi".to_string(),
         },
     ));
-    assert!(matches!(
+    std::assert_matches!(
         state.transcript.last(),
         Some(TranscriptEntry::Agent { content }) if content == "hi"
-    ));
+    );
 
     state.apply_event_msg(EventMsg::AgentMessage(AgentMessageEvent {
         message: "hi there".to_string(),
         phase: None,
     }));
-    assert!(matches!(
+    std::assert_matches!(
         state.transcript.last(),
         Some(TranscriptEntry::Agent { content }) if content == "hi there"
-    ));
+    );
 
     state.apply_event_msg(EventMsg::TurnComplete(TurnCompleteEvent {
         turn_id: "t1".to_string(),
@@ -130,13 +130,13 @@ fn errors_and_token_usage_update_state() {
     }));
 
     assert_eq!(TurnStatus::Idle, state.turn);
-    assert!(matches!(
+    std::assert_matches!(
         state.transcript.last(),
         Some(TranscriptEntry::Notice {
             level: NoticeLevel::Error,
             text,
         }) if text.contains("context window exceeded") && text.contains("boom")
-    ));
+    );
 }
 
 #[test]
@@ -160,12 +160,12 @@ fn orphan_exec_end_still_renders() {
         interaction_input: None,
     }));
 
-    assert!(matches!(
+    std::assert_matches!(
         state.transcript.last(),
         Some(TranscriptEntry::Exec {
             exit_code: Some(0),
             output,
             ..
         }) if output == "hi"
-    ));
+    );
 }

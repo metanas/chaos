@@ -4,10 +4,7 @@ use super::*;
 fn quiescence_requires_a_completed_turn_and_no_pending_work() {
     let mut activity = ProcessActivity::default();
     assert!(disposition(&activity, false).is_none());
-    assert!(matches!(
-        disposition(&activity, true),
-        Some(WaitEvent::Complete)
-    ));
+    std::assert_matches!(disposition(&activity, true), Some(WaitEvent::Complete));
     activity.outstanding_tasks = 1;
     assert!(disposition(&activity, true).is_none());
     activity.outstanding_tasks = 0;
@@ -24,14 +21,8 @@ fn interrupted_or_blocked_is_not_success() {
         wake_policy: WakePolicy::Interrupted,
         ..Default::default()
     };
-    assert!(matches!(
-        disposition(&activity, true),
-        Some(WaitEvent::Stopped(_))
-    ));
+    std::assert_matches!(disposition(&activity, true), Some(WaitEvent::Stopped(_)));
     activity.wake_policy = WakePolicy::Enabled;
     activity.blocked = Some("storage".into());
-    assert!(matches!(
-        disposition(&activity, false),
-        Some(WaitEvent::Stopped(_))
-    ));
+    std::assert_matches!(disposition(&activity, false), Some(WaitEvent::Stopped(_)));
 }

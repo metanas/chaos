@@ -207,10 +207,10 @@ async fn read_includes_origins_and_layers() {
         layers.first().unwrap().name,
         ConfigLayerSource::UserDatabase { revision: 1 }
     );
-    assert!(matches!(
+    std::assert_matches!(
         layers.get(2).unwrap().name,
         ConfigLayerSource::System { .. }
-    ));
+    );
 }
 
 #[tokio::test]

@@ -75,11 +75,9 @@ fn rejects_incomplete_keys_oauth_tokens_and_wrong_formats() {
         ("moonshotai-coding", "SK-KIMI-uppercase-key"),
         ("xai", "xai-"),
     ] {
-        assert!(
-            matches!(
-                validate_provider_api_key(provider, key),
-                Err(ApiKeyValidationError::InvalidFormat { .. })
-            ),
+        std::assert_matches!(
+            validate_provider_api_key(provider, key),
+            Err(ApiKeyValidationError::InvalidFormat { .. }),
             "{provider}"
         );
     }

@@ -1,5 +1,4 @@
 use super::*;
-use assert_matches::assert_matches;
 use bytes::Bytes;
 use chaos_abi::ResponseItem;
 use chaos_client::StreamResponse;
@@ -11,6 +10,7 @@ use rama::http::HeaderMap;
 use rama::http::HeaderValue;
 use rama::http::StatusCode;
 use serde_json::json;
+use std::assert_matches;
 use tokio::sync::mpsc;
 use tokio_test::io::Builder as IoBuilder;
 

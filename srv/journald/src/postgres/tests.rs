@@ -35,7 +35,7 @@ async fn postgres_client_supports_complete_journal_lifecycle() {
         .await
         .expect("open PostgreSQL runtime database");
     let client = JournalClient::postgres_pool(pool.clone());
-    assert!(matches!(&client, JournalClient::Postgres(_)));
+    std::assert_matches!(&client, JournalClient::Postgres(_));
 
     let process_id = ProcessId::new();
     let first_item = compacted("first");

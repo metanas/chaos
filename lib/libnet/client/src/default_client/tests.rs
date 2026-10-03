@@ -67,7 +67,7 @@ async fn timeout_covers_headers_and_waiting_for_the_client_lock() {
         .timeout(timeout)
         .send()
         .await;
-    assert!(matches!(result, Err(ChaosClientError::Timeout)));
+    std::assert_matches!(result.err(), Some(ChaosClientError::Timeout));
 
     let _lock = client.inner.lock().await;
     let result = client
@@ -75,7 +75,7 @@ async fn timeout_covers_headers_and_waiting_for_the_client_lock() {
         .timeout(timeout)
         .execute()
         .await;
-    assert!(matches!(result, Err(TransportError::Timeout)));
+    std::assert_matches!(result, Err(TransportError::Timeout));
 }
 
 #[tokio::test(start_paused = true)]
@@ -97,10 +97,7 @@ async fn body_read_shares_the_send_deadline_instead_of_resetting_it() {
         .send()
         .await
         .expect("headers arrive before the deadline");
-    assert!(matches!(
-        response.bytes().await,
-        Err(ChaosClientError::Timeout)
-    ));
+    std::assert_matches!(response.bytes().await, Err(ChaosClientError::Timeout));
     assert_eq!(start.elapsed(), Duration::from_millis(60));
 }
 

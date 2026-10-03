@@ -68,8 +68,9 @@ async fn stage1_claim_skips_when_up_to_date() {
         .try_claim_stage1_job(process_id, owner_b, 101, 3600, 64)
         .await
         .expect("claim stage1 newer source");
-    assert!(
-        matches!(needs_rerun, Stage1JobClaimOutcome::Claimed { .. }),
+    std::assert_matches!(
+        needs_rerun,
+        Stage1JobClaimOutcome::Claimed { .. },
         "newer source_updated_at should be claimable"
     );
 
@@ -97,7 +98,7 @@ async fn stage1_running_stale_can_be_stolen_but_fresh_running_is_skipped() {
         .try_claim_stage1_job(process_id, owner_a, 100, 3600, 64)
         .await
         .expect("claim a");
-    assert!(matches!(claim_a, Stage1JobClaimOutcome::Claimed { .. }));
+    std::assert_matches!(claim_a, Stage1JobClaimOutcome::Claimed { .. });
 
     let claim_b_fresh = runtime
         .memories()
@@ -117,10 +118,7 @@ async fn stage1_running_stale_can_be_stolen_but_fresh_running_is_skipped() {
         .try_claim_stage1_job(process_id, owner_b, 100, 3600, 64)
         .await
         .expect("claim b stale");
-    assert!(matches!(
-        claim_b_stale,
-        Stage1JobClaimOutcome::Claimed { .. }
-    ));
+    std::assert_matches!(claim_b_stale, Stage1JobClaimOutcome::Claimed { .. });
 
     let _ = tokio::fs::remove_dir_all(chaos_home).await;
 }
@@ -1182,8 +1180,9 @@ async fn stage1_retry_exhaustion_does_not_block_newer_watermark() {
         .try_claim_stage1_job(process_id, owner, 101, 3_600, 64)
         .await
         .expect("claim stage1 with newer source watermark");
-    assert!(
-        matches!(newer_source_claim, Stage1JobClaimOutcome::Claimed { .. }),
+    std::assert_matches!(
+        newer_source_claim,
+        Stage1JobClaimOutcome::Claimed { .. },
         "newer source watermark should reset retry budget and be claimable"
     );
 
@@ -1265,8 +1264,9 @@ async fn phase2_global_consolidation_reruns_when_watermark_advances() {
         .try_claim_global_phase2_job(owner, 3600)
         .await
         .expect("claim phase2 rerun");
-    assert!(
-        matches!(claim_rerun, Phase2JobClaimOutcome::Claimed { .. }),
+    std::assert_matches!(
+        claim_rerun,
+        Phase2JobClaimOutcome::Claimed { .. },
         "advanced watermark should be claimable"
     );
 
@@ -1820,7 +1820,7 @@ async fn mark_process_memory_mode_polluted_enqueues_phase2_for_selected_processe
         .try_claim_global_phase2_job(owner, 3600)
         .await
         .expect("claim phase2 after pollution");
-    assert!(matches!(next_claim, Phase2JobClaimOutcome::Claimed { .. }));
+    std::assert_matches!(next_claim, Phase2JobClaimOutcome::Claimed { .. });
 
     let _ = tokio::fs::remove_dir_all(chaos_home).await;
 }
@@ -3097,8 +3097,9 @@ async fn phase2_global_lock_allows_only_one_fresh_runner() {
         .try_claim_global_phase2_job(owner_a, 3600)
         .await
         .expect("claim global lock");
-    assert!(
-        matches!(running_claim, Phase2JobClaimOutcome::Claimed { .. }),
+    std::assert_matches!(
+        running_claim,
+        Phase2JobClaimOutcome::Claimed { .. },
         "first owner should claim global lock"
     );
 

@@ -5,6 +5,15 @@ use base64::Engine;
 use chaos_mcp_runtime::{ResourceContents, ResourceContentsText};
 use ratatui_hypertile::{KeyChord, MouseEvent, PaneId};
 
+impl std::fmt::Debug for Update {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Catalog(_, uri) => f.debug_tuple("Catalog").field(uri).finish_non_exhaustive(),
+            Self::Content(text, _) => f.debug_tuple("Content").field(text).finish_non_exhaustive(),
+        }
+    }
+}
+
 fn image_resource(width: u32, height: u32) -> ResourceContents {
     png_resource(image::RgbaImage::from_pixel(
         width,
@@ -387,8 +396,8 @@ async fn inspector_mouse_targeting_and_resource_preview() {
         let update =
             requests::resource_content(vec![blob_resource(blob, "image/png")], frames.clone())
                 .await;
-        assert!(
-            matches!(update, Update::Content(text, None) if text.starts_with("[Image preview unavailable:"))
+        std::assert_matches!(
+            update, Update::Content(text, None) if text.starts_with("[Image preview unavailable:")
         );
     }
 

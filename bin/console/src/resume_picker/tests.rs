@@ -524,11 +524,11 @@ async fn enter_on_row_selects_process_id() {
         .await
         .expect("enter should not abort the picker");
 
-    assert!(matches!(
+    std::assert_matches!(
         selection,
         Some(SessionSelection::Resume(SessionTarget { process_id: selected, keep_current: false }))
             if selected == process_id
-    ));
+    );
     assert_eq!(state.inline_error, None);
 }
 
@@ -592,7 +592,7 @@ async fn provider_switch_defaults_and_tab_override() {
             .await
             .unwrap()
             .unwrap();
-        assert!(matches!(
+        std::assert_matches!(
             selection,
             SessionSelection::Resume(SessionTarget {
                 keep_current: false,
@@ -601,7 +601,7 @@ async fn provider_switch_defaults_and_tab_override() {
                 keep_current: false,
                 ..
             })
-        ));
+        );
         state
             .handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE))
             .await
@@ -611,7 +611,7 @@ async fn provider_switch_defaults_and_tab_override() {
             .await
             .unwrap()
             .unwrap();
-        assert!(matches!(
+        std::assert_matches!(
             selection,
             SessionSelection::Resume(SessionTarget {
                 keep_current: true,
@@ -620,7 +620,7 @@ async fn provider_switch_defaults_and_tab_override() {
                 keep_current: true,
                 ..
             })
-        ));
+        );
         let id = state.filtered_rows[1].process_id;
         state
             .handle_background_event(BackgroundEvent::SelectionLoaded {

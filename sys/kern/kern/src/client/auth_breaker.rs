@@ -31,6 +31,7 @@ use breaker_machines::CircuitBreaker;
 const AUTH_HALF_OPEN_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Outcome of consulting the breaker before resolving credentials.
+#[derive(Debug)]
 pub(crate) enum AuthGate {
     /// Open and within backoff — reject without touching auth or the network.
     RejectFastFail,

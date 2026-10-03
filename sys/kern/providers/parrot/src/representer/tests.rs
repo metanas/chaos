@@ -13,8 +13,8 @@ fn openai_representer_remaps_system_to_developer() {
         phase: None,
     }];
     let result = ResponsesRepresenter.represent(items);
-    assert!(
-        matches!(&result[0], ResponseItem::Message { role, .. } if role == "developer"),
+    std::assert_matches!(
+        &result[0], ResponseItem::Message { role, .. } if role == "developer",
         "real OpenAI must remap system → developer"
     );
 }
@@ -55,7 +55,7 @@ fn openai_representer_passes_assistant_role_unchanged() {
         phase: None,
     }];
     let result = ResponsesRepresenter.represent(items);
-    assert!(matches!(&result[0], ResponseItem::Message { role, .. } if role == "assistant"));
+    std::assert_matches!(&result[0], ResponseItem::Message { role, .. } if role == "assistant");
 }
 
 // --- OpenwAInnabeRepresenter (xAI and friends) --------------------------
@@ -70,8 +70,8 @@ fn wannabe_passes_system_role_through() {
         phase: None,
     }];
     let result = OpenwAInnabeRepresenter.represent(items);
-    assert!(
-        matches!(&result[0], ResponseItem::Message { role, .. } if role == "system"),
+    std::assert_matches!(
+        &result[0], ResponseItem::Message { role, .. } if role == "system",
         "wannabe must keep system role unchanged"
     );
 }
@@ -112,8 +112,8 @@ fn wannabe_still_converts_custom_tool_call() {
         input: r#"{"p":"x"}"#.into(),
     }];
     let result = OpenwAInnabeRepresenter.represent(items);
-    assert!(
-        matches!(&result[0], ResponseItem::FunctionCall { call_id, .. } if call_id == "call_w")
+    std::assert_matches!(
+        &result[0], ResponseItem::FunctionCall { call_id, .. } if call_id == "call_w"
     );
 }
 
@@ -217,7 +217,7 @@ fn session_representer_openai_remaps_system() {
         phase: None,
     }];
     let result = sr.represent(items);
-    assert!(matches!(&result[0], ResponseItem::Message { role, .. } if role == "developer"));
+    std::assert_matches!(&result[0], ResponseItem::Message { role, .. } if role == "developer");
 }
 
 #[test]
@@ -231,7 +231,7 @@ fn session_representer_wannabe_keeps_system() {
         phase: None,
     }];
     let result = sr.represent(items);
-    assert!(matches!(&result[0], ResponseItem::Message { role, .. } if role == "system"));
+    std::assert_matches!(&result[0], ResponseItem::Message { role, .. } if role == "system");
 }
 
 #[test]

@@ -115,7 +115,7 @@ fn moonshotai_accounts_render_and_open_by_number_with_key_guidance() {
         );
 
         widget.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-        assert!(matches!(widget.sign_in_state(), SignInState::PickProvider));
+        std::assert_matches!(widget.sign_in_state(), SignInState::PickProvider);
     }
 }
 
@@ -165,10 +165,7 @@ fn moonshotai_accounts_save_reload_and_disconnect_credentials_independently() {
         *widget.sign_in_state.write().unwrap() = SignInState::PickProvider;
         widget.highlighted_provider = provider_index(&widget, id);
         widget.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-        assert!(matches!(
-            widget.sign_in_state(),
-            SignInState::ApiKeyEntry(_)
-        ));
+        std::assert_matches!(widget.sign_in_state(), SignInState::ApiKeyEntry(_));
         widget.handle_paste(format!("  {key}\n"));
         widget.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         assert_eq!(

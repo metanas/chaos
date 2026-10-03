@@ -49,11 +49,11 @@ async fn resource_update_emits_ui_and_structured_notifications() {
     .await;
 
     let event = rx_event.recv().await.expect("UI event");
-    assert!(matches!(
+    std::assert_matches!(
         event.msg,
         EventMsg::BackgroundEvent(BackgroundEventEvent { message })
             if message == "MCP coordinator resource updated: agent://inbox"
-    ));
+    );
     assert_eq!(
         notification_rx
             .recv()
@@ -148,11 +148,11 @@ async fn fleet_protocol_uses_chaos_names_only() {
     .expect("shape");
     assert_eq!(info.os, std::env::consts::OS);
     assert!(info.capabilities.is_empty());
-    assert!(matches!(
+    std::assert_matches!(
         handler
             .on_custom_request("skynet/fleet/hostInfo".into(), None)
             .await,
         Err(mcp_guest::GuestError::MethodNotSupported(method))
             if method == "skynet/fleet/hostInfo"
-    ));
+    );
 }

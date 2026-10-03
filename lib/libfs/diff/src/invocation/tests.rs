@@ -1,6 +1,6 @@
 use super::*;
-use assert_matches::assert_matches;
 use pretty_assertions::assert_eq;
+use std::assert_matches;
 use std::fs;
 use std::path::PathBuf;
 use std::string::ToString;

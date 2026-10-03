@@ -101,13 +101,13 @@ async fn machine_warnings_respect_cancellation_without_starting_a_probe() {
     let cancellation = CancellationToken::new();
     cancellation.cancel();
     let mut input = vec![];
-    assert!(matches!(
+    std::assert_matches!(
         append_with_observation(&mut input, true, &cancellation, async {
             panic!("cancelled warnings must not poll the observation");
         })
         .await,
         Err(ChaosErr::TurnAborted)
-    ));
+    );
     assert!(input.is_empty());
 }
 
@@ -131,10 +131,10 @@ async fn machine_warnings_cancel_a_pending_observation_without_changing_input() 
         assert!(futures::poll!(&mut append).is_pending());
         assert!(polled.get());
         cancellation.cancel();
-        assert!(matches!(
+        std::assert_matches!(
             futures::poll!(&mut append),
             std::task::Poll::Ready(Err(ChaosErr::TurnAborted))
-        ));
+        );
     }
     assert_eq!(input, original);
 }

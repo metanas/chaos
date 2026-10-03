@@ -9,7 +9,6 @@ use crate::history_cell::HistoryCell;
 use crate::history_cell::UserHistoryCell;
 use crate::history_cell::new_session_info;
 use crate::multi_agents::AgentPickerProcessEntry;
-use assert_matches::assert_matches;
 use chaos_ipc::ProcessId;
 use chaos_ipc::config_types::CollaborationMode;
 use chaos_ipc::config_types::CollaborationModeMask;
@@ -39,6 +38,7 @@ use crossterm::event::KeyModifiers;
 use insta::assert_snapshot;
 use pretty_assertions::assert_eq;
 use ratatui::prelude::Line;
+use std::assert_matches;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -285,8 +285,8 @@ async fn enqueue_primary_event_delivers_session_configured_before_buffered_appro
         .expect("timed out waiting for buffered approval event")
         .expect("channel closed unexpectedly");
 
-    assert!(matches!(first_event.msg, EventMsg::SessionConfigured(_)));
-    assert!(matches!(second_event.msg, EventMsg::ExecApprovalRequest(_)));
+    assert_matches!(first_event.msg, EventMsg::SessionConfigured(_));
+    assert_matches!(second_event.msg, EventMsg::ExecApprovalRequest(_));
 
     app.handle_codex_event_now(first_event);
     app.handle_codex_event_now(second_event);
@@ -2631,10 +2631,7 @@ async fn shutdown_first_exit_returns_immediate_exit_when_shutdown_submit_fails()
     let control = app.handle_exit_mode(ExitMode::ShutdownFirst);
 
     assert_eq!(app.pending_shutdown_exit_process_id, None);
-    assert!(matches!(
-        control,
-        AppRunControl::Exit(ExitReason::UserRequested)
-    ));
+    assert_matches!(control, AppRunControl::Exit(ExitReason::UserRequested));
 }
 
 async fn shutdown_first_exit_waits_for_shutdown_when_submit_succeeds() {
@@ -2645,7 +2642,7 @@ async fn shutdown_first_exit_waits_for_shutdown_when_submit_succeeds() {
     let control = app.handle_exit_mode(ExitMode::ShutdownFirst);
 
     assert_eq!(app.pending_shutdown_exit_process_id, Some(process_id));
-    assert!(matches!(control, AppRunControl::Continue));
+    assert_matches!(control, AppRunControl::Continue);
     assert_eq!(op_rx.try_recv(), Ok(Op::Shutdown));
 
     let mut immediate = std::pin::pin!(super::session_lifecycle::wait_for_immediate_exit(
@@ -2657,10 +2654,10 @@ async fn shutdown_first_exit_waits_for_shutdown_when_submit_succeeds() {
     assert!(std::future::Future::poll(immediate.as_mut(), &mut cx).is_pending());
     app.app_event_tx.send(AppEvent::Exit(ExitMode::Immediate));
     immediate.await;
-    assert!(matches!(
+    assert_matches!(
         app.handle_exit_mode(ExitMode::Immediate),
         AppRunControl::ExitImmediately(ExitReason::UserRequested)
-    ));
+    );
     assert_eq!(app.pending_shutdown_exit_process_id, None);
 }
 

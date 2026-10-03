@@ -24,6 +24,16 @@ use crate::bottom_pane::textarea::TextArea;
 use crate::render::renderable::Renderable;
 use crate::test_support::render_test_backend_debug;
 
+impl std::fmt::Debug for ActivePopup {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::None => "None",
+            Self::Command(_) => "Command(..)",
+            Self::File(_) => "File(..)",
+        })
+    }
+}
+
 /// Footer hints, draft retention, and raw key handling.
 pub(crate) fn chat_composer_input_suite() {
     footer_hint_row_is_separated_from_composer();
@@ -579,7 +589,7 @@ fn esc_hint_stays_hidden_with_draft_content() {
     assert!(!composer.is_empty());
     assert_eq!(composer.current_text(), "d");
     assert_eq!(composer.footer_mode, FooterMode::ComposerEmpty);
-    assert!(matches!(composer.active_popup, ActivePopup::None));
+    std::assert_matches!(composer.active_popup, ActivePopup::None);
 
     let _ = composer.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
 
@@ -1050,7 +1060,7 @@ fn enter_submits_when_file_popup_has_no_selection() {
     composer.textarea.set_cursor(input.len());
     composer.sync_popups();
 
-    assert!(matches!(composer.active_popup, ActivePopup::File(_)));
+    std::assert_matches!(composer.active_popup, ActivePopup::File(_));
 
     let (result, consumed) =
         composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
@@ -1184,8 +1194,9 @@ fn ascii_burst_treats_enter_as_newline() {
     now += step;
 
     let (result, _) = composer.handle_submission_with_time(false, now);
-    assert!(
-        matches!(result, InputResult::None),
+    std::assert_matches!(
+        result,
+        InputResult::None,
         "Enter during a burst should insert newline, not submit"
     );
 
@@ -1228,7 +1239,7 @@ fn slash_context_enter_ignores_paste_burst_enter_suppression() {
         .begin_with_retro_grabbed(String::new(), Instant::now());
 
     let (result, _) = composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert!(matches!(result, InputResult::Command(SlashCommand::Diff)));
+    std::assert_matches!(result, InputResult::Command(SlashCommand::Diff));
 }
 
 /// Behavior: if a burst is buffering text and the user presses a non-char key, flush the
@@ -1400,10 +1411,10 @@ fn submit_at_character_limit_succeeds() {
     let (result, _needs_redraw) =
         composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
-    assert!(matches!(
+    std::assert_matches!(
         result,
         InputResult::Submitted { text, .. } if text == input
-    ));
+    );
 }
 
 fn oversized_submit_reports_error_and_restores_draft() {
@@ -1813,7 +1824,7 @@ fn kill_buffer_persists_after_submit() {
     composer.textarea.insert_str("hello");
     let (result, _needs_redraw) =
         composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert!(matches!(result, InputResult::Submitted { .. }));
+    std::assert_matches!(result, InputResult::Submitted { .. });
     assert!(composer.textarea.is_empty());
 
     let (_result, _needs_redraw) =
@@ -2074,10 +2085,10 @@ fn tab_submits_when_no_task_running() {
     let (result, _needs_redraw) =
         composer.handle_key_event(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
 
-    assert!(matches!(
+    std::assert_matches!(
         result,
         InputResult::Submitted { ref text, .. } if text == "hi"
-    ));
+    );
     assert!(composer.textarea.is_empty());
 }
 
@@ -2101,7 +2112,7 @@ fn tab_does_not_submit_for_bang_shell_command() {
     let (result, _needs_redraw) =
         composer.handle_key_event(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
 
-    assert!(matches!(result, InputResult::None));
+    std::assert_matches!(result, InputResult::None);
     assert!(
         composer.textarea.text().starts_with("!ls"),
         "expected Tab not to submit or clear a `!` command"
@@ -2191,10 +2202,10 @@ fn goal_multiline_and_large_paste_are_prepared_as_arguments() {
     let pasted = "fix λ\n".repeat(LARGE_PASTE_CHAR_THRESHOLD);
     composer.handle_paste(pasted.clone());
     assert!(composer.try_dispatch_bare_slash_command().is_none());
-    assert!(matches!(
+    std::assert_matches!(
         composer.try_dispatch_slash_command_with_args(),
         Some(InputResult::CommandWithArgs(SlashCommand::Goal, ..))
-    ));
+    );
     let (args, elements) = composer.prepare_inline_args_submission(true).unwrap();
     assert_eq!(args, pasted.trim());
     assert!(elements.is_empty());
@@ -2584,7 +2595,7 @@ fn submit_captures_recent_mention_bindings_before_clearing_textarea() {
     );
 
     let (result, _) = composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert!(matches!(result, InputResult::Submitted { .. }));
+    std::assert_matches!(result, InputResult::Submitted { .. });
     assert_eq!(
         composer.take_recent_submission_mention_bindings(),
         mention_bindings
@@ -2608,7 +2619,7 @@ fn history_navigation_restores_remote_and_local_image_attachments() {
 
     let (result, _needs_redraw) =
         composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert!(matches!(result, InputResult::Submitted { .. }));
+    std::assert_matches!(result, InputResult::Submitted { .. });
 
     let _ = composer.take_remote_image_urls();
     composer.set_text_content(String::new(), Vec::new(), Vec::new());
@@ -2667,12 +2678,12 @@ fn history_navigation_leaves_cursor_at_end_of_line() {
     type_chars_humanlike(&mut composer, &['f', 'i', 'r', 's', 't']);
     let (result, _needs_redraw) =
         composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert!(matches!(result, InputResult::Submitted { .. }));
+    std::assert_matches!(result, InputResult::Submitted { .. });
 
     type_chars_humanlike(&mut composer, &['s', 'e', 'c', 'o', 'n', 'd']);
     let (result, _needs_redraw) =
         composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert!(matches!(result, InputResult::Submitted { .. }));
+    std::assert_matches!(result, InputResult::Submitted { .. });
 
     let (_result, _needs_redraw) =
         composer.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
@@ -2857,7 +2868,7 @@ fn suppressed_submission_restores_pending_paste_payload() {
         .clone();
 
     let (result, _) = composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert!(matches!(result, InputResult::None));
+    std::assert_matches!(result, InputResult::None);
     assert_eq!(composer.pending_pastes.len(), 1);
     assert_eq!(composer.textarea.text(), format!("/unknown {placeholder}"));
 
@@ -3198,10 +3209,10 @@ fn selecting_custom_prompt_without_args_submits_content() {
     let (result, _needs_redraw) =
         composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
-    assert!(matches!(
+    std::assert_matches!(
         result,
         InputResult::Submitted { text, .. } if text == prompt_text
-    ));
+    );
     assert!(composer.textarea.is_empty());
 }
 
@@ -3230,11 +3241,11 @@ fn custom_prompt_submission_expands_arguments() {
     let (result, _needs_redraw) =
         composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
-    assert!(matches!(
+    std::assert_matches!(
         result,
         InputResult::Submitted { text, .. }
             if text == "Review Alice changes on main"
-    ));
+    );
     assert!(composer.textarea.is_empty());
 }
 
@@ -3263,11 +3274,11 @@ fn custom_prompt_submission_accepts_quoted_values() {
     let (result, _needs_redraw) =
         composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
-    assert!(matches!(
+    std::assert_matches!(
         result,
         InputResult::Submitted { text, .. }
             if text == "Pair Alice Smith with dev-main"
-    ));
+    );
     assert!(composer.textarea.is_empty());
 }
 
@@ -3737,10 +3748,10 @@ fn selecting_custom_prompt_with_args_expands_placeholders() {
         composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     let expected = "Header: foo\nArgs: foo bar\nNinth: \n".to_string();
-    assert!(matches!(
+    std::assert_matches!(
         result,
         InputResult::Submitted { text, .. } if text == expected
-    ));
+    );
 }
 
 fn popup_prompt_submission_prunes_unused_image_attachments() {
@@ -3768,10 +3779,10 @@ fn popup_prompt_submission_prunes_unused_image_attachments() {
     let (result, _needs_redraw) =
         composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
-    assert!(matches!(
+    std::assert_matches!(
         result,
         InputResult::Submitted { text, .. } if text == "Hello"
-    ));
+    );
     assert!(
         composer
             .take_recent_submission_images_with_placeholders()
@@ -3806,10 +3817,10 @@ fn numeric_prompt_auto_submit_prunes_unused_image_attachments() {
     let (result, _needs_redraw) =
         composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
-    assert!(matches!(
+    std::assert_matches!(
         result,
         InputResult::Submitted { text, .. } if text == "Hello foo"
-    ));
+    );
     assert!(
         composer
             .take_recent_submission_images_with_placeholders()
@@ -3848,10 +3859,10 @@ fn numeric_prompt_auto_submit_expands_pending_pastes() {
         composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     let expected = format!("Echo: {large_content}");
-    assert!(matches!(
+    std::assert_matches!(
         result,
         InputResult::Submitted { text, .. } if text == expected
-    ));
+    );
     assert!(composer.pending_pastes.is_empty());
 }
 
@@ -3883,10 +3894,10 @@ fn queued_prompt_submission_prunes_unused_image_attachments() {
     let (result, _needs_redraw) =
         composer.handle_key_event(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
 
-    assert!(matches!(
+    std::assert_matches!(
         result,
         InputResult::Queued { text, .. } if text == "Hello foo"
-    ));
+    );
     assert!(
         composer
             .take_recent_submission_images_with_placeholders()
@@ -3998,10 +4009,10 @@ fn numeric_prompt_positional_args_does_not_error() {
     let (result, _needs_redraw) =
         composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
-    assert!(matches!(
+    std::assert_matches!(
         result,
         InputResult::Submitted { text, .. } if text == "Echo: hi"
-    ));
+    );
     assert!(composer.textarea.is_empty());
 }
 
@@ -4064,11 +4075,11 @@ fn selecting_custom_prompt_preserves_literal_dollar_dollar() {
     let (result, _needs_redraw) =
         composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
-    assert!(matches!(
+    std::assert_matches!(
         result,
         InputResult::Submitted { text, .. }
             if text == "Cost: $$ and first: x"
-    ));
+    );
 }
 
 fn custom_prompt_reuses_arguments_join() {
@@ -4257,8 +4268,9 @@ fn slash_popup_not_activated_for_slash_space_text_history_like_input() {
     composer.set_text_content("/ test".to_string(), Vec::new(), Vec::new());
 
     // After set_text_content -> sync_popups is called; popup should NOT be Command.
-    assert!(
-        matches!(composer.active_popup, ActivePopup::None),
+    std::assert_matches!(
+        composer.active_popup,
+        ActivePopup::None,
         "expected no slash popup for '/ test'"
     );
 
@@ -4282,22 +4294,25 @@ fn slash_popup_activated_for_bare_slash_and_valid_prefixes() {
 
     // Case 1: bare "/"
     composer.set_text_content("/".to_string(), Vec::new(), Vec::new());
-    assert!(
-        matches!(composer.active_popup, ActivePopup::Command(_)),
+    std::assert_matches!(
+        composer.active_popup,
+        ActivePopup::Command(_),
         "bare '/' should activate slash popup"
     );
 
     // Case 2: valid prefix "/re" (matches /review, /resume, etc.)
     composer.set_text_content("/re".to_string(), Vec::new(), Vec::new());
-    assert!(
-        matches!(composer.active_popup, ActivePopup::Command(_)),
+    std::assert_matches!(
+        composer.active_popup,
+        ActivePopup::Command(_),
         "'/re' should activate slash popup via prefix match"
     );
 
     // Case 3: fuzzy match "/ac" (subsequence of /compact)
     composer.set_text_content("/ac".to_string(), Vec::new(), Vec::new());
-    assert!(
-        matches!(composer.active_popup, ActivePopup::Command(_)),
+    std::assert_matches!(
+        composer.active_popup,
+        ActivePopup::Command(_),
         "'/ac' should activate slash popup via fuzzy match"
     );
 
@@ -4305,8 +4320,9 @@ fn slash_popup_activated_for_bare_slash_and_valid_prefixes() {
     // matches no built-in command; our current logic will not open popup.
     // Verify that explicitly.
     composer.set_text_content("/zzz".to_string(), Vec::new(), Vec::new());
-    assert!(
-        matches!(composer.active_popup, ActivePopup::None),
+    std::assert_matches!(
+        composer.active_popup,
+        ActivePopup::None,
         "'/zzz' should not activate slash popup because it is not a prefix of any built-in command"
     );
 }

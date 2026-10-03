@@ -121,13 +121,13 @@ fn ups_and_multiple_batteries_remain_individual_not_combined_capacity() {
     let mut machine = machine();
     machine.power.source = PowerSource::Ups;
     machine.power.batteries.as_mut().unwrap()[0].kind = BatteryKind::Ups;
-    assert!(matches!(
+    std::assert_matches!(
         evaluate_power(&machine)[0],
         MachineWarning::LowBattery {
             battery_kind: BatteryKind::Ups,
             ..
         }
-    ));
+    );
     let mut healthy = machine.power.batteries.as_ref().unwrap()[0].clone();
     healthy.name = "UPS1".into();
     healthy.charge_percent = Some(95);

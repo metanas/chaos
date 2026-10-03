@@ -840,10 +840,7 @@ async fn mixed_rule_and_sandbox_prompt_prioritizes_rule_for_rejection_decision()
         })
         .await;
 
-    assert!(matches!(
-        requirement,
-        ExecApprovalRequirement::NeedsApproval { .. }
-    ));
+    std::assert_matches!(requirement, ExecApprovalRequirement::NeedsApproval { .. });
 }
 
 #[tokio::test]
@@ -1077,13 +1074,13 @@ async fn append_execpolicy_amendment_updates_policy_and_file() {
         &["echo".to_string(), "hello".to_string(), "world".to_string()],
         &|_| Decision::Allow,
     );
-    assert!(matches!(
+    std::assert_matches!(
         evaluation,
         Evaluation {
             decision: Decision::Allow,
             ..
         }
-    ));
+    );
 
     assert!(!default_policy_path(chaos_home.path()).exists());
 }
@@ -1101,7 +1098,7 @@ async fn append_execpolicy_amendment_rejects_empty_prefix() {
         )
         .await;
 
-    assert!(matches!(result, Err(ExecPolicyUpdateError::Storage(_))));
+    std::assert_matches!(result, Err(ExecPolicyUpdateError::Storage(_)));
 }
 
 #[tokio::test]

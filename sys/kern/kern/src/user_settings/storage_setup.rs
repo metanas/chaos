@@ -11,6 +11,16 @@ pub enum StorageChoice {
     Sqlite,
 }
 
+impl std::fmt::Debug for StorageChoice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Connection strings can contain credentials.
+        f.write_str(match self {
+            Self::Postgres(_) => "Postgres(..)",
+            Self::Sqlite => "Sqlite",
+        })
+    }
+}
+
 /// Require a non-empty storage_url in config.toml before interactive startup.
 pub fn is_needed(home: &Path) -> anyhow::Result<bool> {
     Ok(!has_storage_url(&read_toml(home)?)?)

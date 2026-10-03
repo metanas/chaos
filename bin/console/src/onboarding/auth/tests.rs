@@ -14,6 +14,23 @@ use chaos_kern::auth::AuthCredentialsStoreMode;
 mod key_validation;
 mod moonshotai;
 
+impl std::fmt::Debug for SignInState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Report the state without exposing API keys or device-login credentials.
+        f.write_str(match self {
+            Self::PickProvider => "PickProvider",
+            Self::PickMode => "PickMode",
+            Self::ChatGptContinueInBrowser(_) => "ChatGptContinueInBrowser(..)",
+            Self::ChatGptDeviceCode(_) => "ChatGptDeviceCode(..)",
+            Self::XaiDeviceCode(_) => "XaiDeviceCode(..)",
+            Self::ChatGptSuccessMessage => "ChatGptSuccessMessage",
+            Self::ChatGptSuccess => "ChatGptSuccess",
+            Self::ApiKeyEntry(_) => "ApiKeyEntry(..)",
+            Self::ApiKeyConfigured(_) => "ApiKeyConfigured(..)",
+        })
+    }
+}
+
 #[test]
 fn accounts_widget_regressions() {
     auth_suite();
@@ -87,10 +104,10 @@ fn api_key_flow_disabled_when_chatgpt_forced() {
         widget.error.read().unwrap().as_deref(),
         Some(API_KEY_DISABLED_MESSAGE)
     );
-    assert!(matches!(
+    std::assert_matches!(
         &*widget.sign_in_state.read().unwrap(),
         SignInState::PickMode
-    ));
+    );
 }
 
 fn saving_api_key_is_blocked_when_chatgpt_forced() {
@@ -102,22 +119,22 @@ fn saving_api_key_is_blocked_when_chatgpt_forced() {
         widget.error.read().unwrap().as_deref(),
         Some(API_KEY_DISABLED_MESSAGE)
     );
-    assert!(matches!(
+    std::assert_matches!(
         &*widget.sign_in_state.read().unwrap(),
         SignInState::PickMode
-    ));
+    );
 }
 
 fn escape_from_provider_mode_returns_to_provider_picker() {
     let (mut widget, _tmp) = widget_forced_chatgpt();
 
     widget.open_selected_provider();
-    assert!(matches!(widget.sign_in_state(), SignInState::PickMode));
+    std::assert_matches!(widget.sign_in_state(), SignInState::PickMode);
     assert!(!widget.should_close_on_escape());
 
     widget.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
 
-    assert!(matches!(widget.sign_in_state(), SignInState::PickProvider));
+    std::assert_matches!(widget.sign_in_state(), SignInState::PickProvider);
 }
 
 fn escape_from_single_option_provider_returns_to_provider_picker() {
@@ -134,14 +151,11 @@ fn escape_from_single_option_provider_returns_to_provider_picker() {
     let (mut widget, _tmp) = widget_with_model_providers(model_providers);
 
     widget.open_selected_provider();
-    assert!(matches!(
-        widget.sign_in_state(),
-        SignInState::ApiKeyEntry(_)
-    ));
+    std::assert_matches!(widget.sign_in_state(), SignInState::ApiKeyEntry(_));
 
     widget.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
 
-    assert!(matches!(widget.sign_in_state(), SignInState::PickProvider));
+    std::assert_matches!(widget.sign_in_state(), SignInState::PickProvider);
 }
 
 /// Collects all buffer cell symbols that contain the OSC 8 open sequence
@@ -207,7 +221,7 @@ fn xai_provider_offers_account_connection() {
 
     widget.open_selected_provider();
 
-    assert!(matches!(widget.sign_in_state(), SignInState::PickMode));
+    std::assert_matches!(widget.sign_in_state(), SignInState::PickMode);
     assert_eq!(
         widget.displayed_sign_in_options(),
         vec![SignInOption::XaiAccount, SignInOption::ApiKey]

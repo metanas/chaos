@@ -522,7 +522,7 @@ async fn refresh_token_returns_transient_error_on_server_failure() -> Result<()>
         .await
         .err()
         .context("refresh should fail")?;
-    assert!(matches!(err, RefreshTokenError::Transient(_)));
+    std::assert_matches!(err, RefreshTokenError::Transient(_));
     assert_eq!(err.failed_reason(), None);
 
     let stored = ctx.load_auth()?;

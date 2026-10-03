@@ -27,7 +27,7 @@ fn payment_required_maps_to_non_retryable_quota_error() {
             }),
         ] {
             let err = map_api_error(api_error);
-            assert!(matches!(err, ChaosErr::QuotaExceeded), "{err:?}");
+            std::assert_matches!(err, ChaosErr::QuotaExceeded, "{err:?}");
             assert!(!err.is_retryable());
             assert_eq!(
                 err.to_error_event(None).chaos_error_info,
@@ -42,7 +42,7 @@ fn payment_required_maps_to_non_retryable_quota_error() {
         headers: None,
         body: None,
     }));
-    assert!(matches!(err, ChaosErr::QuotaExceeded));
+    std::assert_matches!(err, ChaosErr::QuotaExceeded);
 }
 
 #[test]
@@ -59,7 +59,7 @@ fn other_http_errors_are_not_classified_as_quota_exhaustion() {
 #[test]
 fn map_api_error_maps_service_errors() {
     let err = map_api_error(ApiError::ServerOverloaded);
-    assert!(matches!(err, ChaosErr::ServerOverloaded));
+    std::assert_matches!(err, ChaosErr::ServerOverloaded);
 
     let body = serde_json::json!({
         "error": {
@@ -74,10 +74,10 @@ fn map_api_error_maps_service_errors() {
         body: Some(body),
     }));
 
-    assert!(matches!(err, ChaosErr::ServerOverloaded));
+    std::assert_matches!(err, ChaosErr::ServerOverloaded);
 
     let err = map_api_error(ApiError::ServiceUnavailable);
-    assert!(matches!(err, ChaosErr::InternalServerError));
+    std::assert_matches!(err, ChaosErr::InternalServerError);
     assert_eq!(
         err.to_chaos_ipc_error(),
         chaos_ipc::protocol::ChaosErrorInfo::InternalServerError
@@ -201,7 +201,7 @@ fn map_api_error_network_error_becomes_connection_failed() {
     let err = map_api_error(ApiError::Transport(TransportError::Network(
         "failed to (tcp) connect to any resolved IP address".to_string(),
     )));
-    assert!(matches!(err, ChaosErr::ConnectionFailed(_)));
+    std::assert_matches!(err, ChaosErr::ConnectionFailed(_));
     assert!(err.is_retryable());
     assert!(err.to_string().contains("Connection failed"));
 }
@@ -213,12 +213,9 @@ fn abi_transport_status_zero_becomes_network_error() {
         status: 0,
         message: "tcp connect refused".to_string(),
     });
-    assert!(matches!(
-        api_err,
-        ApiError::Transport(TransportError::Network(_))
-    ));
+    std::assert_matches!(api_err, ApiError::Transport(TransportError::Network(_)));
     let chaos = map_api_error(api_err);
-    assert!(matches!(chaos, ChaosErr::ConnectionFailed(_)));
+    std::assert_matches!(chaos, ChaosErr::ConnectionFailed(_));
 }
 
 #[test]
