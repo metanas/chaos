@@ -1,6 +1,22 @@
 use super::*;
 
 #[test]
+fn observed_400k_window_keeps_distillation_reserve() {
+    assert_eq!(
+        deferral_ceiling_for_windows(400_000, 380_000),
+        Some(360_000)
+    );
+}
+
+#[test]
+fn raw_window_safety_fraction_can_be_the_binding_ceiling() {
+    assert_eq!(
+        deferral_ceiling_for_windows(300_000, 295_000),
+        Some(270_000)
+    );
+}
+
+#[test]
 fn compaction_reflex_uses_the_soft_to_hard_limit_gap() {
     assert_eq!(compaction_reflex_reserve(400_000, 350_000), 50_000);
     assert!(!compaction_reflex_due(50_001, 400_000, 350_000));

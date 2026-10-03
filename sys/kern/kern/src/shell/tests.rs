@@ -1,6 +1,37 @@
 use super::*;
+use chaos_sh::KnownShell;
 use std::path::PathBuf;
 use std::process::Command;
+
+#[test]
+fn test_detect_shell_type() {
+    assert_eq!(
+        detect_shell_type(&PathBuf::from("zsh")),
+        Some(KnownShell::Zsh)
+    );
+    assert_eq!(
+        detect_shell_type(&PathBuf::from("bash")),
+        Some(KnownShell::Bash)
+    );
+    assert_eq!(detect_shell_type(&PathBuf::from("fish")), None);
+    assert_eq!(detect_shell_type(&PathBuf::from("other")), None);
+    assert_eq!(
+        detect_shell_type(&PathBuf::from("/bin/zsh")),
+        Some(KnownShell::Zsh)
+    );
+    assert_eq!(
+        detect_shell_type(&PathBuf::from("/bin/bash")),
+        Some(KnownShell::Bash)
+    );
+    assert_eq!(
+        detect_shell_type(&PathBuf::from("/bin/sh")),
+        Some(KnownShell::Sh)
+    );
+    assert_eq!(
+        detect_shell_type(&PathBuf::from("sh")),
+        Some(KnownShell::Sh)
+    );
+}
 
 #[test]
 fn detects_bash() {

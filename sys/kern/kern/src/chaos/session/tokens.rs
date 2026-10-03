@@ -35,27 +35,6 @@ fn compaction_reflex_reserve(context_window: i64, compaction_token_limit: i64) -
     soft_to_hard_gap.min(proportional_lead)
 }
 
-#[cfg(test)]
-mod compaction_control_tests {
-    use super::deferral_ceiling_for_windows;
-
-    #[test]
-    fn observed_400k_window_keeps_distillation_reserve() {
-        assert_eq!(
-            deferral_ceiling_for_windows(400_000, 380_000),
-            Some(360_000)
-        );
-    }
-
-    #[test]
-    fn raw_window_safety_fraction_can_be_the_binding_ceiling() {
-        assert_eq!(
-            deferral_ceiling_for_windows(300_000, 295_000),
-            Some(270_000)
-        );
-    }
-}
-
 fn compaction_reflex_due(remaining: i64, context_window: i64, compaction_token_limit: i64) -> bool {
     remaining <= compaction_reflex_reserve(context_window, compaction_token_limit)
 }
