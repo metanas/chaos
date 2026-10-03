@@ -66,10 +66,15 @@ usage = { workspace = true, features = ["completions"] }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }
+chaos-pty = { workspace = true }
+chaos-test-fixtures = { workspace = true }
 chaos-which = { workspace = true }
+chaos_journald = { workspace = true }
+core_test_support = { workspace = true }
 predicates = { workspace = true }
 pretty_assertions = { workspace = true }
 sqlx = { workspace = true }
+vt100 = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = ["sqlx", "chaos-sysctl"]

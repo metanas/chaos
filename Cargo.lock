@@ -1112,12 +1112,16 @@ dependencies = [
  "chaos-kern",
  "chaos-mcpd",
  "chaos-pam",
+ "chaos-pty",
  "chaos-pwd",
  "chaos-selinux",
  "chaos-snitch",
  "chaos-sysctl",
  "chaos-taskd",
+ "chaos-test-fixtures",
  "chaos-which",
+ "chaos_journald",
+ "core_test_support",
  "libc",
  "mimalloc",
  "owo-colors",
@@ -1138,6 +1142,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "usage-rs",
+ "vt100",
 ]
 
 [[package]]

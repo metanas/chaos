@@ -9,6 +9,23 @@ The default `tui` Cargo feature includes the interactive console. Build with
 binary supporting `serve`, `mcp serve`, `taskd`, and `exec`. See
 [build and deployment](../../man/chaos-install.7.md#build-without-the-tui).
 
+## Real-terminal tests
+
+The PTY integration tests launch the actual `chaos` binary against a gated
+loopback provider. They exercise resize storms during a live reply, Unicode
+draft preservation, large bracketed pastes, exact submission, and terminal
+restoration on exit. They require no provider account or external network.
+Each test owns its console and journal daemon, with settings and storage in a
+temporary home.
+
+```sh
+cargo build -p chaos_journald --bin chaos_journald
+cargo nextest run -p chaos-cli --test pty_console
+```
+
+On Unix, the tests are enabled with the default `tui` feature and are also
+included in the normal all-features workspace test run.
+
 ## Account management
 
 Connect a provider subscription account with device authorization:
