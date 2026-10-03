@@ -388,7 +388,7 @@ impl builtin_mcp_resources::ChaosBuiltinResourceBackend for KernelBuiltinResourc
         resource["scope"] = serde_json::json!("harness_host");
         resource["recovery"] = serde_json::to_value(self.session.machine_recovery_status().await)
             .map_err(|error| error.to_string())?;
-        serde_json::to_string_pretty(&resource).map_err(|error| error.to_string())
+        serde_json::to_string(&resource).map_err(|error| error.to_string())
     }
 
     async fn sessions_json(&self) -> Result<String, String> {

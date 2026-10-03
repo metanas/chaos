@@ -10,6 +10,8 @@ should. There is no patch level; the build timestamp is the patch.
 ## [Unreleased]
 
 ### Fixed
+- Compact model-facing JSON from `chaos://machine`, Skipper tools, Helmsman skill
+  resources, and Dictator tools instead of spending model context on indentation.
 - Wire IPC `ListModels` requests to correlated, local-only catalog responses
   without starting a model turn or persisting catalog data in session history.
 - Honor custom CA bundles and client certificate/private key pairs in OTLP
