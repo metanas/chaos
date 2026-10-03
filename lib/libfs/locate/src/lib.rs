@@ -3,20 +3,12 @@ use crossbeam_channel::Sender;
 use crossbeam_channel::after;
 use crossbeam_channel::select;
 use crossbeam_channel::unbounded;
-use fff_search::FFFMode;
-use fff_search::FilePicker;
-use fff_search::FilePickerOptions;
-use fff_search::FuzzySearchOptions;
-use fff_search::PaginationArgs;
-use fff_search::QueryParser;
-use fff_search::SharedFilePicker;
-use fff_search::SharedFrecency;
 use ignore::WalkBuilder;
-use ignore::gitignore::Gitignore;
-use ignore::gitignore::GitignoreBuilder;
 use ignore::overrides::OverrideBuilder;
 use serde::Serialize;
-use std::collections::HashMap;
+use std::cmp::Reverse;
+use std::collections::BinaryHeap;
+use std::collections::HashSet;
 use std::num::NonZero;
 use std::path::Path;
 use std::path::PathBuf;
@@ -36,7 +28,7 @@ pub use cli::Cli;
 
 /// A single match result returned from the search.
 ///
-/// * `score` – Relevance score returned by `fff-search`.
+/// * `score` – Local fuzzy relevance score (higher is better).
 /// * `path`  – Path to the matched file (relative to the search directory).
 /// * `indices` – Optional list of character indices that matched the query.
 ///   These are only filled when the caller of [`run`] sets
@@ -162,55 +154,49 @@ pub fn create_session(
     };
     let (work_tx, work_rx) = unbounded();
     let cancelled = cancel_flag.unwrap_or_else(|| Arc::new(AtomicBool::new(false)));
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let mut seen_roots = HashSet::new();
 
-    let pickers: Vec<_> = search_directories
+    // Validate every root and exclusion before starting any background work.
+    let roots: Vec<_> = search_directories
         .iter()
+        .filter(|root| seen_roots.insert((*root).clone()))
         .map(|search_directory| {
-            let shared_picker = SharedFilePicker::default();
-            let manual_files = Arc::new(RwLock::new(Vec::new()));
-            let manual_walk_complete = Arc::new(AtomicBool::new(false));
-            FilePicker::new_with_shared_state(
-                shared_picker.clone(),
-                SharedFrecency::default(),
-                FilePickerOptions {
-                    base_path: search_directory.to_string_lossy().into_owned(),
-                    mode: FFFMode::Ai,
-                    watch: false,
-                    follow_symlinks: true,
-                    ..Default::default()
-                },
-            )?;
-            let walker_override_matcher = build_override_matcher(search_directory, &exclude)?;
-            let root_gitignore_matcher =
-                build_root_gitignore_matcher(search_directory, respect_gitignore)?;
-            spawn_locate_walker(LocateWalkerConfig {
-                search_directory: search_directory.clone(),
-                threads: threads.get(),
-                override_matcher: walker_override_matcher,
-                include_hidden,
-                respect_gitignore,
-                files: manual_files.clone(),
-                walk_complete: manual_walk_complete.clone(),
-                cancelled: cancelled.clone(),
-            });
-            anyhow::Ok(RootPicker {
+            if !std::fs::metadata(search_directory)?.is_dir() {
+                anyhow::bail!(
+                    "search root must be a directory: {}",
+                    search_directory.display()
+                );
+            }
+            anyhow::Ok(RootIndex {
                 root: search_directory.clone(),
                 override_matcher: build_override_matcher(search_directory, &exclude)?,
-                root_gitignore_matcher,
-                picker: shared_picker,
-                manual_files,
-                manual_walk_complete,
+                files: Arc::new(RwLock::new(Vec::new())),
+                walk_complete: Arc::new(AtomicBool::new(false)),
             })
         })
         .collect::<anyhow::Result<_>>()?;
 
+    for root in &roots {
+        spawn_locate_walker(LocateWalkerConfig {
+            search_directory: root.root.clone(),
+            threads: threads.get(),
+            override_matcher: root.override_matcher.clone(),
+            include_hidden,
+            respect_gitignore,
+            files: root.files.clone(),
+            walk_complete: root.walk_complete.clone(),
+            cancelled: cancelled.clone(),
+            shutdown: shutdown.clone(),
+        });
+    }
+
     let inner = Arc::new(SessionInner {
-        pickers,
+        roots,
         limit: limit.get(),
-        threads: threads.get(),
         compute_indices,
         cancelled: cancelled.clone(),
-        shutdown: Arc::new(AtomicBool::new(false)),
+        shutdown,
         reporter,
         work_tx: work_tx.clone(),
     });
@@ -334,9 +320,8 @@ where
 }
 
 struct SessionInner {
-    pickers: Vec<RootPicker>,
+    roots: Vec<RootIndex>,
     limit: usize,
-    threads: usize,
     compute_indices: bool,
     cancelled: Arc<AtomicBool>,
     shutdown: Arc<AtomicBool>,
@@ -344,13 +329,11 @@ struct SessionInner {
     work_tx: Sender<WorkSignal>,
 }
 
-struct RootPicker {
+struct RootIndex {
     root: PathBuf,
     override_matcher: Option<ignore::overrides::Override>,
-    root_gitignore_matcher: Option<Gitignore>,
-    picker: SharedFilePicker,
-    manual_files: Arc<RwLock<Vec<String>>>,
-    manual_walk_complete: Arc<AtomicBool>,
+    files: Arc<RwLock<Vec<String>>>,
+    walk_complete: Arc<AtomicBool>,
 }
 
 enum WorkSignal {
@@ -374,26 +357,6 @@ fn build_override_matcher(
     Ok(Some(matcher))
 }
 
-fn build_root_gitignore_matcher(
-    search_directory: &Path,
-    respect_gitignore: bool,
-) -> anyhow::Result<Option<Gitignore>> {
-    if !respect_gitignore {
-        return Ok(None);
-    }
-
-    let gitignore_path = search_directory.join(".gitignore");
-    if !gitignore_path.is_file() {
-        return Ok(None);
-    }
-
-    let mut builder = GitignoreBuilder::new(search_directory);
-    if let Some(err) = builder.add(&gitignore_path) {
-        return Err(err.into());
-    }
-    Ok(Some(builder.build()?))
-}
-
 struct LocateWalkerConfig {
     search_directory: PathBuf,
     threads: usize,
@@ -403,6 +366,7 @@ struct LocateWalkerConfig {
     files: Arc<RwLock<Vec<String>>>,
     walk_complete: Arc<AtomicBool>,
     cancelled: Arc<AtomicBool>,
+    shutdown: Arc<AtomicBool>,
 }
 
 fn spawn_locate_walker(walker: LocateWalkerConfig) {
@@ -415,6 +379,7 @@ fn spawn_locate_walker(walker: LocateWalkerConfig) {
         files,
         walk_complete,
         cancelled,
+        shutdown,
     } = walker;
 
     thread::spawn(move || {
@@ -424,36 +389,29 @@ fn spawn_locate_walker(walker: LocateWalkerConfig) {
             // Hidden files are valid `@` search targets.
             .hidden(!include_hidden)
             .follow_links(true)
-            // Walk everything under the explicit search root. Root-scoped
-            // ignore filtering is applied later in `search_with_fff`, which
-            // prevents parent ignore files from hiding requested roots.
-            .git_ignore(false)
-            .git_global(false)
-            .git_exclude(false)
-            .ignore(false)
-            .parents(false);
-        if !respect_gitignore {
-            walk_builder
-                .git_ignore(false)
-                .git_global(false)
-                .git_exclude(false)
-                .ignore(false)
-                .parents(false);
-        }
+            // The explicit root is the boundary, even outside a Git repository.
+            // Filter during traversal, including nested ignore files, rather
+            // than walking ignored subtrees and discarding matches afterward.
+            .git_ignore(respect_gitignore)
+            .git_global(respect_gitignore)
+            .git_exclude(respect_gitignore)
+            .ignore(respect_gitignore)
+            .require_git(false)
+            .parents(false)
+            .filter_entry(|entry| entry.file_name() != ".git");
         if let Some(override_matcher) = override_matcher {
             walk_builder.overrides(override_matcher);
         }
 
         let walker = walk_builder.build_parallel();
         walker.run(|| {
-            const CHECK_INTERVAL: usize = 1024;
-            let mut n = 0;
             let search_directory = search_directory.clone();
             let files = files.clone();
             let cancelled = cancelled.clone();
+            let shutdown = shutdown.clone();
 
             Box::new(move |entry| {
-                if cancelled.load(Ordering::Relaxed) {
+                if cancelled.load(Ordering::Relaxed) || shutdown.load(Ordering::Relaxed) {
                     return ignore::WalkState::Quit;
                 }
                 let entry = match entry {
@@ -471,17 +429,10 @@ fn spawn_locate_walker(walker: LocateWalkerConfig) {
                 if let (Some(relative_path), Ok(mut guard)) = (relative_path, files.write()) {
                     guard.push(relative_path.to_string());
                 }
-                n += 1;
-                if n >= CHECK_INTERVAL {
-                    if cancelled.load(Ordering::Relaxed) {
-                        return ignore::WalkState::Quit;
-                    }
-                    n = 0;
-                }
                 ignore::WalkState::Continue
             })
         });
-        walk_complete.store(true, Ordering::Relaxed);
+        walk_complete.store(true, Ordering::Release);
     });
 }
 
@@ -490,7 +441,7 @@ fn matcher_worker(inner: Arc<SessionInner>, work_rx: Receiver<WorkSignal>) -> an
     let cancel_requested = || inner.cancelled.load(Ordering::Relaxed);
     let shutdown_requested = || inner.shutdown.load(Ordering::Relaxed);
 
-    let mut last_query = String::new();
+    let mut last_query = None;
     let mut needs_search = false;
     let mut completed_for_query = false;
 
@@ -502,11 +453,11 @@ fn matcher_worker(inner: Arc<SessionInner>, work_rx: Receiver<WorkSignal>) -> an
                 };
                 match signal {
                     WorkSignal::QueryUpdated(query) => {
-                        last_query = query;
+                        last_query = Some(query);
                         needs_search = true;
                         completed_for_query = false;
-                        if !last_query.is_empty() && !pickers_scan_complete(&inner) {
-                            let snapshot = search_with_fff(&inner, &last_query, false);
+                        if !scan_complete(&inner) {
+                            let snapshot = search_index(&inner, last_query.as_deref().unwrap_or(""), false);
                             inner.reporter.on_update(&snapshot);
                         }
                     }
@@ -516,12 +467,12 @@ fn matcher_worker(inner: Arc<SessionInner>, work_rx: Receiver<WorkSignal>) -> an
                 }
             }
             recv(after(Duration::from_millis(POLL_INTERVAL_MS))) -> _ => {
-                if last_query.is_empty() {
+                let Some(query) = last_query.as_deref() else {
                     continue;
-                }
-                let walk_complete = pickers_scan_complete(&inner);
-                if needs_search || !walk_complete {
-                    let snapshot = search_with_fff(&inner, &last_query, walk_complete);
+                };
+                let walk_complete = scan_complete(&inner);
+                if needs_search || !walk_complete || !completed_for_query {
+                    let snapshot = search_index(&inner, query, walk_complete);
                     inner.reporter.on_update(&snapshot);
                     needs_search = false;
                 }
@@ -543,23 +494,14 @@ fn matcher_worker(inner: Arc<SessionInner>, work_rx: Receiver<WorkSignal>) -> an
     Ok(())
 }
 
-fn pickers_scan_complete(inner: &SessionInner) -> bool {
-    inner.pickers.iter().all(|root_picker| {
-        root_picker.manual_walk_complete.load(Ordering::Relaxed)
-            && root_picker
-                .picker
-                .read()
-                .ok()
-                .and_then(|guard| guard.as_ref().map(|picker| !picker.is_scan_active()))
-                .unwrap_or(true)
-    })
+fn scan_complete(inner: &SessionInner) -> bool {
+    inner
+        .roots
+        .iter()
+        .all(|root| root.walk_complete.load(Ordering::Acquire))
 }
 
-fn search_with_fff(
-    inner: &SessionInner,
-    query_text: &str,
-    walk_complete: bool,
-) -> FileSearchSnapshot {
+fn search_index(inner: &SessionInner, query_text: &str, walk_complete: bool) -> FileSearchSnapshot {
     if inner.cancelled.load(Ordering::Relaxed) {
         return FileSearchSnapshot {
             query: query_text.to_string(),
@@ -570,89 +512,55 @@ fn search_with_fff(
         };
     }
 
-    let parser = QueryParser::default();
-    let query = parser.parse(query_text);
-    let mut matches = Vec::new();
-    let mut seen = HashMap::<(PathBuf, PathBuf), usize>::new();
+    // The heap retains only top-N paths. Its greatest element is the worst
+    // candidate: lowest score, then lexicographically greatest path/root.
+    let mut matches = BinaryHeap::new();
     let mut total_match_count = 0usize;
     let mut scanned_file_count = 0usize;
 
-    for root_picker in &inner.pickers {
-        let Ok(guard) = root_picker.picker.read() else {
+    for root in &inner.roots {
+        let Ok(files) = root.files.read() else {
             continue;
         };
-        let Some(picker) = guard.as_ref() else {
-            continue;
-        };
-        let progress = picker.get_scan_progress();
-        scanned_file_count = scanned_file_count.saturating_add(progress.scanned_files_count);
-        let result = picker.fuzzy_search(
-            &query,
-            None,
-            FuzzySearchOptions {
-                max_threads: inner.threads,
-                pagination: PaginationArgs {
-                    offset: 0,
-                    limit: inner.limit.saturating_mul(8).max(inner.limit),
-                },
-                ..Default::default()
-            },
-        );
-        total_match_count = total_match_count.saturating_add(result.total_matched);
-
-        for (item, score) in result.items.into_iter().zip(result.scores) {
-            let relative_path = item.relative_path(picker);
-            if is_excluded(&root_picker.override_matcher, &relative_path) {
-                continue;
-            }
-            if is_ignored_by_root_gitignore(root_picker, Path::new(&relative_path)) {
-                continue;
-            }
-            upsert_match(
-                &mut matches,
-                &mut seen,
-                root_picker.root.clone(),
-                PathBuf::from(&relative_path),
-                score.total.max(0) as u32,
-                inner
-                    .compute_indices
-                    .then(|| fuzzy_subsequence_indices(query_text, &relative_path)),
-            );
-        }
-
-        if let Ok(manual_files) = root_picker.manual_files.read() {
-            scanned_file_count = scanned_file_count.saturating_add(manual_files.len());
-            for relative_path in manual_files.iter() {
-                if is_excluded(&root_picker.override_matcher, relative_path) {
-                    continue;
-                }
-                if is_ignored_by_root_gitignore(root_picker, Path::new(relative_path)) {
-                    continue;
-                }
-                let Some(score) = fuzzy_subsequence_score(query_text, relative_path) else {
-                    continue;
+        scanned_file_count = scanned_file_count.saturating_add(files.len());
+        for relative_path in files.iter() {
+            if inner.cancelled.load(Ordering::Relaxed) || inner.shutdown.load(Ordering::Relaxed) {
+                return FileSearchSnapshot {
+                    query: query_text.to_string(),
+                    walk_complete,
+                    ..Default::default()
                 };
-                total_match_count = total_match_count.saturating_add(1);
-                let path = PathBuf::from(relative_path);
-                upsert_match(
-                    &mut matches,
-                    &mut seen,
-                    root_picker.root.clone(),
-                    path,
-                    score,
-                    inner
-                        .compute_indices
-                        .then(|| fuzzy_subsequence_indices(query_text, relative_path)),
-                );
+            }
+            let Some(score) = fuzzy_subsequence_score(query_text, relative_path) else {
+                continue;
+            };
+            total_match_count = total_match_count.saturating_add(1);
+            let candidate = (
+                Reverse(score),
+                PathBuf::from(relative_path),
+                root.root.clone(),
+            );
+            if matches.len() < inner.limit {
+                matches.push(candidate);
+            } else if matches.peek().is_some_and(|worst| candidate < *worst) {
+                matches.pop();
+                matches.push(candidate);
             }
         }
     }
 
-    matches.sort_by(cmp_by_score_desc_then_path_asc(
-        |file_match: &FileMatch| file_match.score,
-        |file_match| file_match.path.to_str().unwrap_or(""),
-    ));
-    matches.truncate(inner.limit);
+    let matches = matches
+        .into_sorted_vec()
+        .into_iter()
+        .map(|(Reverse(score), path, root)| FileMatch {
+            score,
+            indices: inner
+                .compute_indices
+                .then(|| fuzzy_subsequence_indices(query_text, path.to_str().unwrap_or(""))),
+            path,
+            root,
+        })
+        .collect();
 
     FileSearchSnapshot {
         query: query_text.to_string(),
@@ -661,44 +569,6 @@ fn search_with_fff(
         scanned_file_count,
         walk_complete,
     }
-}
-
-fn is_ignored_by_root_gitignore(root_picker: &RootPicker, relative_path: &Path) -> bool {
-    root_picker
-        .root_gitignore_matcher
-        .as_ref()
-        .is_some_and(|matcher| {
-            matcher
-                .matched_path_or_any_parents(root_picker.root.join(relative_path), false)
-                .is_ignore()
-        })
-}
-
-fn upsert_match(
-    matches: &mut Vec<FileMatch>,
-    seen: &mut HashMap<(PathBuf, PathBuf), usize>,
-    root: PathBuf,
-    path: PathBuf,
-    score: u32,
-    indices: Option<Vec<u32>>,
-) {
-    let key = (root.clone(), path.clone());
-    if let Some(existing_index) = seen.get(&key).copied() {
-        let existing = &mut matches[existing_index];
-        if score > existing.score {
-            existing.score = score;
-            existing.indices = indices;
-        }
-        return;
-    }
-
-    seen.insert(key, matches.len());
-    matches.push(FileMatch {
-        score,
-        path,
-        root,
-        indices,
-    });
 }
 
 pub fn fuzzy_subsequence_score(query: &str, haystack: &str) -> Option<u32> {
@@ -731,15 +601,6 @@ pub fn fuzzy_subsequence_score(query: &str, haystack: &str) -> Option<u32> {
         score = score.saturating_add(20_000);
     }
     Some(score)
-}
-
-fn is_excluded(
-    override_matcher: &Option<ignore::overrides::Override>,
-    relative_path: &str,
-) -> bool {
-    override_matcher
-        .as_ref()
-        .is_some_and(|matcher| matcher.matched(relative_path, false).is_ignore())
 }
 
 fn fuzzy_subsequence_indices(query: &str, haystack: &str) -> Vec<u32> {

@@ -9,6 +9,14 @@ should. There is no patch level; the build timestamp is the patch.
 
 ## [Unreleased]
 
+### Changed
+- Replace FFF-backed file-search sessions with a single root-scoped walker and
+  local fuzzy ranking. Content grep uses byte regexes and ignore-aware traversal
+  without a Git backend or external binary.
+
+### Removed
+- `fff-search` and its transitive `git2`/vendored-libgit2 dependency.
+
 ## [47.10.2] - 2026-10-03
 
 ### Added

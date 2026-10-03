@@ -1,16 +1,13 @@
-//! MCP tool: grep_files — search file contents using fff-search.
+//! MCP tool: grep_files — local byte-regex content search.
 
+use std::fs::File;
+use std::io::Read;
 use std::path::Path;
 
-use fff_search::AiGrepConfig;
-use fff_search::Casing;
-use fff_search::FFFMode;
-use fff_search::FilePicker;
-use fff_search::FilePickerOptions;
-use fff_search::GrepMode;
-use fff_search::GrepSearchOptions;
-use fff_search::QueryParser;
+use globset::Glob;
+use ignore::WalkBuilder;
 use mcp_host::prelude::*;
+use regex::bytes::RegexBuilder;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
@@ -21,6 +18,9 @@ use crate::tools::tool_json_result;
 
 const DEFAULT_LIMIT: usize = 100;
 const MAX_LIMIT: usize = 2000;
+// Preserve the previous content-search bound, including if a file grows while
+// being read. Paths-only search never needs to retain all file contents.
+const MAX_FILE_SIZE: u64 = 10 * 1024 * 1024;
 
 fn default_limit() -> usize {
     DEFAULT_LIMIT
@@ -52,7 +52,7 @@ pub struct GrepFilesParams {
 }
 
 impl ChaosServer {
-    /// Search file contents using fff-search and return matching file paths. This does not require an rg binary; use locate_files to fuzzy search file names/paths.
+    /// Search file contents with a regex and return matching file paths.
     #[mcp_tool(name = "grep_files", read_only = true, open_world = false)]
     async fn grep_files(
         &self,
@@ -117,7 +117,7 @@ async fn execute_params_structured(params: GrepFilesParams) -> Result<serde_json
         .map(str::trim)
         .filter(|val| !val.is_empty());
 
-    // fff-search is sync — run on a blocking thread.
+    // Filesystem walking and regex search are sync — run on a blocking thread.
     let pattern = pattern.to_string();
     let search_path = search_path.to_path_buf();
     let include = include.map(String::from);
@@ -149,7 +149,7 @@ async fn verify_path_exists(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Search files using fff-search content grep.
+/// Search regular files with a byte regex.
 ///
 /// Walks the directory respecting .gitignore, applies an optional glob filter,
 /// searches each file for the pattern, collects matching file paths sorted by
@@ -162,61 +162,91 @@ pub fn run_grep_search(
     limit: usize,
     case_sensitive: Option<bool>,
 ) -> Result<Vec<String>, String> {
-    regex::bytes::Regex::new(pattern).map_err(|e| format!("invalid regex pattern: {e}"))?;
+    let case_sensitive =
+        case_sensitive.unwrap_or_else(|| pattern.chars().any(char::is_uppercase));
+    let regex = RegexBuilder::new(pattern)
+        .case_insensitive(!case_sensitive)
+        .multi_line(true)
+        .unicode(false)
+        .build()
+        .map_err(|e| format!("invalid regex pattern: {e}"))?;
+    let include_matcher = include
+        .map(|pattern| {
+            Glob::new(pattern)
+                .map(|glob| glob.compile_matcher())
+                .map_err(|e| format!("invalid include glob: {e}"))
+        })
+        .transpose()?;
+    let search_path = std::path::absolute(search_path)
+        .map_err(|e| format!("unable to resolve search path: {e}"))?;
+    std::fs::metadata(&search_path)
+        .map_err(|e| format!("unable to access `{}`: {e}", search_path.display()))?;
+    let mut walker = WalkBuilder::new(&search_path);
+    walker
+        .hidden(false)
+        .follow_links(false)
+        .require_git(false)
+        .filter_entry(|entry| entry.file_name() != ".git");
 
-    let mut picker = FilePicker::new(FilePickerOptions {
-        base_path: search_path.to_string_lossy().into_owned(),
-        mode: FFFMode::Ai,
-        watch: false,
-        follow_symlinks: false,
-        ..Default::default()
-    })
-    .map_err(|e| format!("failed to create fff picker: {e}"))?;
-    picker
-        .collect_files()
-        .map_err(|e| format!("failed to scan files: {e}"))?;
-
-    let query_text = match include {
-        Some(include) => format!("{include} {pattern}"),
-        None => pattern.to_string(),
-    };
-    let parsed = QueryParser::new(AiGrepConfig).parse(&query_text);
-    let result = picker.grep(
-        &parsed,
-        &GrepSearchOptions {
-            max_matches_per_file: 1,
-            page_limit: limit,
-            mode: GrepMode::Regex,
-            casing: Some(match case_sensitive {
-                Some(true) => Casing::Sensitive,
-                Some(false) => Casing::Insensitive,
-                None => Casing::Smart,
-            }),
-            ..Default::default()
-        },
-    );
-
-    if let Some(err) = result.regex_fallback_error {
-        return Err(format!("invalid regex pattern: {err}"));
+    let mut files = Vec::new();
+    for entry in walker.build() {
+        // Ignore unreadable/vanished entries without losing other matches.
+        let Ok(entry) = entry else {
+            continue;
+        };
+        if !entry.file_type().is_some_and(|kind| kind.is_file()) {
+            continue;
+        }
+        let path = entry.path();
+        if let Some(matcher) = &include_matcher {
+            let match_path = if include.is_some_and(|pattern| pattern.contains('/')) {
+                path.strip_prefix(&search_path).unwrap_or(path)
+            } else {
+                Path::new(entry.file_name())
+            };
+            if !matcher.is_match(match_path) {
+                continue;
+            }
+        }
+        let Ok(metadata) = entry.metadata() else {
+            continue;
+        };
+        if metadata.len() == 0 || metadata.len() > MAX_FILE_SIZE {
+            continue;
+        }
+        files.push((path.to_path_buf(), metadata.modified().ok()));
     }
 
-    let mut results = result
-        .files
-        .into_iter()
-        .map(|file| {
-            let path = file.absolute_path(&picker, picker.base_path());
-            (path.to_string_lossy().into_owned(), file.modified)
-        })
-        .collect::<Vec<_>>();
+    // Search newest files first so positive queries can stop at the limit
+    // without reading every candidate. Path breaks modification-time ties.
+    files.sort_by(|(left_path, left_time), (right_path, right_time)| {
+        right_time.cmp(left_time).then_with(|| left_path.cmp(right_path))
+    });
+    let mut results = Vec::new();
+    let mut contents = Vec::new();
+    for (path, _) in files {
+        if results.len() >= limit {
+            break;
+        }
+        let Ok(file) = File::open(&path) else {
+            continue;
+        };
+        if !file.metadata().is_ok_and(|metadata| metadata.is_file()) {
+            continue;
+        }
+        contents.clear();
+        if file.take(MAX_FILE_SIZE + 1).read_to_end(&mut contents).is_err()
+            || contents.len() as u64 > MAX_FILE_SIZE
+            || contents[..contents.len().min(8192)].contains(&0)
+        {
+            continue;
+        }
+        if regex.is_match(&contents) {
+            results.push(path.to_string_lossy().into_owned());
+        }
+    }
 
-    // Sort by modification time, newest first.
-    results.sort_by_key(|entry| std::cmp::Reverse(entry.1));
-
-    Ok(results
-        .into_iter()
-        .take(limit)
-        .map(|(path, _)| path)
-        .collect())
+    Ok(results)
 }
 
 /// Returns the auto-generated `ToolInfo` for schema extraction by core.

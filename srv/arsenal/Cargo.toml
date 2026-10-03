@@ -17,7 +17,7 @@ workspace = true
 chaos-locate = { workspace = true }
 chaos-traits = { workspace = true }
 chaos-wchar = { workspace = true }
-fff-search = { workspace = true }
+globset = { workspace = true }
 ignore = { workspace = true }
 inventory = { workspace = true }
 mcp-host = { workspace = true, features = ["macros"] }

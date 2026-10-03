@@ -80,6 +80,84 @@ fn run_matches_space_separated_path_query() {
     );
 }
 
+#[test]
+fn run_counts_each_file_once_and_limits_the_global_top_matches() {
+    let first = create_temp_tree(4);
+    let second = create_temp_tree(3);
+    let results = run(
+        "file",
+        vec![
+            first.path().to_path_buf(),
+            second.path().to_path_buf(),
+            first.path().to_path_buf(),
+        ],
+        FileSearchOptions {
+            limit: NonZero::new(2).unwrap(),
+            compute_indices: true,
+            ..Default::default()
+        },
+        None,
+    )
+    .unwrap();
+
+    assert_eq!(results.total_match_count, 7);
+    assert_eq!(results.matches.len(), 2);
+    assert_eq!(results.matches[0].path, Path::new("file-0000.txt"));
+    assert_eq!(results.matches[1].path, Path::new("file-0000.txt"));
+    assert_ne!(results.matches[0].root, results.matches[1].root);
+    assert_eq!(results.matches[0].indices, Some(vec![0, 1, 2, 3]));
+}
+
+#[test]
+fn run_filters_exclusions_and_nested_ignore_rules_before_counting() {
+    let parent = tempfile::tempdir().unwrap();
+    fs::write(parent.path().join(".ignore"), "*\n").unwrap();
+    let root = parent.path().join("repo");
+    fs::create_dir_all(root.join("nested")).unwrap();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::write(root.join(".git/config"), "metadata").unwrap();
+    fs::write(root.join("visible.txt"), "").unwrap();
+    fs::write(root.join("excluded.txt"), "").unwrap();
+    fs::write(root.join("nested/.gitignore"), "*.txt\n!keep.txt\n").unwrap();
+    fs::write(root.join("nested/.ignore"), "*.log\n").unwrap();
+    fs::write(root.join("nested/keep.txt"), "").unwrap();
+    fs::write(root.join("nested/ignored.txt"), "").unwrap();
+    fs::write(root.join("nested/ignored.log"), "").unwrap();
+
+    for (respect_gitignore, expected) in [
+        (true, vec!["nested/keep.txt", "visible.txt"]),
+        (
+            false,
+            vec!["nested/ignored.txt", "nested/keep.txt", "visible.txt"],
+        ),
+    ] {
+        let results = run(
+            "txt",
+            vec![root.clone()],
+            FileSearchOptions {
+                exclude: vec!["excluded.txt".to_string()],
+                respect_gitignore,
+                ..Default::default()
+            },
+            None,
+        )
+        .unwrap();
+        let mut paths = results
+            .matches
+            .iter()
+            .map(|m| m.path.to_str().unwrap())
+            .collect::<Vec<_>>();
+        paths.sort_unstable();
+        assert_eq!(paths, expected);
+        assert_eq!(results.total_match_count, expected.len());
+    }
+    let results = run("config", vec![root], FileSearchOptions::default(), None).unwrap();
+    assert_eq!(
+        results.total_match_count, 0,
+        "Git metadata is never indexed"
+    );
+}
+
 #[derive(Default)]
 struct RecordingReporter {
     updates: Mutex<Vec<FileSearchSnapshot>>,

@@ -86,6 +86,59 @@ fn search_only_reads_regular_files() {
     assert!(results[0].ends_with("match.txt"));
 }
 
+#[test]
+fn search_accepts_a_single_file_and_returns_an_absolute_path() {
+    let temp = tempfile::tempdir().unwrap();
+    let file = temp.path().join("one.rs");
+    std::fs::write(&file, "alpha\n").unwrap();
+    assert_eq!(
+        run_grep_search("alpha", Some("*.rs"), &file, 10, None).unwrap(),
+        vec![file.to_string_lossy().into_owned()]
+    );
+
+    let results = run_grep_search("chaos-arsenal", None, Path::new("Cargo.toml"), 10, None).unwrap();
+    assert_eq!(results.len(), 1);
+    assert!(Path::new(&results[0]).is_absolute());
+}
+
+#[test]
+fn search_preserves_raw_regexes_and_multiline_matches() {
+    let temp = tempfile::tempdir().unwrap();
+    let file = temp.path().join("one.txt");
+    std::fs::write(&file, "prefix\nalpha != beta\ngamma\n").unwrap();
+    for pattern in [
+        "^alpha != beta$",
+        r"alpha != beta\ngamma",
+        "(?s)alpha.*gamma",
+        r"\w+ != \w+",
+    ] {
+        let results = run_grep_search(pattern, None, temp.path(), 10, Some(true)).unwrap();
+        assert_eq!(results.len(), 1, "{pattern}");
+    }
+}
+
+#[test]
+fn search_selects_newest_matches_before_limiting_and_breaks_ties_by_path() {
+    let temp = tempfile::tempdir().unwrap();
+    let base_time = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000);
+    for (name, seconds) in [("old.txt", 0), ("new-b.txt", 100), ("new-a.txt", 100)] {
+        let path = temp.path().join(name);
+        std::fs::write(&path, "alpha").unwrap();
+        File::options()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_times(
+                std::fs::FileTimes::new()
+                    .set_modified(base_time + std::time::Duration::from_secs(seconds)),
+            )
+            .unwrap();
+    }
+    let results = run_grep_search("alpha", None, temp.path(), 1, None).unwrap();
+    assert_eq!(results.len(), 1);
+    assert!(results[0].ends_with("new-a.txt"));
+}
+
 #[tokio::test]
 async fn search_case_mode_is_optional_and_can_override_smart_case() {
     let temp = tempfile::tempdir().expect("create temp dir");

@@ -1,4 +1,4 @@
-//! MCP tool: locate_files — fuzzy file path search using fff-search.
+//! MCP tool: locate_files — local fuzzy file path search.
 
 use std::num::NonZero;
 use std::path::Path;
@@ -29,7 +29,7 @@ fn default_include_hidden() -> bool {
 #[serde(deny_unknown_fields)]
 #[schemars(deny_unknown_fields)]
 pub struct LocateFilesParams {
-    /// Fuzzy file path query to search for.
+    /// Fuzzy path query or glob pattern to search for.
     pattern: String,
 
     /// Directory to search in. Defaults to cwd.
@@ -46,7 +46,7 @@ pub struct LocateFilesParams {
 }
 
 impl ChaosServer {
-    /// Fuzzy search file paths using fff-search. Use this to find files by name/path; use grep_files to search file contents.
+    /// Find files by fuzzy path query or glob pattern.
     #[mcp_tool(name = "locate_files", read_only = true, open_world = false)]
     async fn locate_files(
         &self,
