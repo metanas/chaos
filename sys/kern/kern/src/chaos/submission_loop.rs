@@ -29,6 +29,9 @@ pub(crate) mod handlers;
 #[cfg(test)]
 mod journal_recovery_tests;
 
+#[cfg(test)]
+mod model_listing_tests;
+
 pub(crate) fn initial_replay_event_msgs(
     initial_history: &chaos_ipc::protocol::InitialHistory,
     process_id: ProcessId,
@@ -359,6 +362,10 @@ pub(super) async fn submission_loop(
                 }
                 Op::ListAllTools => {
                     handlers::list_all_tools(&sess, &config, sub.id.clone()).await;
+                    false
+                }
+                Op::ListModels => {
+                    handlers::list_models(&sess, sub.id.clone()).await;
                     false
                 }
                 Op::RefreshMcpServers { config } => {

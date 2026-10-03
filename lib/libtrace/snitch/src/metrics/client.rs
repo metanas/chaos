@@ -361,7 +361,10 @@ fn build_otlp_metric_exporter(
             let default_tls = crate::config::OtelTlsConfig::default();
             let tls_ref = tls.as_ref().unwrap_or(&default_tls);
             let client =
-                crate::otlp::build_http_client(tls_ref, OTEL_EXPORTER_OTLP_METRICS_TIMEOUT);
+                crate::otlp::build_http_client(tls_ref, OTEL_EXPORTER_OTLP_METRICS_TIMEOUT)
+                    .map_err(|source| MetricsError::HttpClientBuild {
+                        source: Box::new(source),
+                    })?;
             exporter_builder = exporter_builder.with_http_client(client);
 
             exporter_builder

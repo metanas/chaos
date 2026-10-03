@@ -105,6 +105,7 @@ impl EventProcessorWithHumanOutput {
                     | EventMsg::GetHistoryEntryResponse(_)
                     | EventMsg::McpListToolsResponse(_)
                     | EventMsg::ListCustomPromptsResponse(_)
+                    | EventMsg::ListModelsResponse(_)
                     | EventMsg::RawResponseItem(_)
                     | EventMsg::UserMessage(_)
                     | EventMsg::EnteredReviewMode(_)

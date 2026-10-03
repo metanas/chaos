@@ -9,6 +9,13 @@ should. There is no patch level; the build timestamp is the patch.
 
 ## [Unreleased]
 
+### Fixed
+- Wire IPC `ListModels` requests to correlated, local-only catalog responses
+  without starting a model turn or persisting catalog data in session history.
+- Honor custom CA bundles and client certificate/private key pairs in OTLP
+  HTTP exporters for logs, traces, and metrics. Invalid TLS files or incomplete
+  or mismatched mTLS identities now fail exporter initialization.
+
 ### Changed
 - Replace FFF-backed file-search sessions with a single root-scoped walker and
   local fuzzy ranking. Content grep uses byte regexes and ignore-aware traversal

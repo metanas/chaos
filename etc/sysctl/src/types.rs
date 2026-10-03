@@ -619,8 +619,12 @@ pub enum OtelHttpProtocol {
 #[schemars(deny_unknown_fields)]
 #[serde(rename_all = "kebab-case")]
 pub struct OtelTlsConfig {
+    /// PEM CA bundle added to native system trust roots.
     pub ca_certificate: Option<AbsolutePathBuf>,
+    /// PEM client certificate chain, leaf first. Requires `client_private_key`.
     pub client_certificate: Option<AbsolutePathBuf>,
+    /// PEM private key matching the client leaf certificate.
+    /// Invalid or incomplete identities fail exporter initialization.
     pub client_private_key: Option<AbsolutePathBuf>,
 }
 

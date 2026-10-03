@@ -359,7 +359,9 @@ pub enum Op {
         command: String,
     },
 
-    /// Request the list of available models.
+    /// Request available models from the active provider's local catalog.
+    /// Replies with [`super::EventMsg::ListModelsResponse`] without starting a turn
+    /// or contacting the provider. Refresh the catalog separately when needed.
     ListModels,
 }
 

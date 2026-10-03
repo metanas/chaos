@@ -774,6 +774,7 @@ impl EventProcessor for EventProcessorWithHumanOutput {
             | EventMsg::McpListToolsResponse(_)
             | EventMsg::AllToolsResponse(_)
             | EventMsg::ListCustomPromptsResponse(_)
+            | EventMsg::ListModelsResponse(_)
             | EventMsg::RawResponseItem(_)
             | EventMsg::UserMessage(_)
             | EventMsg::EnteredReviewMode(_)

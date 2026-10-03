@@ -68,6 +68,7 @@ opentelemetry_sdk = { workspace = true, features = [
     "testing",
 ] }
 pretty_assertions = { workspace = true }
+tempfile = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = ["opentelemetry_sdk"]

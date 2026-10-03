@@ -6,6 +6,29 @@ use serde_json::json;
 use std::path::PathBuf;
 
 #[test]
+fn list_models_response_round_trips_with_submission_correlation() -> Result<()> {
+    let event = Event {
+        id: "catalog-request".into(),
+        msg: EventMsg::ListModelsResponse(ListModelsResponseEvent { models: Vec::new() }),
+    };
+    let value = serde_json::to_value(&event)?;
+    assert_eq!(
+        value,
+        json!({
+            "id": "catalog-request",
+            "msg": {"type": "list_models_response", "models": []}
+        })
+    );
+    let decoded: Event = serde_json::from_value(value.clone())?;
+    assert_eq!(serde_json::to_value(decoded)?, value);
+    assert_eq!(
+        serde_json::from_value::<Op>(json!({"type": "list_models"}))?,
+        Op::ListModels
+    );
+    Ok(())
+}
+
+#[test]
 fn set_clamped_preserves_legacy_toggle_and_round_trips_backends() -> Result<()> {
     use crate::config_types::ClampBackend;
 

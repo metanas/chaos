@@ -2,6 +2,47 @@ use super::*;
 use pretty_assertions::assert_eq;
 use std::path::PathBuf;
 
+fn incomplete_mtls_exporter() -> OtelExporter {
+    OtelExporter::OtlpHttp {
+        endpoint: "https://127.0.0.1:1/v1/traces".into(),
+        headers: Default::default(),
+        protocol: OtelHttpProtocol::Binary,
+        tls: Some(OtelTlsConfig {
+            client_certificate: Some(
+                chaos_realpath::AbsolutePathBuf::try_from(
+                    std::env::temp_dir().join("unused-otel-client.pem"),
+                )
+                .expect("absolute test path"),
+            ),
+            ..Default::default()
+        }),
+    }
+}
+
+#[test]
+fn all_exporter_signals_propagate_invalid_tls_configuration() {
+    for signal in ["logs", "traces", "metrics"] {
+        let mut settings = test_otel_settings();
+        match signal {
+            "logs" => settings.exporter = incomplete_mtls_exporter(),
+            "traces" => settings.trace_exporter = incomplete_mtls_exporter(),
+            "metrics" => settings.metrics_exporter = incomplete_mtls_exporter(),
+            _ => unreachable!(),
+        }
+        assert!(
+            OtelProvider::from(&settings).is_err(),
+            "{signal} must not silently ignore an incomplete mTLS identity"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn async_trace_exporter_propagates_invalid_tls_configuration() {
+    let mut settings = test_otel_settings();
+    settings.trace_exporter = incomplete_mtls_exporter();
+    assert!(OtelProvider::from(&settings).is_err());
+}
+
 #[test]
 fn resource_attributes_include_host_name_when_present() {
     let attrs = resource_attributes(

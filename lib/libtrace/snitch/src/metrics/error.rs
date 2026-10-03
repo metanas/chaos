@@ -26,6 +26,12 @@ pub enum MetricsError {
         source: opentelemetry_otlp::ExporterBuildError,
     },
 
+    #[error("failed to build OTLP metrics HTTP client")]
+    HttpClientBuild {
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
     #[error("invalid OTLP metrics configuration: {message}")]
     InvalidConfig { message: String },
 

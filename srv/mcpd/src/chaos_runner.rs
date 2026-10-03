@@ -393,6 +393,7 @@ async fn run_event_loop(
                     | EventMsg::McpListToolsResponse(_)
                     | EventMsg::AllToolsResponse(_)
                     | EventMsg::ListCustomPromptsResponse(_)
+                    | EventMsg::ListModelsResponse(_)
                     | EventMsg::ExecCommandBegin(_)
                     | EventMsg::TerminalInteraction(_)
                     | EventMsg::ExecCommandOutputDelta(_)

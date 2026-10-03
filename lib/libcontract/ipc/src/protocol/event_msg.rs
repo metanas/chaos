@@ -99,6 +99,12 @@ pub struct GetHistoryEntryResponseEvent {
     pub entry: Option<HistoryEntry>,
 }
 
+/// Response to [`super::Op::ListModels`] for the active provider's local catalog.
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+pub struct ListModelsResponseEvent {
+    pub models: Vec<crate::openai_models::ModelPreset>,
+}
+
 /// Response event from the agent
 /// NOTE: Make sure none of these values have optional types, as it will mess up the extension code-gen.
 #[derive(Debug, Clone, Deserialize, Serialize, Display, JsonSchema)]
@@ -252,6 +258,10 @@ pub enum EventMsg {
 
     /// List of custom prompts available to the agent.
     ListCustomPromptsResponse(ListCustomPromptsResponseEvent),
+
+    /// Auth-filtered model presets for the active provider, including picker
+    /// visibility metadata.
+    ListModelsResponse(ListModelsResponseEvent),
 
     PlanUpdate(UpdatePlanArgs),
 

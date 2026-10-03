@@ -6,6 +6,7 @@ use rama::error::extra::OpaqueError;
 use rama::http::Body;
 use rama::http::body::util::BodyExt;
 use rama::service::BoxService;
+use rama::tls::client::TlsClientConfig;
 use rama_http_hyperium::{TryIntoHyperiumHttp, TryIntoRamaHttp};
 use std::fmt;
 use std::future::Future;
@@ -71,8 +72,17 @@ pub(crate) struct RamaOtelClient {
 }
 
 impl RamaOtelClient {
-    pub fn new() -> Self {
-        let client = rama::http::client::EasyHttpWebClient::default().boxed();
+    pub fn new(tls_config: TlsClientConfig) -> Self {
+        let client = rama::http::client::EasyHttpWebClient::connector_builder()
+            .with_default_transport_connector()
+            .with_default_dns_connector()
+            .with_tls_proxy_support_using_rustls()
+            .with_proxy_support()
+            .with_tls_support_using_rustls(tls_config)
+            .with_default_http_connector(rama::rt::Executor::default())
+            .with_default_connection_pool()
+            .build_client()
+            .boxed();
         Self {
             inner: Arc::new(Mutex::new(client)),
         }

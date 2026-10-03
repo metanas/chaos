@@ -20,5 +20,5 @@ pub(crate) use tasks::{
     run_user_shell_command, set_process_name,
 };
 pub(crate) use tools::{
-    dynamic_tool_response, list_all_tools, list_custom_prompts, list_mcp_tools,
+    dynamic_tool_response, list_all_tools, list_custom_prompts, list_mcp_tools, list_models,
 };

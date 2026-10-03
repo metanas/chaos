@@ -121,6 +121,7 @@ fn event_msg_persistence_mode(ev: &EventMsg) -> Option<EventPersistenceMode> {
         | EventMsg::McpStartupComplete(_)
         | EventMsg::McpServersRefreshed(_)
         | EventMsg::ListCustomPromptsResponse(_)
+        | EventMsg::ListModelsResponse(_)
         | EventMsg::PlanUpdate(_)
         | EventMsg::ShutdownComplete
         | EventMsg::DeprecationNotice(_)

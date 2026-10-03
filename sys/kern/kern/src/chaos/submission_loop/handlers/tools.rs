@@ -8,6 +8,7 @@ use chaos_ipc::protocol::AllToolsResponseEvent;
 use chaos_ipc::protocol::Event;
 use chaos_ipc::protocol::EventMsg;
 use chaos_ipc::protocol::ListCustomPromptsResponseEvent;
+use chaos_ipc::protocol::ListModelsResponseEvent;
 use chaos_ipc::protocol::ToolSummary;
 
 use crate::catalog::Catalog;
@@ -17,6 +18,21 @@ use crate::client_common::tools::ToolSpec;
 use crate::config::Config;
 use crate::mcp::auth::compute_auth_statuses;
 use crate::mcp::collect_mcp_snapshot_from_registry;
+use crate::models_manager::manager::RefreshStrategy;
+
+pub async fn list_models(sess: &Session, sub_id: String) {
+    // Listing is local-only. Provider discovery/refresh has separate entry points.
+    let models = sess
+        .services
+        .models_manager
+        .list_models(RefreshStrategy::Offline)
+        .await;
+    sess.send_event_raw(Event {
+        id: sub_id,
+        msg: EventMsg::ListModelsResponse(ListModelsResponseEvent { models }),
+    })
+    .await;
+}
 
 fn annotation_labels(tool: &chaos_traits::catalog::CatalogTool) -> Vec<String> {
     tool.annotations
