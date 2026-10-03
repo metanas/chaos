@@ -1,3 +1,6 @@
+mod mcp_add_server;
+mod mcp_server;
+
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::path::Path;
@@ -18,10 +21,13 @@ use chaos_traits::catalog::CatalogToolRequest;
 use chaos_traits::catalog::CatalogToolResult;
 use chaos_traits::catalog::ToolExposure;
 use chaos_traits::catalog::tool_infos_to_catalog_tools_with_parallel;
-use mcp_host::prelude::*;
-use schemars::JsonSchema;
+use mcp_host::prelude::ToolInfo;
 use serde::Deserialize;
 use serde::Serialize;
+
+pub use mcp_add_server::McpAddServerParams;
+pub use mcp_add_server::add_server_to_dot_mcp_json;
+pub use mcp_server::McpServerActionParams;
 
 pub const DOT_MCP_JSON: &str = ".mcp.json";
 
@@ -32,80 +38,7 @@ struct DotMcpJson {
     mcp_servers: BTreeMap<String, McpServerConfig>,
 }
 
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-#[schemars(deny_unknown_fields)]
-pub struct McpAddServerParams {
-    /// Name for the MCP server entry in `.mcp.json`.
-    pub name: String,
-    /// Command to launch a stdio MCP server.
-    #[serde(default)]
-    pub command: Option<String>,
-    /// Arguments for a stdio MCP server.
-    #[serde(default)]
-    pub args: Option<Vec<String>>,
-    /// Environment variables for a stdio MCP server.
-    #[serde(default)]
-    pub env: Option<BTreeMap<String, String>>,
-    /// URL for a streamable HTTP MCP server.
-    #[serde(default)]
-    pub url: Option<String>,
-    /// Optional environment variable containing a bearer token for a streamable HTTP server.
-    #[serde(default)]
-    pub bearer_token_env_var: Option<String>,
-    /// Optional static HTTP headers for a streamable HTTP server.
-    #[serde(default)]
-    pub http_headers: Option<BTreeMap<String, String>>,
-    /// Whether the server should start enabled. Defaults to true.
-    #[serde(default)]
-    pub enabled: Option<bool>,
-    /// Whether failure to start this server should be treated as fatal. Defaults to false.
-    #[serde(default)]
-    pub required: Option<bool>,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-#[schemars(deny_unknown_fields)]
-pub struct McpServerActionParams {
-    /// Name of the MCP server entry to control.
-    pub name: String,
-    /// Action to apply to the named server.
-    pub action: String,
-}
-
 struct McpManageServer;
-
-impl McpManageServer {
-    #[mcp_tool(
-        name = "mcp_add_server",
-        description = "Add a stdio or HTTP MCP server to the project `.mcp.json` and reload the active session.",
-        read_only = false,
-        destructive = false,
-        open_world = false
-    )]
-    async fn mcp_add_server(
-        &self,
-        _ctx: Ctx<'_>,
-        _params: Parameters<McpAddServerParams>,
-    ) -> ToolResult {
-        unreachable!("catalog driver path only");
-    }
-
-    #[mcp_tool(
-        name = "mcp_server",
-        description = "Enable, disable, reset, or remove an MCP server in the project `.mcp.json`, then reload the active session.",
-        read_only = false,
-        open_world = false
-    )]
-    async fn mcp_server(
-        &self,
-        _ctx: Ctx<'_>,
-        _params: Parameters<McpServerActionParams>,
-    ) -> ToolResult {
-        unreachable!("catalog driver path only");
-    }
-}
 
 pub fn tool_infos() -> Vec<ToolInfo> {
     vec![
@@ -199,13 +132,13 @@ impl CatalogToolDriver for McpManageToolDriver {
                 "mcp_add_server" => {
                     let params: McpAddServerParams = serde_json::from_value(request.arguments)
                         .map_err(|e| format!("invalid arguments: {e}"))?;
-                    execute_add_server(&dot_mcp_path, params)?
+                    mcp_add_server::execute_add_server(&dot_mcp_path, params)?
                 }
                 "mcp_server" => {
                     let params: McpServerActionParams =
                         serde_json::from_value(request.arguments)
                             .map_err(|e| format!("invalid arguments: {e}"))?;
-                    execute_server_action(&dot_mcp_path, params)?
+                    mcp_server::execute_server_action(&dot_mcp_path, params)?
                 }
                 other => return Err(format!("unknown MCP management tool: {other}")),
             };
@@ -253,82 +186,6 @@ fn write_dot_mcp_json(path: &Path, doc: &DotMcpJson) -> Result<(), String> {
         .map_err(|err| format!("failed to serialize {}: {err}", path.display()))?;
     std::fs::write(path, format!("{rendered}\n"))
         .map_err(|err| format!("failed to write {}: {err}", path.display()))
-}
-
-fn build_server_config(params: &McpAddServerParams) -> Result<McpServerConfig, String> {
-    let transport = match (&params.command, &params.url) {
-        (Some(command), None) => {
-            if params.http_headers.is_some() {
-                return Err("`http_headers` is only supported with `url`".to_string());
-            }
-
-            McpServerTransportConfig::Stdio {
-                command: command.clone(),
-                args: params.args.clone().unwrap_or_default(),
-                env: params.env.clone().map(|vars| {
-                    vars.into_iter()
-                        .collect::<std::collections::HashMap<_, _>>()
-                }),
-                env_vars: Vec::new(),
-                cwd: None,
-            }
-        }
-        (None, Some(url)) => McpServerTransportConfig::StreamableHttp {
-            url: url.clone(),
-            bearer_token: None,
-            bearer_token_env_var: params.bearer_token_env_var.clone(),
-            http_headers: params.http_headers.clone().map(|headers| {
-                headers
-                    .into_iter()
-                    .collect::<std::collections::HashMap<_, _>>()
-            }),
-            env_http_headers: None,
-        },
-        (Some(_), Some(_)) => {
-            return Err("provide either `command` or `url`, not both".to_string());
-        }
-        (None, None) => {
-            return Err("either `command` or `url` is required".to_string());
-        }
-    };
-    let transport_type = match &transport {
-        McpServerTransportConfig::Stdio { .. } => "stdio",
-        McpServerTransportConfig::StreamableHttp { .. } => "streamable_http",
-    };
-
-    Ok(McpServerConfig {
-        transport,
-        enabled: params.enabled.unwrap_or(true),
-        required: params.required.unwrap_or(false),
-        disabled_reason: None,
-        startup_timeout_sec: None,
-        tool_timeout_sec: None,
-        enabled_tools: None,
-        disabled_tools: None,
-        scopes: None,
-        oauth_resource: None,
-        r#type: Some(transport_type.to_string()),
-        oauth: None,
-    })
-}
-
-pub fn add_server_to_dot_mcp_json(
-    path: &Path,
-    params: McpAddServerParams,
-) -> Result<BTreeMap<String, McpServerConfig>, String> {
-    let mut doc = load_dot_mcp_json(path)?;
-    if doc.mcp_servers.contains_key(&params.name) {
-        return Err(format!(
-            "MCP server `{}` already exists in {}",
-            params.name,
-            path.display()
-        ));
-    }
-
-    let server = build_server_config(&params)?;
-    doc.mcp_servers.insert(params.name, server);
-    write_dot_mcp_json(path, &doc)?;
-    Ok(doc.mcp_servers)
 }
 
 pub fn project_mcp_json_path_for_cwd(
@@ -405,101 +262,6 @@ pub fn build_project_mcp_refresh_config(
         mcp_oauth_credentials_store_mode: serde_json::to_value(store_mode)
             .map_err(|err| format!("failed to serialize MCP OAuth store mode: {err}"))?,
     })
-}
-
-fn execute_add_server(
-    path: &Path,
-    params: McpAddServerParams,
-) -> Result<serde_json::Value, String> {
-    let server_kind = match (&params.command, &params.url) {
-        (Some(_), None) => "stdio",
-        (None, Some(_)) => "streamable_http",
-        (Some(_), Some(_)) => return Err("provide either `command` or `url`, not both".to_string()),
-        (None, None) => return Err("either `command` or `url` is required".to_string()),
-    };
-    let server_name = params.name.clone();
-    add_server_to_dot_mcp_json(path, params)?;
-    Ok(serde_json::json!({
-        "status": "added",
-        "server": server_name,
-        "path": path.display().to_string(),
-        "transport": server_kind,
-        "reload_requested": true,
-    }))
-}
-
-fn execute_server_action(
-    path: &Path,
-    params: McpServerActionParams,
-) -> Result<serde_json::Value, String> {
-    let mut doc = load_dot_mcp_json(path)?;
-    if !doc.mcp_servers.contains_key(&params.name) {
-        return Err(format!(
-            "No MCP server named `{}` found in {}",
-            params.name,
-            path.display()
-        ));
-    }
-
-    match params.action.as_str() {
-        "enable" => {
-            let Some(server) = doc.mcp_servers.get_mut(&params.name) else {
-                return Err(format!(
-                    "No MCP server named `{}` found in {}",
-                    params.name,
-                    path.display()
-                ));
-            };
-            server.enabled = true;
-            write_dot_mcp_json(path, &doc)?;
-            Ok(serde_json::json!({
-                "status": "enabled",
-                "action": "enable",
-                "server": params.name,
-                "path": path.display().to_string(),
-                "reload_requested": true,
-            }))
-        }
-        "disable" => {
-            let Some(server) = doc.mcp_servers.get_mut(&params.name) else {
-                return Err(format!(
-                    "No MCP server named `{}` found in {}",
-                    params.name,
-                    path.display()
-                ));
-            };
-            server.enabled = false;
-            write_dot_mcp_json(path, &doc)?;
-            Ok(serde_json::json!({
-                "status": "disabled",
-                "action": "disable",
-                "server": params.name,
-                "path": path.display().to_string(),
-                "reload_requested": true,
-            }))
-        }
-        "remove" => {
-            doc.mcp_servers.remove(&params.name);
-            write_dot_mcp_json(path, &doc)?;
-            Ok(serde_json::json!({
-                "status": "removed",
-                "action": "remove",
-                "server": params.name,
-                "path": path.display().to_string(),
-                "reload_requested": true,
-            }))
-        }
-        "reset" => Ok(serde_json::json!({
-            "status": "reset",
-            "action": "reset",
-            "server": params.name,
-            "path": path.display().to_string(),
-            "reload_requested": true,
-        })),
-        other => Err(format!(
-            "invalid action `{other}`; expected one of: enable, disable, reset, remove"
-        )),
-    }
 }
 
 #[cfg(test)]

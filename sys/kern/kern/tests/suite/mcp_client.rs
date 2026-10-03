@@ -339,10 +339,7 @@ async fn stdio_dynamic_tools_reach_immediate_follow_up_request() -> anyhow::Resu
                     transport: McpServerTransportConfig::Stdio {
                         command: mcp_test_test_server_bin,
                         args: Vec::new(),
-                        env: Some(HashMap::from([(
-                            "MCP_TEST_DYNAMIC_TOOLS".to_string(),
-                            "1".to_string(),
-                        )])),
+                        env: None,
                         env_vars: Vec::new(),
                         cwd: None,
                     },

@@ -1,5 +1,7 @@
 use tempfile::tempdir;
 
+use super::mcp_add_server::execute_add_server;
+use super::mcp_server::execute_server_action;
 use super::*;
 
 #[test]

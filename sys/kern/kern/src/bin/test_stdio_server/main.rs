@@ -1,152 +1,17 @@
 #![deny(clippy::print_stdout, clippy::print_stderr)]
 
+mod tools;
+
 use std::fs::OpenOptions;
 use std::io;
 use std::io::Write;
 use std::sync::Arc;
 
 use chaos_ipc::product::CHAOS_VERSION;
-use chaos_mcp_runtime::CHAOS_MCP_CLIENT_ID_ENV;
-use mcp_host::content::types::ImageContent;
 use mcp_host::prelude::*;
-use mcp_host::registry::router::McpToolRouter;
-use schemars::JsonSchema;
-use serde::Deserialize;
 
 struct TestStdioServer {
     tool_registry: ToolRegistry,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-#[schemars(deny_unknown_fields)]
-struct EchoParams {
-    message: String,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-#[schemars(deny_unknown_fields)]
-struct ImageParams {}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-#[schemars(deny_unknown_fields)]
-struct SelectProjectParams {}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-#[schemars(deny_unknown_fields)]
-struct ProjectTaskParams {}
-
-impl TestStdioServer {
-    #[mcp_tool(name = "echo", read_only = true, open_world = false)]
-    async fn echo(&self, _ctx: Ctx<'_>, params: Parameters<EchoParams>) -> ToolResult {
-        let mut payload = serde_json::Map::new();
-        payload.insert(
-            "echo".to_string(),
-            serde_json::Value::String(format!("ECHOING: {}", params.0.message)),
-        );
-        if let Ok(value) = std::env::var("MCP_TEST_VALUE") {
-            payload.insert("env".to_string(), serde_json::Value::String(value));
-        }
-        if std::env::var_os("MCP_TEST_INCLUDE_CLIENT_ID").is_some() {
-            let client_id = std::env::var(CHAOS_MCP_CLIENT_ID_ENV).map_err(|err| {
-                ToolError::Execution(format!("missing {CHAOS_MCP_CLIENT_ID_ENV}: {err}"))
-            })?;
-            payload.insert(
-                "client_id".to_string(),
-                serde_json::Value::String(client_id),
-            );
-        }
-        Ok(ToolOutput::json(payload))
-    }
-
-    #[mcp_tool(name = "image", read_only = true, open_world = false)]
-    async fn image(&self, _ctx: Ctx<'_>, _params: Parameters<ImageParams>) -> ToolResult {
-        let data_url = std::env::var("MCP_TEST_IMAGE_DATA_URL").map_err(|err| {
-            ToolError::Execution(format!("missing MCP_TEST_IMAGE_DATA_URL: {err}"))
-        })?;
-        let (mime_type, base64_data) = parse_data_url(&data_url).map_err(ToolError::Execution)?;
-        Ok(ToolOutput::content(vec![Box::new(ImageContent::new(
-            base64_data.to_owned(),
-            mime_type.to_owned(),
-        ))]))
-    }
-
-    #[mcp_tool(name = "select_project", read_only = false, open_world = false)]
-    async fn select_project(
-        &self,
-        _ctx: Ctx<'_>,
-        _params: Parameters<SelectProjectParams>,
-    ) -> ToolResult {
-        self.tool_registry.enable_tool("project_task");
-        Ok(ToolOutput::json(serde_json::Map::from_iter([(
-            "selected".to_string(),
-            serde_json::Value::Bool(true),
-        )])))
-    }
-
-    #[mcp_tool(name = "project_task", read_only = true, open_world = false)]
-    async fn project_task(
-        &self,
-        _ctx: Ctx<'_>,
-        _params: Parameters<ProjectTaskParams>,
-    ) -> ToolResult {
-        Ok(ToolOutput::json(serde_json::Map::from_iter([(
-            "task".to_string(),
-            serde_json::Value::String("available".to_string()),
-        )])))
-    }
-}
-
-fn parse_data_url(data_url: &str) -> Result<(&str, &str), String> {
-    let payload = data_url
-        .strip_prefix("data:")
-        .ok_or_else(|| "data URL must start with data:".to_string())?;
-    let (metadata, base64_data) = payload
-        .split_once(',')
-        .ok_or_else(|| "data URL must contain a comma separator".to_string())?;
-    let mime_type = metadata
-        .strip_suffix(";base64")
-        .ok_or_else(|| "data URL must use ;base64 encoding".to_string())?;
-    if mime_type.is_empty() {
-        return Err("data URL is missing a MIME type".to_string());
-    }
-    if base64_data.is_empty() {
-        return Err("data URL is missing base64 payload".to_string());
-    }
-    Ok((mime_type, base64_data))
-}
-
-fn tool_router() -> McpToolRouter<TestStdioServer> {
-    let router = McpToolRouter::new()
-        .with_tool(
-            TestStdioServer::echo_tool_info(),
-            TestStdioServer::echo_handler,
-            None,
-        )
-        .with_tool(
-            TestStdioServer::image_tool_info(),
-            TestStdioServer::image_handler,
-            None,
-        );
-
-    if std::env::var_os("MCP_TEST_DYNAMIC_TOOLS").is_some() {
-        router
-            .with_tool(
-                TestStdioServer::select_project_tool_info(),
-                TestStdioServer::select_project_handler,
-                None,
-            )
-            .with_tool(
-                TestStdioServer::project_task_tool_info(),
-                TestStdioServer::project_task_handler,
-                None,
-            )
-    } else {
-        router
-    }
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -167,7 +32,7 @@ async fn main() -> io::Result<()> {
     let server = Arc::new(TestStdioServer {
         tool_registry: tool_registry.clone(),
     });
-    for tool in tool_router().into_tools(server) {
+    for tool in tools::router().into_tools(server) {
         if tool.name() == "project_task" {
             tool_registry.register_boxed_configured(
                 tool,
@@ -185,6 +50,3 @@ async fn main() -> io::Result<()> {
         .map_err(|err| io::Error::other(format!("mcp server error: {err}")))?;
     Ok(())
 }
-
-#[cfg(test)]
-mod tests;
