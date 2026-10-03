@@ -216,6 +216,14 @@ pub(crate) async fn clamp_suite() {
 }
 
 #[cfg(test)]
+pub(crate) async fn terminal_title_suite() {
+    Box::pin(terminal_title_icons_follow_turn_and_mcp_lifecycle()).await;
+    Box::pin(terminal_title_rename_and_mcp_update_preserve_working_icon()).await;
+    Box::pin(terminal_title_off_suppresses_icon_updates()).await;
+    Box::pin(super::terminal_title::tests::attention_lifecycle_tests()).await;
+}
+
+#[cfg(test)]
 pub(crate) async fn chatwidget_suite() {
     Box::pin(resumed_initial_messages_render_history()).await;
     Box::pin(process_snapshot_replay_does_not_duplicate_agent_message_history()).await;
@@ -426,9 +434,6 @@ pub(crate) async fn chatwidget_suite() {
         .expect("apply_patch_request_shows_diff_summary");
     Box::pin(plan_update_renders_history_cell()).await;
     Box::pin(stream_error_updates_status_indicator()).await;
-    Box::pin(terminal_title_icons_follow_turn_and_mcp_lifecycle()).await;
-    Box::pin(terminal_title_rename_and_mcp_update_preserve_working_icon()).await;
-    Box::pin(terminal_title_off_suppresses_icon_updates()).await;
     Box::pin(replayed_turn_started_does_not_mark_task_running()).await;
     Box::pin(process_snapshot_replayed_turn_started_marks_task_running()).await;
     Box::pin(replayed_stream_error_does_not_set_retry_status_or_status_indicator()).await;
@@ -2157,7 +2162,7 @@ fn test_session_telemetry(config: &Config, model: &str) -> SessionTelemetry {
 }
 
 // --- Helpers for tests that need direct construction and event draining ---
-async fn make_chatwidget_manual(
+pub(super) async fn make_chatwidget_manual(
     model_override: Option<&str>,
 ) -> (
     ChatWidget,
@@ -2250,6 +2255,8 @@ async fn make_chatwidget_manual(
         suppress_queue_autosend: false,
         process_id: None,
         process_name: None,
+        terminal_title_attention: std::cell::Cell::new(false),
+        terminal_title_animation: std::cell::Cell::new(None),
         forked_from: None,
         resumed_session: None,
         frame_requester: FrameRequester::test_dummy(),
@@ -2427,7 +2434,9 @@ fn drain_insert_history(
     out
 }
 
-fn drain_terminal_titles(rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>) -> Vec<String> {
+pub(super) fn drain_terminal_titles(
+    rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
+) -> Vec<String> {
     let mut titles = Vec::new();
     while let Ok(event) = rx.try_recv() {
         if let AppEvent::SetTerminalTitle(Some(title)) = event {
@@ -8178,7 +8187,6 @@ async fn stream_error_updates_status_indicator() {
 async fn terminal_title_icons_follow_turn_and_mcp_lifecycle() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(None).await;
     chat.config.tui_terminal_title_icon = Some("✦".to_string());
-    chat.config.tui_terminal_title_working_icon = Some("◒".to_string());
     chat.process_name = Some("Terminal Icons".to_string());
 
     chat.refresh_terminal_title();
@@ -8190,7 +8198,7 @@ async fn terminal_title_icons_follow_turn_and_mcp_lifecycle() {
     chat.on_task_started();
     assert_eq!(
         drain_terminal_titles(&mut rx),
-        vec!["◒ Terminal Icons".to_string()]
+        vec!["◰ Terminal Icons".to_string()]
     );
 
     chat.on_mcp_startup_update(McpStartupUpdateEvent {
@@ -8199,13 +8207,13 @@ async fn terminal_title_icons_follow_turn_and_mcp_lifecycle() {
     });
     assert_eq!(
         drain_terminal_titles(&mut rx),
-        vec!["◒ Terminal Icons".to_string()]
+        vec!["◰ Terminal Icons".to_string()]
     );
 
     chat.on_task_complete(None, /*from_replay*/ false);
     assert_eq!(
         drain_terminal_titles(&mut rx),
-        vec!["◒ Terminal Icons".to_string()],
+        vec!["◰ Terminal Icons".to_string()],
         "MCP startup keeps the tab working after the model turn completes"
     );
 
@@ -8221,7 +8229,6 @@ async fn terminal_title_rename_and_mcp_update_preserve_working_icon() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(None).await;
     let process_id = ProcessId::new();
     chat.config.tui_terminal_title_icon = Some("✦".to_string());
-    chat.config.tui_terminal_title_working_icon = Some("◒".to_string());
     chat.process_id = Some(process_id);
     chat.process_name = Some("Old Name".to_string());
     chat.on_task_started();
@@ -8233,7 +8240,7 @@ async fn terminal_title_rename_and_mcp_update_preserve_working_icon() {
     });
     assert_eq!(
         drain_terminal_titles(&mut rx),
-        vec!["◒ New Name".to_string()]
+        vec!["◰ New Name".to_string()]
     );
 
     chat.on_mcp_startup_update(McpStartupUpdateEvent {
@@ -8242,7 +8249,7 @@ async fn terminal_title_rename_and_mcp_update_preserve_working_icon() {
     });
     assert_eq!(
         drain_terminal_titles(&mut rx),
-        vec!["◒ New Name".to_string()]
+        vec!["◰ New Name".to_string()]
     );
 }
 
@@ -8251,15 +8258,22 @@ async fn terminal_title_off_suppresses_icon_updates() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(None).await;
     chat.config.terminal_title = chaos_kern::config::TerminalTitleMode::Off;
     chat.config.tui_terminal_title_icon = Some("✦".to_string());
-    chat.config.tui_terminal_title_working_icon = Some("◒".to_string());
     chat.process_name = Some("Hidden Title".to_string());
 
     chat.refresh_terminal_title();
     chat.on_task_started();
+    chat.handle_apply_patch_approval_now(ApplyPatchApprovalRequestEvent {
+        call_id: "patch-1".to_string(),
+        turn_id: "turn-1".to_string(),
+        changes: HashMap::new(),
+        reason: None,
+        grant_root: None,
+    });
+    chat.handle_key_event(KeyEvent::from(KeyCode::Esc));
 
     assert!(
         drain_terminal_titles(&mut rx).is_empty(),
-        "terminal title mode off must suppress idle and working updates"
+        "terminal title mode off must suppress idle, working, and attention updates"
     );
 }
 
@@ -8267,7 +8281,6 @@ async fn terminal_title_off_suppresses_icon_updates() {
 async fn replayed_turn_started_does_not_mark_task_running() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(None).await;
     chat.config.tui_terminal_title_icon = Some("✦".to_string());
-    chat.config.tui_terminal_title_working_icon = Some("◒".to_string());
     chat.process_name = Some("Replay Test".to_string());
     chat.refresh_terminal_title();
     drain_terminal_titles(&mut rx);
@@ -8290,7 +8303,6 @@ async fn replayed_turn_started_does_not_mark_task_running() {
 async fn process_snapshot_replayed_turn_started_marks_task_running() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(None).await;
     chat.config.tui_terminal_title_icon = Some("✦".to_string());
-    chat.config.tui_terminal_title_working_icon = Some("◒".to_string());
     chat.process_name = Some("Replay Test".to_string());
 
     chat.handle_codex_event_replay(Event {
@@ -8304,7 +8316,7 @@ async fn process_snapshot_replayed_turn_started_marks_task_running() {
 
     assert_eq!(
         drain_terminal_titles(&mut rx),
-        vec!["◒ Replay Test".to_string()]
+        vec!["◰ Replay Test".to_string()]
     );
     assert!(chat.bottom_pane.is_task_running());
     let status = chat

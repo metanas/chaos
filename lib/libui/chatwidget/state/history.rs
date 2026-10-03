@@ -344,6 +344,7 @@ impl ChatWidget {
 
     pub fn set_pending_process_approvals(&mut self, threads: Vec<String>) {
         self.bottom_pane.set_pending_process_approvals(threads);
+        self.refresh_terminal_title_if_attention_changed();
     }
 
     pub fn add_diff_in_progress(&mut self) {

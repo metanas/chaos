@@ -9,6 +9,30 @@ should. There is no patch level; the build timestamp is the patch.
 
 ## [Unreleased]
 
+## [47.10.2] - 2026-10-03
+
+### Added
+- Automatic terminal-title attention markers alternating between `◻` and `❏`
+  for pending approvals, permission requests, user-input questions, and MCP
+  elicitation, including queued and background-agent requests. These markers
+  are built-in, with no override. Attention takes precedence over working and
+  idle markers, restoring the normal title when requests are answered or
+  cancelled.
+- MCP Apps `ui://` resource discovery and reads with typed tool UI metadata,
+  HTML decoding, and validated sandbox metadata. Terminal clients continue not
+  to advertise Apps rendering support.
+
+### Changed
+- Animate working terminal titles through the built-in `◰`, `◱`, `◲`, and `◳`
+  markers, with no activity-animation toggle.
+- Update `mcp-host` and its macros to 0.6.0 and `mcp-guest` to 0.11.0.
+
+### Removed
+- The `tui.terminal_title_working_icon` override; working and attention
+  activity markers are built-in rather than configurable replacements.
+- Obsolete steer-mode test shim, redundant shell runtime backend selection, and
+  the unused `ConversationPathResponseEvent` type.
+
 ## [47.10.1] - 2026-10-02
 
 ### Added

@@ -647,6 +647,14 @@ impl BottomPane {
         self.is_task_running
     }
 
+    pub(crate) fn requires_user_attention(&self) -> bool {
+        !self.pending_process_approvals.is_empty()
+            || self
+                .view_stack
+                .iter()
+                .any(|view| view.requires_user_attention())
+    }
+
     #[cfg(any(test, feature = "testing"))]
     pub fn has_active_view(&self) -> bool {
         !self.view_stack.is_empty()

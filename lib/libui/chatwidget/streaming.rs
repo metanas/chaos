@@ -236,6 +236,7 @@ impl ChatWidget {
 
     pub fn pre_draw_tick(&mut self) {
         self.bottom_pane.pre_draw_tick();
+        self.refresh_terminal_title_animation();
     }
 
     fn run_commit_tick(&mut self) {
@@ -276,6 +277,7 @@ impl ChatWidget {
         let mut mgr = std::mem::take(&mut self.interrupts);
         mgr.flush_all(self);
         self.interrupts = mgr;
+        self.refresh_terminal_title_if_attention_changed();
     }
 
     #[inline]
@@ -286,6 +288,7 @@ impl ChatWidget {
     ) {
         if self.stream_controller.is_some() || !self.interrupts.is_empty() {
             push(&mut self.interrupts);
+            self.refresh_terminal_title_if_attention_changed();
         } else {
             handle(self);
         }

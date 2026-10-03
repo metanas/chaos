@@ -321,6 +321,9 @@ pub struct ChatWidget {
     suppress_queue_autosend: bool,
     process_id: Option<ProcessId>,
     process_name: Option<String>,
+    /// Last published attention state, used to avoid redundant title updates.
+    terminal_title_attention: std::cell::Cell<bool>,
+    terminal_title_animation: std::cell::Cell<Option<terminal_title::TerminalTitleAnimation>>,
     forked_from: Option<ProcessId>,
     resumed_session: Option<ProcessId>,
     frame_requester: FrameRequester,
@@ -487,6 +490,8 @@ impl ChatWidget {
             suppress_queue_autosend: false,
             process_id: None,
             process_name: None,
+            terminal_title_attention: std::cell::Cell::new(false),
+            terminal_title_animation: std::cell::Cell::new(None),
             forked_from: None,
             resumed_session: p.resumed_session,
             queued_user_messages: VecDeque::new(),

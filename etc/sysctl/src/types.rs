@@ -767,12 +767,6 @@ pub struct Tui {
     #[serde(default, deserialize_with = "deserialize_terminal_title_icon")]
     pub terminal_title_icon: Option<String>,
 
-    /// Optional replacement marker shown while the active session is working.
-    ///
-    /// When unset or empty, `terminal_title_icon` remains visible while working.
-    #[serde(default, deserialize_with = "deserialize_terminal_title_icon")]
-    pub terminal_title_working_icon: Option<String>,
-
     /// Syntax highlighting theme name (kebab-case).
     ///
     /// When set, overrides automatic light/dark theme detection.

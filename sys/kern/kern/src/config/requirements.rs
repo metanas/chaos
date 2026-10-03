@@ -750,10 +750,6 @@ impl Config {
             tui_theme: cfg.tui.as_ref().and_then(|t| t.theme.clone()),
             appearance: cfg.appearance.clone(),
             tui_terminal_title_icon: cfg.tui.as_ref().and_then(|t| t.terminal_title_icon.clone()),
-            tui_terminal_title_working_icon: cfg
-                .tui
-                .as_ref()
-                .and_then(|t| t.terminal_title_working_icon.clone()),
             otel: {
                 let t: OtelConfigToml = cfg.otel.unwrap_or_default();
                 let log_user_prompt = t.log_user_prompt.unwrap_or(false);

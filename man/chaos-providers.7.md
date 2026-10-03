@@ -294,17 +294,14 @@ terminal_title = "process-name"
 # Also let the current root agent name the session.
 terminal_title = "agent"
 
-# Optional identity and working markers are TUI presentation only.
+# Optional idle identity marker is TUI presentation only.
 [tui]
 terminal_title_icon = "✦"
-terminal_title_working_icon = "◒"
 ```
 
-The idle icon prefixes both named sessions and the `new session` fallback. While
-a model turn or MCP startup is active, the working icon replaces it. If only
-`terminal_title_icon` is configured, that icon remains visible in both states.
-Icons must be one grapheme cluster and no more than four terminal cells; an
-empty string disables the corresponding icon.
+The optional idle icon prefixes both named sessions and the `new session`
+fallback. It must be one grapheme cluster and no more than four terminal cells;
+an empty string disables it.
 
 Agent mode exposes `set_session_title` to the current root agent and privately
 asks it to review the title at the start of a session, after resume or

@@ -17,6 +17,13 @@ pub trait BottomPaneView: Renderable {
         false
     }
 
+    /// Whether this view is waiting for a response required by an agent or MCP server.
+    ///
+    /// Ordinary menus and settings views do not require attention.
+    fn requires_user_attention(&self) -> bool {
+        false
+    }
+
     /// Stable identifier for views that need external refreshes while open.
     fn view_id(&self) -> Option<&'static str> {
         None

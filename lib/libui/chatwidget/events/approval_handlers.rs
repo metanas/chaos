@@ -30,8 +30,7 @@ impl ChatWidget {
             network_approval_context: ev.network_approval_context,
             additional_permissions: ev.additional_permissions,
         };
-        self.bottom_pane.push_approval_request(request);
-        self.request_redraw();
+        self.push_approval_request(request);
     }
 
     pub fn handle_apply_patch_approval_now(&mut self, ev: ApplyPatchApprovalRequestEvent) {
@@ -46,8 +45,7 @@ impl ChatWidget {
             changes: ev.changes.clone(),
             cwd: self.config.cwd.clone(),
         };
-        self.bottom_pane.push_approval_request(request);
-        self.request_redraw();
+        self.push_approval_request(request);
         self.notify(Notification::EditApprovalRequested {
             cwd: self.config.cwd.clone(),
             changes: ev.changes.keys().cloned().collect(),
@@ -66,8 +64,7 @@ impl ChatWidget {
         });
         let process_id = self.process_id.unwrap_or_default();
         if let Some(request) = McpServerElicitationFormRequest::from_event(process_id, ev.clone()) {
-            self.bottom_pane
-                .push_mcp_server_elicitation_request(request);
+            self.push_mcp_server_elicitation_request(request);
         } else {
             let url = match &ev.request {
                 ElicitationRequest::Url { url, .. } => Some(url.clone()),
@@ -82,13 +79,13 @@ impl ChatWidget {
                 message: ev.request.message().to_string(),
                 url,
             };
-            self.bottom_pane.push_approval_request(request);
+            self.push_approval_request(request);
         }
-        self.request_redraw();
     }
 
     pub fn push_approval_request(&mut self, request: ApprovalRequest) {
         self.bottom_pane.push_approval_request(request);
+        self.refresh_terminal_title_if_attention_changed();
         self.request_redraw();
     }
 
@@ -98,6 +95,7 @@ impl ChatWidget {
     ) {
         self.bottom_pane
             .push_mcp_server_elicitation_request(request);
+        self.refresh_terminal_title_if_attention_changed();
         self.request_redraw();
     }
 
@@ -109,6 +107,7 @@ impl ChatWidget {
             summary: Notification::user_input_request_summary(&ev.questions),
         });
         self.bottom_pane.push_user_input_request(ev);
+        self.refresh_terminal_title_if_attention_changed();
         self.request_redraw();
     }
 
@@ -122,7 +121,6 @@ impl ChatWidget {
             reason: ev.reason,
             permissions: ev.permissions,
         };
-        self.bottom_pane.push_approval_request(request);
-        self.request_redraw();
+        self.push_approval_request(request);
     }
 }

@@ -47,6 +47,7 @@ impl ChatWidget {
                 ..
             } if modifiers.contains(KeyModifiers::CONTROL) && c.eq_ignore_ascii_case(&'c') => {
                 self.on_ctrl_c();
+                self.refresh_terminal_title_if_attention_changed();
                 return;
             }
             KeyEvent {
@@ -216,6 +217,7 @@ impl ChatWidget {
                 InputResult::None => {}
             },
         }
+        self.refresh_terminal_title_if_attention_changed();
     }
 
     /// Attach a local image to the composer when the active model supports image inputs.
@@ -284,6 +286,7 @@ impl ChatWidget {
 
     pub fn handle_paste(&mut self, text: String) {
         self.bottom_pane.handle_paste(text);
+        self.refresh_terminal_title_if_attention_changed();
     }
 
     // Returns true if caller should skip rendering this frame (a future frame is scheduled).

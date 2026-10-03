@@ -145,7 +145,6 @@ fn config_toml_deserializes_model_availability_nux() {
             alternate_screen: AltScreenMode::default(),
             status_line: None,
             terminal_title_icon: None,
-            terminal_title_working_icon: None,
             theme: None,
             model_availability_nux: ModelAvailabilityNuxConfig {
                 shown_count: HashMap::from(
@@ -233,7 +232,6 @@ fn terminal_title_icons_parse_normalize_and_reject_invalid_values() {
         r#"
 [tui]
 terminal_title_icon = " ✦ "
-terminal_title_working_icon = "🧑‍💻"
 "#,
     )
     .expect("valid terminal title icons should deserialize");
@@ -244,19 +242,16 @@ terminal_title_working_icon = "🧑‍💻"
     )
     .expect("load terminal title icon config");
     assert_eq!(cfg.tui_terminal_title_icon.as_deref(), Some("✦"));
-    assert_eq!(cfg.tui_terminal_title_working_icon.as_deref(), Some("🧑‍💻"));
 
     let empty = toml::from_str::<ConfigToml>(
         r#"
 [tui]
 terminal_title_icon = ""
-terminal_title_working_icon = "   "
 "#,
     )
     .expect("empty terminal title icons should deserialize");
     let tui = empty.tui.expect("tui config");
     assert_eq!(tui.terminal_title_icon, None);
-    assert_eq!(tui.terminal_title_working_icon, None);
 
     for invalid in ["two icons", "✦✦", "\\u001b"] {
         let input = format!(
@@ -384,7 +379,6 @@ fn tui_config_missing_notifications_field_defaults_to_enabled() {
             alternate_screen: AltScreenMode::Auto,
             status_line: None,
             terminal_title_icon: None,
-            terminal_title_working_icon: None,
             theme: None,
             model_availability_nux: ModelAvailabilityNuxConfig::default(),
         }
@@ -1134,7 +1128,6 @@ fn expected_precedence_fixture_config_baseline(fixture: &PrecedenceTestFixture) 
         tui_theme: None,
         appearance: Default::default(),
         tui_terminal_title_icon: None,
-        tui_terminal_title_working_icon: None,
         otel: OtelConfig::default(),
         disable_user_scripts: false,
     }

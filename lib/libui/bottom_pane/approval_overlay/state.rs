@@ -426,6 +426,10 @@ impl BottomPaneView for ApprovalOverlay {
         self.done
     }
 
+    fn requires_user_attention(&self) -> bool {
+        !self.is_complete()
+    }
+
     fn try_consume_approval_request(
         &mut self,
         request: ApprovalRequest,

@@ -901,6 +901,10 @@ impl BottomPaneView for McpServerElicitationOverlay {
         self.done
     }
 
+    fn requires_user_attention(&self) -> bool {
+        !self.is_complete()
+    }
+
     fn handle_paste(&mut self, pasted: String) -> bool {
         if pasted.is_empty() || self.current_field_is_select() {
             return false;

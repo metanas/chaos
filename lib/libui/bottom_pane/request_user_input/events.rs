@@ -392,6 +392,10 @@ impl BottomPaneView for RequestUserInputOverlay {
         self.done()
     }
 
+    fn requires_user_attention(&self) -> bool {
+        !self.is_complete()
+    }
+
     fn handle_paste(&mut self, pasted: String) -> bool {
         if self.done() || self.confirm_unanswered_active() || pasted.is_empty() {
             return false;

@@ -450,6 +450,10 @@ impl BottomPaneView for AppLinkView {
     fn is_complete(&self) -> bool {
         self.complete
     }
+
+    fn requires_user_attention(&self) -> bool {
+        self.is_tool_suggestion() && !self.is_complete()
+    }
 }
 
 impl crate::render::renderable::Renderable for AppLinkView {

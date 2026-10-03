@@ -44,6 +44,19 @@ impl InterruptManager {
         self.queue.is_empty()
     }
 
+    pub fn requires_user_attention(&self) -> bool {
+        self.queue.iter().any(|event| {
+            matches!(
+                event,
+                QueuedInterrupt::ExecApproval(_)
+                    | QueuedInterrupt::ApplyPatchApproval(_)
+                    | QueuedInterrupt::Elicitation(_)
+                    | QueuedInterrupt::RequestPermissions(_)
+                    | QueuedInterrupt::RequestUserInput(_)
+            )
+        })
+    }
+
     pub fn push_exec_approval(&mut self, ev: ExecApprovalRequestEvent) {
         self.queue.push_back(QueuedInterrupt::ExecApproval(ev));
     }
