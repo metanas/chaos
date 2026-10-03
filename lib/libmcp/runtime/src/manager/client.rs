@@ -532,6 +532,8 @@ impl AsyncManagedClient {
 pub(super) fn client_capabilities() -> mcp_guest::protocol::ClientCapabilities {
     mcp_guest::protocol::ClientCapabilities {
         experimental: Some(chaos_mcp_protocol::client_experimental_capabilities()),
+        // Terminal clients can read views but do not implement an Apps renderer.
+        extensions: None,
         roots: Some(mcp_guest::protocol::RootsCapability {
             list_changed: Some(true),
         }),

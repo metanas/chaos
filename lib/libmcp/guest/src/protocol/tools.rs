@@ -33,6 +33,13 @@ pub struct ToolInfo {
     pub meta: Option<Meta>,
 }
 
+impl ToolInfo {
+    /// Parse and validate `_meta.ui` without dropping other tool metadata.
+    pub fn ui(&self) -> Result<Option<super::apps::ToolUi>, crate::GuestError> {
+        super::apps::tool_ui(self.meta.as_ref())
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListToolsResult {

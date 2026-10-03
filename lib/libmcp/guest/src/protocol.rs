@@ -77,6 +77,7 @@ macro_rules! const_str_marker {
     };
 }
 
+pub mod apps;
 pub mod capabilities;
 pub mod elicitation;
 pub mod implementation;
@@ -86,6 +87,12 @@ pub mod resources;
 pub mod sampling;
 pub mod tools;
 
+pub use apps::ToolUi;
+pub use apps::UiCsp;
+pub use apps::UiPermissions;
+pub use apps::UiResource;
+pub use apps::UiResourceMeta;
+pub use apps::UiVisibility;
 pub use capabilities::ClientCapabilities;
 pub use capabilities::CompletionCapability;
 pub use capabilities::ElicitationCapability;

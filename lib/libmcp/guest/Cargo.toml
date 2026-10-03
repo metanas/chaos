@@ -1,6 +1,6 @@
 [package]
 name = "mcp-guest"
-version = "0.10.0"
+version = "0.11.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -22,6 +22,7 @@ stdio = []
 http = ["dep:chrono-machines", "dep:rama", "dep:rand", "dep:state-machines", "dep:tokio-stream", "dep:url"]
 
 [dependencies]
+base64 = { workspace = true }
 chrono-machines = { workspace = true, optional = true }
 mcp-host = { workspace = true }
 rand = { workspace = true, optional = true }

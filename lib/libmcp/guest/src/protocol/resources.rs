@@ -34,6 +34,32 @@ pub enum ResourceContents {
     Blob(ResourceContentsBlob),
 }
 
+impl ResourceContents {
+    pub fn uri(&self) -> &str {
+        match self {
+            Self::Text(contents) => &contents.uri,
+            Self::Blob(contents) => &contents.uri,
+        }
+    }
+
+    pub fn is_mcp_app(&self) -> bool {
+        let mime_type = match self {
+            Self::Text(contents) => contents.mime_type.as_deref(),
+            Self::Blob(contents) => contents.mime_type.as_deref(),
+        };
+        super::apps::is_ui_uri(self.uri()) && mime_type == Some(super::apps::MIME_TYPE)
+    }
+
+    /// Parse sandbox requests; these declarations do not grant permissions.
+    pub fn ui(&self) -> Result<Option<super::apps::UiResourceMeta>, crate::GuestError> {
+        let meta = match self {
+            Self::Text(contents) => contents.meta.as_ref(),
+            Self::Blob(contents) => contents.meta.as_ref(),
+        };
+        super::apps::resource_ui(meta)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceInfo {
@@ -53,6 +79,18 @@ pub struct ResourceInfo {
     pub annotations: Option<Annotations>,
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     pub meta: Option<Meta>,
+}
+
+impl ResourceInfo {
+    pub fn is_mcp_app(&self) -> bool {
+        super::apps::is_ui_uri(&self.uri)
+            && self.mime_type.as_deref() == Some(super::apps::MIME_TYPE)
+    }
+
+    /// Listing metadata is a fallback; contents-level metadata takes precedence.
+    pub fn ui(&self) -> Result<Option<super::apps::UiResourceMeta>, crate::GuestError> {
+        super::apps::resource_ui(self.meta.as_ref())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

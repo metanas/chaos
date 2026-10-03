@@ -2,6 +2,12 @@ use super::*;
 use futures::future;
 
 #[test]
+fn terminal_client_does_not_advertise_an_apps_renderer() {
+    assert!(!client_capabilities().supports_mcp_apps());
+    assert!(client_capabilities().extensions.is_none());
+}
+
+#[test]
 fn initialize_advertises_chaos_fleet_experimental_capability() {
     let capabilities = client_capabilities();
     let experimental = capabilities.experimental.expect("experimental");

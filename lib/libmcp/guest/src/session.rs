@@ -429,6 +429,18 @@ impl McpSession {
         .await
     }
 
+    /// Discover listed MCP Apps views. Tool-linked views need not be listed.
+    pub async fn list_ui_resources(
+        &self,
+    ) -> Result<Vec<crate::protocol::ResourceInfo>, GuestError> {
+        Ok(self
+            .list_resources()
+            .await?
+            .into_iter()
+            .filter(crate::protocol::ResourceInfo::is_mcp_app)
+            .collect())
+    }
+
     pub async fn list_resource_templates(
         &self,
     ) -> Result<Vec<crate::protocol::ResourceTemplateInfo>, GuestError> {
@@ -452,6 +464,52 @@ impl McpSession {
             },
         )
         .await
+    }
+
+    /// Read a view without executing HTML or granting its requested permissions.
+    ///
+    /// Uses cached listing metadata as a fallback: call `list_resources()` or
+    /// `list_ui_resources()` first if you need that fallback. Does not require
+    /// the URI to be listed and never fetches a URI via HTTP or the filesystem.
+    pub async fn read_ui_resource(
+        &self,
+        uri: impl Into<String>,
+    ) -> Result<crate::protocol::UiResource, GuestError> {
+        let uri = uri.into();
+        if !crate::protocol::apps::is_ui_uri(&uri) {
+            return Err(GuestError::InvalidParams(
+                crate::protocol::apps::AppsError::InvalidUri(uri).to_string(),
+            ));
+        }
+        let result = self.read_resource(&uri).await?;
+        let mut matching = result
+            .contents
+            .into_iter()
+            .filter(|contents| contents.uri() == uri);
+        let contents = matching.next().ok_or_else(|| {
+            GuestError::Protocol(format!("resources/read returned no contents for {uri}"))
+        })?;
+        if matching.next().is_some() {
+            return Err(GuestError::Protocol(format!(
+                "resources/read returned multiple views for {uri}"
+            )));
+        }
+        let listings = self.inner.shared.resources.cached().await;
+        let listing = listings
+            .as_ref()
+            .and_then(|listings| listings.iter().find(|listing| listing.uri == uri));
+        crate::protocol::UiResource::from_contents(contents, listing)
+    }
+
+    /// Read the view linked from a tool; visibility-only metadata has no view.
+    pub async fn read_tool_ui(
+        &self,
+        tool: &ToolInfo,
+    ) -> Result<Option<crate::protocol::UiResource>, GuestError> {
+        match tool.ui()?.and_then(|ui| ui.resource_uri) {
+            Some(uri) => self.read_ui_resource(uri).await.map(Some),
+            None => Ok(None),
+        }
     }
 
     pub async fn subscribe_resource(&self, uri: impl Into<String>) -> Result<(), GuestError> {
@@ -681,3 +739,6 @@ fn value_kind(value: &Value) -> &'static str {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod apps_tests;

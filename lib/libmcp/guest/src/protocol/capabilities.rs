@@ -133,6 +133,8 @@ pub struct ClientCapabilities {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub experimental: Option<HashMap<String, Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub extensions: Option<HashMap<String, Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub roots: Option<RootsCapability>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sampling: Option<SamplingCapability>,
@@ -147,6 +149,8 @@ pub struct ClientCapabilities {
 pub struct ServerCapabilities {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub experimental: Option<HashMap<String, Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extensions: Option<HashMap<String, Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub logging: Option<LoggingCapability>,
     #[serde(skip_serializing_if = "Option::is_none", alias = "completion")]
@@ -163,4 +167,36 @@ pub struct ServerCapabilities {
     /// client features or granting them runtime behavior.
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,
+}
+
+impl ClientCapabilities {
+    /// Advertise an embedding application's MCP Apps renderer.
+    ///
+    /// Opt-in only: reading HTML alone does not constitute rendering support.
+    pub fn with_mcp_apps(mut self) -> Self {
+        self.extensions.get_or_insert_with(HashMap::new).insert(
+            super::apps::EXTENSION_ID.to_string(),
+            Value::Object(super::apps::extension_settings()),
+        );
+        self
+    }
+
+    pub fn extension(&self, id: &str) -> Option<&Value> {
+        self.extensions.as_ref()?.get(id)
+    }
+
+    pub fn supports_mcp_apps(&self) -> bool {
+        super::apps::supports_mcp_apps(self.extension(super::apps::EXTENSION_ID))
+    }
+}
+
+impl ServerCapabilities {
+    pub fn extension(&self, id: &str) -> Option<&Value> {
+        self.extensions.as_ref()?.get(id)
+    }
+
+    /// Whether the server advertises MCP Apps HTML views; not client support.
+    pub fn supports_mcp_apps(&self) -> bool {
+        super::apps::supports_mcp_apps(self.extension(super::apps::EXTENSION_ID))
+    }
 }

@@ -110,6 +110,14 @@ macro_rules! impl_session_builder {
                 self
             }
 
+            /// Advertise MCP Apps support provided by your embedding renderer.
+            ///
+            /// Does not render HTML or grant the view any permissions.
+            pub fn enable_mcp_apps(mut self) -> Self {
+                self.capabilities = self.capabilities.with_mcp_apps();
+                self
+            }
+
             pub fn enable_roots(mut self, list_changed: bool) -> Self {
                 self.capabilities.roots = Some(RootsCapability {
                     list_changed: Some(list_changed),
@@ -174,6 +182,9 @@ macro_rules! impl_session_builder {
         }
     };
 }
+
+#[cfg(all(test, any(feature = "stdio", feature = "http")))]
+mod tests;
 
 #[cfg(feature = "stdio")]
 impl_session_builder!(StdioBuilder);
