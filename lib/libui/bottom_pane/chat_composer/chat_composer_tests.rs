@@ -1394,7 +1394,6 @@ fn submit_at_character_limit_succeeds() {
         "Ask FreeChaOS to do anything".to_string(),
         false,
     );
-    composer.set_steer_enabled(true);
     let input = "x".repeat(MAX_USER_INPUT_TEXT_CHARS);
     composer.textarea.set_text_clearing_elements(&input);
 
@@ -1420,7 +1419,6 @@ fn oversized_submit_reports_error_and_restores_draft() {
         "Ask FreeChaOS to do anything".to_string(),
         false,
     );
-    composer.set_steer_enabled(true);
     let input = "x".repeat(MAX_USER_INPUT_TEXT_CHARS + 1);
     composer.textarea.set_text_clearing_elements(&input);
 
@@ -1460,12 +1458,12 @@ fn oversized_queued_submission_reports_error_and_restores_draft() {
         "Ask FreeChaOS to do anything".to_string(),
         false,
     );
-    composer.set_steer_enabled(false);
+    composer.set_task_running(true);
     let input = "x".repeat(MAX_USER_INPUT_TEXT_CHARS + 1);
     composer.textarea.set_text_clearing_elements(&input);
 
     let (result, _needs_redraw) =
-        composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        composer.handle_key_event(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
 
     assert_eq!(InputResult::None, result);
     assert_eq!(composer.textarea.text(), input);
@@ -1805,7 +1803,6 @@ fn kill_buffer_persists_after_submit() {
         "Ask FreeChaOS to do anything".to_string(),
         false,
     );
-    composer.set_steer_enabled(true);
     composer.textarea.insert_str("restore me");
     composer.textarea.set_cursor(0);
 
@@ -3906,7 +3903,6 @@ fn prompt_expansion_over_character_limit_reports_error_and_restores_draft() {
         "Ask FreeChaOS to do anything".to_string(),
         false,
     );
-    composer.set_steer_enabled(true);
 
     composer.set_custom_prompts(vec![CustomPrompt {
         name: "my-prompt".to_string(),

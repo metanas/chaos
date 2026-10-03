@@ -394,9 +394,6 @@ impl ChatComposer {
         self.login_required = login_required;
     }
 
-    /// Compatibility shim for tests that still toggle the removed steer mode flag.
-    #[cfg(test)]
-    pub fn set_steer_enabled(&mut self, _enabled: bool) {}
     /// Centralized feature gating keeps config checks out of call sites.
     fn popups_enabled(&self) -> bool {
         self.config.popups_enabled

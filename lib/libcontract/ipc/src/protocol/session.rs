@@ -36,15 +36,6 @@ pub struct PermissionsUpdatedEvent {
     pub granted_permissions: Option<PermissionProfile>,
 }
 
-// Conversation kept for backward compatibility.
-/// Response payload for `Op::GetHistory` containing the current session's
-/// in-memory transcript.
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct ConversationPathResponseEvent {
-    pub conversation_id: ProcessId,
-    pub path: PathBuf,
-}
-
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct ResumedHistory {
     pub conversation_id: ProcessId,

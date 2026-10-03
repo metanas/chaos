@@ -26,7 +26,6 @@ use crate::tools::registry::ToolHandler;
 use crate::tools::registry::ToolKind;
 use crate::tools::runtimes::shell::ShellRequest;
 use crate::tools::runtimes::shell::ShellRuntime;
-use crate::tools::runtimes::shell::ShellRuntimeBackend;
 use crate::tools::sandboxing::ToolCtx;
 use chaos_ipc::models::PermissionProfile;
 
@@ -44,7 +43,6 @@ struct RunExecLikeArgs {
     tracker: crate::tools::context::SharedTurnDiffTracker,
     call_id: String,
     freeform: bool,
-    shell_runtime_backend: ShellRuntimeBackend,
 }
 
 impl ShellHandler {
@@ -69,10 +67,6 @@ impl ShellHandler {
 impl ShellCommandHandler {
     pub fn new() -> Self {
         Self
-    }
-
-    fn shell_runtime_backend(&self) -> ShellRuntimeBackend {
-        ShellRuntimeBackend::ShellCommandClassic
     }
 
     fn resolve_use_login_shell(
@@ -172,7 +166,6 @@ impl ToolHandler for ShellHandler {
                     tracker,
                     call_id,
                     freeform: false,
-                    shell_runtime_backend: ShellRuntimeBackend::Generic,
                 })
                 .await
             }
@@ -189,7 +182,6 @@ impl ToolHandler for ShellHandler {
                     tracker,
                     call_id,
                     freeform: false,
-                    shell_runtime_backend: ShellRuntimeBackend::Generic,
                 })
                 .await
             }
@@ -273,7 +265,6 @@ impl ToolHandler for ShellCommandHandler {
             tracker,
             call_id,
             freeform: true,
-            shell_runtime_backend: self.shell_runtime_backend(),
         })
         .await
     }
@@ -291,7 +282,6 @@ impl ShellHandler {
             tracker,
             call_id,
             freeform,
-            shell_runtime_backend,
         } = args;
 
         let mut exec_params = exec_params;
@@ -390,13 +380,7 @@ impl ShellHandler {
             exec_approval_requirement,
         };
         let mut orchestrator = ToolOrchestrator::new();
-        let mut runtime = {
-            use ShellRuntimeBackend::*;
-            match shell_runtime_backend {
-                Generic => ShellRuntime::new(),
-                backend @ ShellCommandClassic => ShellRuntime::for_shell_command(backend),
-            }
-        };
+        let mut runtime = ShellRuntime::new();
         let tool_ctx = ToolCtx {
             session: session.clone(),
             turn: turn.clone(),
