@@ -97,7 +97,7 @@ use libui::tool_badges;
 use libui::tui;
 
 const DEFAULT_LOG_FILTER: &str = "chaos_kern=info,chaos_console=info,libui=warn,\
-chaos_mcp_runtime=info,mcp_guest=info";
+chaos_mcp_runtime=info,mcp_guest=info,chaos_snitch::startup=info";
 
 const DEBUG_LOG_FILTER: &str = "warn,chaos_kern=debug,chaos_coreboot=debug,chaos_boot=debug,chaos_fork=debug,\
 chaos_console=debug,chaos_mcpd=debug,chaos_pam=debug,chaos_snitch=debug,\
@@ -136,6 +136,8 @@ pub async fn run_main(
     arg0_paths: Arg0DispatchPaths,
     loader_overrides: LoaderOverrides,
 ) -> std::io::Result<AppExitInfo> {
+    let startup = chaos_snitch::startup::StartupTimeline::new("console");
+    startup.mark("frontend_entry");
     let (sandbox_mode, approval_policy) = if cli.auto_exec.headless {
         (
             Some(SandboxMode::RootAccess),
@@ -224,10 +226,12 @@ pub async fn run_main(
     };
 
     let config = load_config_or_exit(cli_kv_overrides.clone(), overrides.clone()).await;
+    startup.mark("config_loaded");
 
     chaos_kern::runtime_db::mount_vfs_for_startup(&config)
         .await
         .map_err(std::io::Error::other)?;
+    startup.mark("storage_mounted");
 
     #[allow(clippy::print_stderr)]
     match check_execpolicy_for_warnings(&config.config_layer_stack).await {
@@ -315,6 +319,8 @@ pub async fn run_main(
         .with(otel_tracing_layer)
         .try_init();
 
+    startup.mark("logging_ready");
+    startup.enable_logging();
     run_ratatui_app(
         cli,
         arg0_paths,
@@ -323,6 +329,7 @@ pub async fn run_main(
         overrides,
         cli_kv_overrides,
         log_state_db,
+        startup,
     )
     .await
     .map_err(report_to_io_error)
@@ -369,6 +376,7 @@ async fn run_ratatui_app(
     overrides: ConfigOverrides,
     cli_kv_overrides: Vec<(String, toml::Value)>,
     log_state_db: Option<RuntimeDbHandle>,
+    startup: chaos_snitch::startup::StartupTimeline,
 ) -> color_eyre::Result<AppExitInfo> {
     color_eyre::install()?;
 
@@ -385,6 +393,8 @@ async fn run_ratatui_app(
     terminal.clear()?;
 
     let mut tui = Tui::new(terminal);
+    startup.mark("terminal_ready");
+    tui.set_startup_timeline(startup.clone());
 
     // Initialize high-fidelity session event logging if enabled.
     session_log::maybe_init(&initial_config);
@@ -603,6 +613,7 @@ async fn run_ratatui_app(
     let use_alt_screen = determine_alt_screen_mode(no_alt_screen, config.tui_alternate_screen);
     tui.set_alt_screen_enabled(use_alt_screen);
     let managers = boot_core(&config);
+    startup.mark("coreboot_ready");
 
     let app_result = App::run(
         &mut tui,

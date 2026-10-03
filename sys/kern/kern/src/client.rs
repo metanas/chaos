@@ -89,6 +89,8 @@ pub(super) struct ModelClientState {
     pub(super) beta_features_header: Option<String>,
     /// Cached result of auto wire-format detection.
     pub(super) resolved_wire: OnceLock<WireApi>,
+    /// Never shared between parent/minion sessions or providers.
+    pub(super) responses_websocket: Option<Arc<chaos_parrot::openai::ResponsesWebSocket>>,
     /// When true, route turns through the selected first-party CLI.
     pub(super) clamped: AtomicBool,
     /// First-party CLI transport selected for clamped turns, plus its settings.

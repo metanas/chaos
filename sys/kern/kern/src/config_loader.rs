@@ -150,8 +150,8 @@ pub async fn load_config_layers_state(
     let snapshot = crate::user_settings::snapshot(chaos_home)
         .await
         .map_err(io::Error::other)?;
-    let bootstrap = crate::user_settings::BootstrapConfig::read(chaos_home)
-        .and_then(|bootstrap| bootstrap.effective_values(chaos_home))
+    let bootstrap = crate::user_settings::bootstrap_values(chaos_home)
+        .await
         .map_err(io::Error::other)?;
     layers.push(ConfigLayerEntry::new(
         ConfigLayerSource::Bootstrap {

@@ -21,6 +21,8 @@ use crate::ResponsesOptions;
 use crate::SseTelemetry;
 use crate::requests::responses::Compression;
 
+pub use crate::endpoint::responses::ResponsesWebSocket;
+
 const GROK_SUBSCRIPTION_PROXY_HOST: &str = "cli-chat-proxy.grok.com";
 const GROK_CLIENT_VERSION_HEADER: &str = "x-grok-client-version";
 const GROK_MODEL_OVERRIDE_HEADER: &str = "x-grok-model-override";
@@ -135,6 +137,16 @@ impl<A: AuthProvider> OpenAiAdapter<A> {
         self
     }
 
+    pub fn with_websocket(mut self, websocket: Arc<ResponsesWebSocket>) -> Self {
+        self.client = self.client.with_websocket(websocket);
+        self
+    }
+
+    /// Socket-only prewarm: no generation, request body, or auth refresh.
+    pub fn prewarm(&self) {
+        self.client.prewarm(&self.options);
+    }
+
     pub fn with_telemetry(
         self,
         request: Option<Arc<dyn RequestTelemetry>>,
@@ -184,7 +196,12 @@ where
             tokio::spawn(async move {
                 let mut api_stream = api_stream;
                 use futures::StreamExt;
-                while let Some(event) = api_stream.next().await {
+                loop {
+                    let event = tokio::select! {
+                        _ = tx_event.closed() => return,
+                        event = api_stream.next() => event,
+                    };
+                    let Some(event) = event else { return };
                     let mapped = event.map(TurnEvent::from).map_err(AbiError::from);
                     if tx_event.send(mapped).await.is_err() {
                         return;

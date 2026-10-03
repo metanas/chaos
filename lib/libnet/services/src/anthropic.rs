@@ -7,5 +7,8 @@
 /// `{API_BASE}/messages`.
 pub const API_BASE: &str = "https://api.anthropic.com/v1";
 
+/// Host for Anthropic's native API.
+pub const API_HOST: &str = "api.anthropic.com";
+
 /// Anthropic Messages API endpoint.
 pub const MESSAGES_URL: &str = "https://api.anthropic.com/v1/messages";

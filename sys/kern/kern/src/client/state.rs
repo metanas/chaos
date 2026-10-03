@@ -46,6 +46,15 @@ impl ModelClient {
             )
         };
         let auth_breaker = auth_breaker::AuthBreaker::new(&provider_id);
+        let responses_websocket = (*crate::flags::CHAOS_OPENAI_WEBSOCKET
+            && provider.supports_websockets
+            && provider.egress.is_none()
+            && matches!(
+                provider.wire_api,
+                crate::WireApi::Auto | crate::WireApi::Responses
+            )
+            && !crate::model_provider_info::is_anthropic_wire(provider.base_url.as_deref()))
+        .then(|| Arc::new(chaos_parrot::openai::ResponsesWebSocket::default()));
         let claude_resume = super::native_resume::NativeResume::new(
             clamp_settings
                 .claude_resume_dir
@@ -70,6 +79,7 @@ impl ModelClient {
                 enable_request_compression,
                 beta_features_header,
                 resolved_wire: std::sync::OnceLock::new(),
+                responses_websocket,
                 clamped: std::sync::atomic::AtomicBool::new(initial_clamped),
                 clamp_settings: std::sync::Mutex::new(clamp_settings),
                 clamp_transport: tokio::sync::Mutex::new(None),
@@ -99,6 +109,58 @@ impl ModelClient {
             .session
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Arc::downgrade(session);
+        self.prewarm_responses_socket();
+    }
+
+    fn prewarm_responses_socket(&self) {
+        let Some(websocket) = &self.state.responses_websocket else {
+            return;
+        };
+        if self.state.clamped.load(Ordering::Relaxed)
+            || crate::flags::CHAOS_RS_SSE_FIXTURE.is_some()
+        {
+            return;
+        }
+        // Resolve only cached credentials. Speculation must never rotate a
+        // managed token or gate first-frame/session startup on network I/O.
+        let auth = self
+            .state
+            .auth_manager
+            .as_ref()
+            .and_then(|manager| manager.auth_for_provider(&self.state.provider_id));
+        let Ok(provider) = self
+            .state
+            .provider
+            .to_api_provider(auth.as_ref().map(ChaosAuth::auth_mode))
+        else {
+            return;
+        };
+        let Ok(api_auth) = crate::api_bridge::auth_provider_from_auth(auth, &self.state.provider)
+        else {
+            return;
+        };
+        let mut headers = crate::default_client::default_headers();
+        headers.extend(super::streaming::build_responses_headers(
+            self.state.beta_features_header.as_deref(),
+            None,
+            None,
+        ));
+        let options = chaos_parrot::ResponsesOptions {
+            conversation_id: Some(self.state.conversation_id.to_string()),
+            session_source: Some(self.state.session_source.clone()),
+            extra_headers: headers,
+            ..Default::default()
+        };
+        chaos_parrot::openai::OpenAiAdapter::new(
+            chaos_parrot::RamaTransport::default_client(),
+            provider,
+            api_auth,
+            None,
+            self.state.representer.clone(),
+        )
+        .with_options(options)
+        .with_websocket(websocket.clone())
+        .prewarm();
     }
 
     pub(super) async fn ensure_clamp_mcp_bridge(
@@ -211,6 +273,9 @@ impl ModelClient {
     /// transcript. Resetting the subprocess makes the next turn send a full prompt reconstructed
     /// from Chaos history instead of appending to stale clamp-side history.
     pub async fn reset_clamped_transport(&self) {
+        if let Some(websocket) = &self.state.responses_websocket {
+            websocket.reset().await;
+        }
         let transport = {
             let mut guard = self.state.clamp_transport.lock().await;
             guard.take()

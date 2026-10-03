@@ -4,7 +4,7 @@
 //! outbound request. The shape is similar across providers but the
 //! auth scheme varies: OpenAI-style endpoints use a Bearer token;
 //! Anthropic accepts either a Bearer token or an `x-api-key` value;
-//! TensorZero treats the bearer as optional. The helpers here cover
+//! LSD treats the bearer as optional. The helpers here cover
 //! the mechanical parts — inserting `Authorization`, `x-api-key`, and
 //! the standard JSON-in / SSE-out pair — and leave the policy choices
 //! (mandatory vs. optional, header value source) to the caller.

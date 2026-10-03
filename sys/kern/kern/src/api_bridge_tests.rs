@@ -349,12 +349,37 @@ fn auth_provider_from_auth_preflight_matrix() {
         egress: None,
     };
     let Err(ChaosErr::ProviderAuthMissing(info)) = auth_provider_from_auth(None, &minimax) else {
-        panic!("anthropic-wire provider without env must preflight-fail");
+        panic!("provider without env must preflight-fail");
+    };
+    assert_eq!(info.provider_id, "MiniMax");
+
+    let anthropic = ModelProviderInfo {
+        name: "Anthropic".into(),
+        base_url: Some(crate::model_provider_info::ANTHROPIC_DEFAULT_BASE_URL.into()),
+        ..minimax.clone()
+    };
+    let Err(ChaosErr::ProviderAuthMissing(info)) = auth_provider_from_auth(None, &anthropic) else {
+        panic!("Anthropic without env must preflight-fail");
     };
     assert_eq!(
         info.provider_id,
         crate::model_provider_info::ANTHROPIC_PROVIDER_ID
     );
+
+    for base_url in [
+        "https://api.anthropic.com.example.test/v1",
+        "https://gateway.example.test/v1?upstream=api.anthropic.com",
+    ] {
+        let custom = ModelProviderInfo {
+            base_url: Some(base_url.into()),
+            ..minimax.clone()
+        };
+        let Err(ChaosErr::ProviderAuthMissing(info)) = auth_provider_from_auth(None, &custom)
+        else {
+            panic!("custom provider without env must preflight-fail");
+        };
+        assert_eq!(info.provider_id, "MiniMax");
+    }
 
     let ollama = ModelProviderInfo {
         name: "Ollama".into(),

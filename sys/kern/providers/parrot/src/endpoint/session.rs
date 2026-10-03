@@ -46,7 +46,11 @@ impl<T: HttpTransport, A: AuthProvider> EndpointSession<T, A> {
         &self.provider
     }
 
-    fn make_request(
+    pub(super) fn request_telemetry(&self) -> Option<Arc<dyn RequestTelemetry>> {
+        self.request_telemetry.clone()
+    }
+
+    pub(super) fn make_request(
         &self,
         method: &Method,
         path: &str,

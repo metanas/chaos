@@ -11,7 +11,7 @@
 #   base_url                 = "https://api.example.com/v1"
 #   env_key                  = "EXAMPLE_API_KEY"
 #   env_key_instructions     = "Grab a key at https://example.com/keys"
-#   wire_api                 = "auto" | "responses" | "chat_completions" | "tensorzero"
+#   wire_api                 = "auto" | "responses" | "chat_completions" | "lsd"
 #   query_params             = { foo = "bar" }
 #   http_headers             = { "X-Static-Header" = "value" }
 #   env_http_headers         = { "X-From-Env" = "ENV_VAR_NAME" }

@@ -13,7 +13,7 @@ use serde::Serialize;
 pub enum ModelRerouteReason {
     /// Upstream provider silently substituted a different model than the
     /// one requested. Vendor-agnostic: covers OpenAI abuse heuristics,
-    /// TensorZero routing rules, Anthropic fallbacks, etc.
+    /// LSD routing rules, Anthropic fallbacks, etc.
     VendorDeclinedSelection,
 }
 

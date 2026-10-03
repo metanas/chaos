@@ -11,12 +11,12 @@ chaos-providers - configure and select LLM providers for FreeChaOS
 
 ## DESCRIPTION
 
-FreeChaOS is provider-agnostic. The kernel speaks the Chaos-ABI; adapters
-translate that to whatever wire format a given provider expects. New
-providers are added through `~/.chaos/config.toml` - no code changes, no
-rebuilds.
+Each session selects a provider ID and model. Provider settings control the
+endpoint, credentials, wire format, and transport. Additional providers use
+`[model_providers.<id>]` entries in the persisted configuration.
 
-For the condensed support matrix (bundled IDs, wire formats, OS/CI coverage, clamp backends), see [chaos-support(7)](./chaos-support.7.md).
+See [chaos-support(7)](./chaos-support.7.md) for available providers and formats,
+and [chaos-storage(7)](./chaos-storage.7.md) for configuration storage.
 
 ## GLOBAL EGRESS
 
@@ -28,8 +28,8 @@ export CHAOS_EGRESS_URL="http://localhost:8847/egress/chaos"
 
 This overrides root-level `egress_url` in `~/.chaos/config.toml`.
 Keep provider URLs and credentials unchanged. Invalid or empty values fail
-configuration loading. There is no direct fallback; LSD rejects local/private
-providers. Leave both settings unset for direct access.
+configuration loading. LSD rejects local/private providers; gateway failures
+are reported as errors. Leave both settings unset for direct access.
 
 Use a trusted gateway: it receives credentials and prompts. See LSD's
 documentation for gateway setup and policy.
@@ -40,16 +40,16 @@ FreeChaOS ships with these providers preconfigured:
 
 | Provider | Wire format | Notes |
 |----------|-------------|-------|
-| `openai` | Responses API | Default, hardcoded |
-| `anthropic` | Anthropic Messages | Hardcoded; URL-detected |
-| `xai` | Responses API | Bundled; native `web_search` / `x_search` tools |
-| `moonshotai` | Responses API | Bundled; Moonshot AI pay-per-token API |
-| `moonshotai-coding` | Responses API | Bundled; Kimi Code subscription |
-| `zai` | Chat Completions | Bundled; Z.ai pay-per-token (GLM-5 / GLM-5.1) |
-| `zai-coding` | Chat Completions | Bundled; Z.ai GLM Coding Plan subscription |
-| `charm` | Chat Completions | Bundled via `thirdparty.toml` |
+| `openai` | Responses API | Default provider |
+| `anthropic` | Anthropic Messages | Native Anthropic API |
+| `xai` | Responses API | Native `web_search` / `x_search` tools |
+| `moonshotai` | Responses API | Moonshot AI pay-per-token API |
+| `moonshotai-coding` | Responses API | Kimi Code subscription |
+| `zai` | Chat Completions | Z.ai pay-per-token (GLM-5 / GLM-5.1) |
+| `zai-coding` | Chat Completions | Z.ai GLM Coding Plan subscription |
+| `charm` | Chat Completions | Charm API |
 
-Any other provider — DeepSeek, Groq, Ollama, MiniMax, LSD,
+Additional providers — DeepSeek, Groq, Ollama, LSD,
 self-hosted gateways — is a config entry away.
 
 ### API-key validation
@@ -58,7 +58,7 @@ self-hosted gateways — is a config entry away.
 before saving credentials. A format mismatch leaves existing credentials
 unchanged and does not switch providers.
 
-The harness has internal format rules for `openai`, `anthropic`, `charm`,
+Provider-specific key formats are checked for `openai`, `anthropic`, `charm`,
 `moonshotai`, `moonshotai-coding`, and `xai`. For example, an OpenAI
 `sk-proj-…` key cannot be saved for `anthropic`, and a Kimi Code `sk-kimi-…`
 key cannot be saved for the pay-per-token `moonshotai` account. Custom
@@ -68,14 +68,29 @@ is stripped on save.
 
 These checks are local format validation, not remote authentication. They
 cannot prove a key is active or distinguish providers sharing the same format
-(such as legacy OpenAI and Moonshot `sk-…` keys). Prefix rules are not
-user-configurable.
+(such as legacy OpenAI and Moonshot `sk-…` keys).
+
+### Responses transport
+
+```sh
+CHAOS_OPENAI_WEBSOCKET=0 chaos # Explicitly disable WS and use HTTP/SSE
+```
+
+OpenAI uses Responses WebSocket v2 by default. Other providers use it only
+when `supports_websockets = true` and `wire_api` is `auto` or `responses`.
+Set `supports_websockets = false` to disable it for a provider, or use
+`CHAOS_OPENAI_WEBSOCKET=0` to disable it globally.
+
+Azure and providers routed through global egress use HTTP/SSE. Clamped
+sessions use the selected CLI transport.
+
+WebSocket failures terminate the request with an error.
 
 ## CLAMP TRANSPORTS
 
 Clamp uses an installed, authenticated first-party CLI with Chaos tools over MCP.
 Claude Code is the default; Antigravity (`agy`) is experimental. CLI, authentication,
-or bridge failures never fall back to metered API billing.
+or bridge failures terminate the turn with an error.
 
 - `/clamp claude` or `/clamp agy` selects a backend (`claude-code` and `antigravity`
   are aliases).
@@ -89,20 +104,13 @@ With AGY, `/model` accepts a slug from `agy models`. `antigravity.model` or
 `CHAOS_AGY_MODEL` pins the model until a new session; otherwise activation keeps
 a compatible current model or uses `gemini-3.1-pro-low`.
 
-Both backends receive the same Chaos base instructions used by direct API
-requests. Claude Code receives them through `--system-prompt-file` at subprocess
-startup. AGY's TLS-inspecting egress proxy replaces the CLI-generated
-`systemInstruction` in supported Cloud Code and Gemini JSON generation requests.
-Both `cloudcode-pa.googleapis.com` and `daily-cloudcode-pa.googleapis.com` use
-this replacement for `v1internal:generateContent` and
-`v1internal:streamGenerateContent`. Allowing a host never bypasses prompt ownership.
-The canonical prompt is refreshed before every turn, including resumes; empty
-instructions remove the CLI's system instructions. No custom AGY agent or
-user-message prompt injection is used. Encoded, malformed, cached-content, and
-unsupported generation requests fail rather than falling back to the CLI prompt.
-Clamp serializes history as text when bootstrapping a new provider conversation.
-Compatible Claude Code resumes retain the CLI's native assistant/tool history
-and append only the new Chaos input, including new hook/developer messages.
+Both backends use the session's Chaos instructions. Guidance is refreshed
+before every turn, including resumes; CLI-provided instructions do not replace
+the session's instructions.
+
+New provider conversations receive the current Chaos transcript as text.
+Compatible resumes retain the native conversation and receive new Chaos
+input, including hook and developer messages.
 
 ### Antigravity setup
 
@@ -151,29 +159,46 @@ uses that provider's own transport and is never routed through the parent's CLI.
 With Claude Code, `spawn_agent` validates a requested `model` and
 `reasoning_effort` against the models the CLI advertised to the parent's
 session (for example `haiku`, `sonnet`, `opus`), and passes the model to
-the child CLI's `--model`. No Anthropic API key is needed. Unknown models and
+the child session. No Anthropic API key is needed. Unknown models and
 effort levels the CLI did not advertise are rejected rather than substituted.
+
+### Continuation behavior
 
 Claude Code resumes also require its native session files (normally under
 `~/.claude/projects`) and the same working directory to survive between
-invocations. Chaos stores owner-only, per-process checkpoints under
-`$CHAOS_HOME/clamp/claude`; these contain a native session ID and history
-fingerprints, not transcript contents. Ephemeral Chaos sessions keep checkpoints
-only in memory.
+invocations.
 
 Request-local runtime guidance and machine warnings are sent on every request,
-but are excluded from the durable history fingerprint. Refreshed guidance therefore
-does not invalidate an otherwise compatible native conversation.
+without invalidating an otherwise compatible native conversation.
 
-A checkpoint is reused only when the model, base instructions, working directory,
-and completed Chaos history prefix still match. New/forked sessions, rewritten
-history, changed instructions, and absent checkpoints bootstrap from the current
-Chaos transcript instead. Checkpoints are consumed before dispatch and renewed
-only after successful completion. A missing native session or failed resume
-surfaces an error, rather than automatically replaying a potentially
-side-effecting turn; the next attempt bootstraps without that stale checkpoint.
-Native resume enables prefix reuse but does not guarantee a cache hit: cache
-expiry and provider/tool-prefix changes still apply.
+Native continuation requires a matching model, instructions, working directory,
+and completed history prefix. New or forked sessions, rewritten or compacted
+history, and changed context start from the current Chaos transcript.
+
+A missing native session or failed resume is reported as an error. Antigravity
+transport errors are terminal for that turn and do not automatically replay
+tool actions. A subsequent explicit attempt starts a new provider conversation
+when no compatible completed resume state is available.
+
+Failure does not roll back side effects. Inspect the session history before
+retrying an interrupted turn. For Antigravity, keep the configured conversation
+directory and native CLI history together.
+
+### Antigravity tools
+
+Antigravity receives the current session's Chaos tool catalogue. Tool availability
+is updated each turn. Chaos permissions apply to every tool call.
+
+### Model discovery under clamp
+
+CLI-backed (`clamp = true`) sessions use cached model metadata without automatic
+native API discovery or authentication. Missing metadata uses the default model
+descriptor.
+
+Explicit `refresh_models` or `models --refresh` performs discovery for the
+requested provider/account and reports credential or discovery errors. A CLI
+login alone does not supply native API credentials. Custom authoritative
+catalogs remain unchanged.
 
 ## SESSION PICKER
 
@@ -189,17 +214,14 @@ model metadata produce an error rather than silently using another model.
 
 Providers speak one of four wire formats:
 
-- **Responses API** — OpenAI's `/v1/responses`. What OpenAI ships and most imitators clone.
-- **Chat Completions** — `/v1/chat/completions`. The lingua franca of OpenAI-compatible gateways.
-- **Anthropic Messages** — Anthropic's native format. Auto-detected when the base URL contains `anthropic`.
-- **TensorZero** — TensorZero's native `/inference` endpoint. Opt in with `wire_api = "tensorzero"`.
+- **Responses API** — `/v1/responses`.
+- **Chat Completions** — `/v1/chat/completions`.
+- **Anthropic Messages** — `/v1/messages` on `api.anthropic.com`.
+- **LSD** — LSD's native `/inference` endpoint. Select `wire_api = "lsd"`.
 
-By default, providers use `wire_api = "auto"` — FreeChaOS tries Responses
-first and falls back to Chat Completions on 404/405/501. The winning
-format is cached for the session.
-
-You add a `[model_providers.<id>]` block, set your API key in the
-environment, and go.
+For HTTP providers, `wire_api = "auto"` tries Responses first and falls back
+to Chat Completions on 404/405/501. The winning format is cached for the
+session. Enabled WebSocket v2 selects Responses directly.
 
 ## EXAMPLES
 
@@ -212,9 +234,8 @@ catalog by default:
 chatgpt_context_window = "catalog"
 ```
 
-The ChatGPT OAuth route has also been observed accepting more context than its
-catalog advertises. Users who prefer the experimentally observed window can
-opt in:
+The optional `observed-400k` preset applies to `gpt-5.6-sol` on the built-in
+OpenAI ChatGPT OAuth route:
 
 ```toml
 chatgpt_context_window = "observed-400k"
@@ -232,10 +253,10 @@ Changes made through the command apply to newly started Chaos sessions.
 
 For `gpt-5.6-sol` on the built-in OpenAI provider, this selects a 400,000-token
 window and automatic compaction at 350,000 tokens. It does not change other
-models or providers. The provider may change its accepted limit independently
-of Chaos, so `catalog` remains the default.
+models or providers. The provider's enforced context limit may differ from
+the configured preset.
 
-The lower-level numeric settings remain available for advanced use:
+Explicit numeric settings are also available:
 
 ```toml
 model_context_window = 400000
@@ -256,7 +277,7 @@ compaction threshold while remaining below the 90% safety ceiling, Chaos grants
 one immediate iteration before compacting. The reflex is directed to the agent
 rather than emitted as a user-facing compaction warning.
 
-Users can optionally give the agent bounded timing control:
+To enable bounded agent control over compaction timing:
 
 ```toml
 agent_compaction_control = "bounded"
@@ -267,7 +288,7 @@ The default is `"disabled"`. In bounded mode, Chaos exposes a
 next safe turn-loop boundary, or defer the current pressure window once after
 receiving its reflex. A deferral cannot stack or change its own limits: Chaos
 keeps an absolute ceiling equal to the smaller of 90% of the raw model window
-and the effective input window minus a 20,000-token distillation reserve.
+and the effective input window minus a 20,000-token compaction reserve.
 For the `observed-400k` preset, that ceiling is 360,000 tokens, so deferral
 extends the normal 350,000-token threshold by only 10,000 tokens. Models whose
 catalog window is reduced to an 80% effective input window can have a larger
@@ -275,9 +296,6 @@ usable band.
 Doing nothing retains normal automatic compaction. Accepted decisions are
 persisted for resume continuity; forks inherit transcript history but not a
 pending decision made by the source agent.
-
-The user-facing term *compaction* corresponds to the kernel's internal
-*distillation* implementation.
 
 ### Terminal session titles
 
@@ -303,41 +321,17 @@ The optional idle icon prefixes both named sessions and the `new session`
 fallback. It must be one grapheme cluster and no more than four terminal cells;
 an empty string disables it.
 
-Agent mode exposes `set_session_title` to the current root agent and privately
-asks it to review the title at the start of a session, after resume or
-compaction, and periodically during longer work. A reminder does not require a
-rename: the agent is instructed to retain a title that still accurately names
-the session's primary work. Reconnecting also runs a hidden, title-only review
-against the restored conversation before accepting a new user turn, allowing an
-unnamed or stale tab to update immediately. The title remains the existing
-process name used by `/rename` and `chaos resume`; the separate database `title`
-field remains a first-message preview and is never used as the terminal
-fallback. An explicit `/rename` always marks the name as user-authored,
-preventing the agent from replacing it. Agent-generated names must also be
-distinct from other unarchived sessions.
+Agent mode exposes `set_session_title` to the current root agent. The kernel
+requests title reviews at session start, resume, compaction, reconnection, and
+periodically during longer work. Keep an existing title when it still describes
+the session's primary work.
 
-Chaos emits the portable OSC terminal-title sequence and clears it when the TUI
-exits. Terminal configuration can still override or transform the displayed
-tab title; for example, a custom WezTerm `format-tab-title` callback may choose
-not to show the pane title. OSC titles cannot independently color the icon, but
-WezTerm can style configured markers locally:
+The title is the process name used by `/rename` and `chaos resume`. An explicit
+`/rename` prevents the agent from replacing that name. Agent-generated names
+must be distinct from other unarchived sessions.
 
-```lua
-local wezterm = require("wezterm")
-
-wezterm.on("format-tab-title", function(tab)
-  local title = tab.active_pane.title
-  local color = title:match("^✦ ") and "#7bd88f"
-    or title:match("^◒ ") and "#f5c451"
-  if color then
-    return {
-      { Foreground = { Color = color } },
-      { Text = title },
-    }
-  end
-  return title
-end)
-```
+Terminal-title updates are cleared when the TUI exits. Terminal configuration
+may override their display.
 
 ### xAI (Grok)
 
@@ -349,15 +343,12 @@ chaos --provider xai --model grok-4
 ```
 
 URLs containing `x.ai` automatically expose xAI's native `web_search` and
-`x_search` server-side tools — no function schema needed. Override the
-bundled config by redeclaring `[model_providers.xai]` in your
-`~/.chaos/config.toml`.
+`x_search` server-side tools. Override the provider through
+`[model_providers.xai]` settings.
 
 Provider HTTP 402 (Payment Required) responses, including Grok Build balance
 exhaustion, are reported as a non-retryable quota error (`UsageLimitExceeded`
-in protocol events). The harness can handle the limit without repeated
-requests to the exhausted account; replenish the balance or switch providers
-before retrying.
+in protocol events). Replenish the balance or switch providers before retrying.
 
 ### Anthropic (Claude)
 
@@ -375,27 +366,25 @@ export ANTHROPIC_API_KEY=sk-ant-...
 chaos --provider anthropic --model haiku
 ```
 
-The URL contains `anthropic`, so FreeChaOS routes to the Messages API adapter.
-For the official Anthropic endpoint, five-minute prompt caching is enabled by
-default. Set `CHAOS_ANTHROPIC_CACHE_TTL=1h` for the extended TTL or
-`CHAOS_ANTHROPIC_CACHE_TTL=off` to disable caching. A request-level
-`anthropic_cache_ttl` extension (`5m`, `1h`, or `off`) takes precedence over
-the environment variable.
+The Anthropic provider uses the Messages API at `api.anthropic.com`.
+Five-minute prompt caching is enabled by default. Set
+`CHAOS_ANTHROPIC_CACHE_TTL=1h` for the extended TTL or
+`CHAOS_ANTHROPIC_CACHE_TTL=off` to disable caching.
 
-### TensorZero
+### LSD
 
 ```toml
-[model_providers.tensorzero]
-name = "TensorZero"
-base_url = "http://localhost:3000"
-wire_api = "tensorzero"
+[model_providers.lsd]
+name = "LSD"
+base_url = "http://localhost:8847"
+wire_api = "lsd"
 ```
 
 ```bash
-chaos --provider tensorzero --model my-function
+chaos --provider lsd --model my-function
 ```
 
-TensorZero has its own inference protocol — explicit `wire_api` required.
+LSD has its own inference protocol — explicit `wire_api = "lsd"` required.
 
 ### Z.ai (GLM)
 
@@ -448,15 +437,12 @@ chaos --provider moonshotai-coding --model kimi-for-coding
 `moonshotai` uses `https://api.moonshot.ai/v1`; `moonshotai-coding` uses the international
 Kimi Code endpoint, `https://api.kimi.ai/coding/v1`. Create the corresponding
 key in the Kimi API Platform or Kimi Code console. These are separate billing
-routes: Chaos never falls back from the subscription to the metered API.
+routes with separate credentials.
 
 Both use HTTP/SSE Responses requests, including function tools and native
-`web_search`. Kimi's plaintext reasoning history is preserved across tool calls;
-OpenAI encrypted reasoning, summary controls, and service tiers are not sent.
+`web_search`. Kimi's plaintext reasoning history is preserved across tool calls.
 Use `low`, `high`, or `max` effort; `none`/`minimal` map to `low`, `medium` to
-`high`, and `xhigh`/`ultra` to `max`. Kimi does not support disabling reasoning
-with `none`; Chaos sends its lowest supported effort instead. An unspecified
-effort is left unspecified.
+`high`, and `xhigh`/`ultra` to `max`.
 
 The pay-per-token Responses endpoint currently supports `kimi-k3`; other
 models advertised by `/models` may require a different wire API. Kimi Code
@@ -468,8 +454,8 @@ chaos --provider moonshotai-coding models --refresh
 ```
 
 Context windows and image/thinking capabilities are taken from the provider's
-model catalog, not guessed from model names. For a regional endpoint, override
-the bundled provider in `~/.chaos/config.toml` and use a key for that region.
+model catalog. For a regional endpoint, override the provider's settings and
+use a key for that region.
 For example, the China Kimi Code endpoint is:
 
 ```toml
@@ -518,22 +504,6 @@ No `env_key` needed — Ollama runs locally without authentication.
 chaos --provider ollama --model llama3
 ```
 
-### Anthropic-compatible proxies (MiniMax, Kimi, Z.ai)
-
-Any provider whose base URL contains `anthropic` gets routed to the
-Anthropic Messages adapter:
-
-```toml
-[model_providers.minimax]
-name = "MiniMax"
-base_url = "https://api.minimax.io/anthropic"
-env_key = "MINIMAX_API_KEY"
-```
-
-Prompt caching remains opt-in for compatible endpoints because some providers
-reject Anthropic-specific request fields. Set `CHAOS_ANTHROPIC_CACHE_TTL=5m`
-or `1h` only when the endpoint supports top-level `cache_control`.
-
 ## REFLEX
 
 Use `/reflex` to configure judgment backends and save keys securely.
@@ -548,25 +518,24 @@ See [chaos-reflex(7)](./chaos-reflex.7.md).
 | `base_url` | yes | Provider API endpoint |
 | `env_key` | no | Environment variable holding the API key |
 | `env_key_instructions` | no | Help text shown when the key is missing |
-| `wire_api` | no | `"auto"` (default), `"responses"`, `"chat_completions"`, or `"tensorzero"`. Anthropic is URL-detected and overrides this. |
+| `wire_api` | no | `"auto"` (default), `"responses"`, `"chat_completions"`, or `"lsd"`. Requests to `api.anthropic.com` use Messages. |
 | `http_headers` | no | Static headers as `{ "Header-Name" = "value" }` |
 | `env_http_headers` | no | Headers from env vars as `{ "Header-Name" = "ENV_VAR" }` |
 | `query_params` | no | Query string parameters as `{ "key" = "value" }` |
 | `request_max_retries` | no | HTTP retry limit (default: 4, max: 100) |
 | `stream_max_retries` | no | Stream reconnect limit (default: 5, max: 100) |
 | `stream_idle_timeout_ms` | no | Idle timeout in ms (default: 300000) |
-| `supports_websockets` | no | Enable WebSocket transport (default: false) |
-| `experimental_bearer_token` | no | Hardcoded bearer token (discouraged — use `env_key`) |
+| `supports_websockets` | no | Use Responses WS v2 (OpenAI: true; other providers: false by default). Set false to disable. |
+| `experimental_bearer_token` | no | Bearer token or credential reference |
 
 ## SELECTION RULES
 
 FreeChaOS resolves the wire format in this order:
 
-1. If the `base_url` contains `anthropic` → Anthropic Messages API (overrides `wire_api`)
-2. If `wire_api` is set explicitly → use it (`responses`, `chat_completions`, `tensorzero`)
-3. Otherwise → `auto`: try Responses, fall back to Chat Completions on 404/405/501
-
-There is no `wire_api = "anthropic"` option. The URL is the signal.
+1. Requests to `api.anthropic.com` → Anthropic Messages API
+2. If `wire_api` is set explicitly → use it (`responses`, `chat_completions`, `lsd`)
+3. Otherwise → `auto`: use Responses directly when WebSocket v2 is enabled;
+   with HTTP/SSE, try Responses and fall back to Chat Completions on 404/405/501.
 
 ## TROUBLESHOOTING
 
@@ -587,56 +556,12 @@ stream_idle_timeout_ms = 600000
 
 ## FILES
 
-- `~/.chaos/config.toml` - user-level provider configuration
-- `thirdparty.toml` - bundled provider definitions referenced by the tree
+- `~/.chaos/config.toml` - bootstrap settings, including global egress
 
 ## SEE ALSO
 
 - [chaos-install.7](./chaos-install.7.md)
+- [chaos-storage.7](./chaos-storage.7.md)
 - [chaos-reflex.7](./chaos-reflex.7.md)
 - [chaos-mcp.7](./chaos-mcp.7.md)
 - [chaos-halluacinate.7](./chaos-halluacinate.7.md)
-
-### Antigravity continuation safety
-
-Antigravity resume checkpoints bind the native conversation to its completed
-Chaos history prefix, model, canonical instructions and working directory.
-Compatible continuations send every unsent rendered item, including developer
-and Stop-hook messages, without changing their roles in the Chaos journal.
-Rewritten/compacted history, changed context, or old ID-only state bootstraps
-from the current canonical transcript instead of resuming incompatible history.
-
-A checkpoint is consumed before dispatch and renewed only after success.
-Antigravity transport errors are terminal for that turn: automatic sampling
-retries must not repeat potentially executed tool actions. A subsequent explicit
-attempt starts fresh when there is no completed checkpoint. This is not a
-rollback of side effects and does not guarantee that a model will never choose
-to repeat an action; inspect the canonical transcript after an interrupted turn.
-Keep the configured conversation directory and native CLI history together.
-
-### Antigravity tool catalogue
-
-The canonical Antigravity system prompt includes the current Chaos MCP tool
-catalogue. It uses the same function schemas and freeform `input` envelope as
-the session bridge; provider-native tool declarations are excluded. The catalogue
-is regenerated from each sampling turn's tools, so removed tools are not retained
-in the replacement system prompt. Tools remain subject to Chaos permissions.
-
-### Model discovery with CLI clamp
-
-CLI-backed (`clamp = true`) sessions use fresh, version-compatible cached model
-metadata instead of automatic native API discovery, including Anthropic metadata
-lookups and ETag-triggered refreshes. Cold or stale caches do not trigger native
-authentication; uncached model metadata falls back to the normal descriptor.
-An already loaded catalog remains available in memory.
-
-Explicit `refresh_models` / `models --refresh` requests still perform native
-discovery for the requested provider/account and report missing credentials or
-discovery failures. A CLI login alone is not a native API credential. Custom
-authoritative catalogs remain unchanged.
-
-Antigravity also uses the exact host `www.googleapis.com` for its pre-generation
-OAuth userinfo/eligibility check (`/oauth2/v2/userinfo`). The clamp permits that
-host and the exact `lh3.googleusercontent.com` profile-picture host: agy 1.1.22
-treats a failed picture fetch as an eligibility failure even in text-only print
-mode. Sibling Google API and image hosts remain denied.

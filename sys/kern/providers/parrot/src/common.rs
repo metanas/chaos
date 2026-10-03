@@ -18,7 +18,7 @@ use std::task::Poll;
 use tokio::sync::mpsc;
 
 /// Flattens a tool-call output body into the plain text that the chat-style
-/// wire formats (Anthropic, chat completions, TensorZero) expect.
+/// wire formats (Anthropic, chat completions, LSD) expect.
 pub(crate) fn function_output_text(body: &chaos_ipc::models::FunctionCallOutputBody) -> String {
     match body {
         chaos_ipc::models::FunctionCallOutputBody::Text(text) => text.clone(),
@@ -193,7 +193,6 @@ impl From<&ResponsesApiRequest> for ResponseCreateWsRequest {
             parallel_tool_calls: request.parallel_tool_calls,
             reasoning: request.reasoning.clone(),
             store: request.store,
-            stream: request.stream,
             include: request.include.clone(),
             service_tier: request.service_tier.clone(),
             prompt_cache_key: request.prompt_cache_key.clone(),
@@ -216,7 +215,7 @@ pub struct ResponseCreateWsRequest {
     pub parallel_tool_calls: bool,
     pub reasoning: Option<Reasoning>,
     pub store: bool,
-    pub stream: bool,
+    // WebSocket v2 always streams and rejects the HTTP `stream` parameter.
     pub include: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub service_tier: Option<String>,

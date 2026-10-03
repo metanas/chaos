@@ -224,6 +224,7 @@ pub struct Tui {
         tokio::sync::watch::Sender<Option<chaos_kern::machine_status::ObservationRequest>>,
     sandbox_policy: Option<chaos_ipc::protocol::SandboxPolicy>,
     terminal_title_enabled: bool,
+    startup_timeline: Option<chaos_snitch::startup::StartupTimeline>,
 }
 
 impl Tui {
@@ -278,7 +279,13 @@ impl Tui {
             machine_context,
             sandbox_policy: None,
             terminal_title_enabled: false,
+            startup_timeline: None,
         }
+    }
+
+    /// Record the first successfully drawn frame on the frontend timeline.
+    pub fn set_startup_timeline(&mut self, timeline: chaos_snitch::startup::StartupTimeline) {
+        self.startup_timeline = Some(timeline);
     }
 
     /// Publish live activity without waking the top bar for identical snapshots.
@@ -646,6 +653,9 @@ impl Tui {
             })
         })??;
 
+        if let Some(timeline) = self.startup_timeline.take() {
+            timeline.mark("first_frame");
+        }
         Ok(())
     }
 

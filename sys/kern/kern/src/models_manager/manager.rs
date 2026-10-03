@@ -782,7 +782,7 @@ impl ModelsManager {
     }
 
     async fn fetch_catalog(&self) -> CoreResult<FetchedCatalog> {
-        // Anthropic-compatible providers get models through the AnthropicAdapter.
+        // Anthropic models come from its native API.
         if crate::model_provider_info::is_anthropic_wire(self.provider.base_url.as_deref()) {
             return self.fetch_catalog_via_adapter().await;
         }
@@ -823,7 +823,7 @@ impl ModelsManager {
         Ok(FetchedCatalog::Live { models, etag })
     }
 
-    /// Fetch models via the ABI adapter (Anthropic-compatible providers).
+    /// Fetch models via the Anthropic adapter.
     async fn fetch_catalog_via_adapter(&self) -> CoreResult<FetchedCatalog> {
         use chaos_abi::ListModelsError;
         use chaos_abi::ModelAdapter;
@@ -871,7 +871,10 @@ impl ModelsManager {
                     etag: None,
                 })
             }
-            Err(ListModelsError::Unsupported) => Ok(FetchedCatalog::Unsupported),
+            Err(ListModelsError::Unsupported) => Err(ChaosErr::Stream(
+                "Anthropic model discovery is unavailable".into(),
+                None,
+            )),
             Err(ListModelsError::Failed { message }) => {
                 error!("Anthropic model listing failed: {message}");
                 Err(ChaosErr::Stream(message, None))

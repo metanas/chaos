@@ -90,7 +90,7 @@ fn build_headers_uses_bearer_for_bearer_auth() {
 fn build_request_body_enables_automatic_prompt_caching() {
     let request = test_request();
 
-    let body = build_request_body(&request, "claude-test", "5m").expect("request should build");
+    let body = build_request_body(&request, "claude-test").expect("request should build");
 
     assert_eq!(body["cache_control"], json!({"type": "ephemeral"}));
 }
@@ -102,7 +102,7 @@ fn build_request_body_supports_one_hour_cache_ttl() {
         .extensions
         .insert(CACHE_TTL_EXTENSION.to_string(), json!("1h"));
 
-    let body = build_request_body(&request, "claude-test", "off").expect("request should build");
+    let body = build_request_body(&request, "claude-test").expect("request should build");
 
     assert_eq!(
         body["cache_control"],
@@ -117,29 +117,61 @@ fn build_request_body_can_disable_prompt_caching() {
         .extensions
         .insert(CACHE_TTL_EXTENSION.to_string(), json!("off"));
 
-    let body = build_request_body(&request, "claude-test", "5m").expect("request should build");
+    let body = build_request_body(&request, "claude-test").expect("request should build");
 
     assert!(body.get("cache_control").is_none());
 }
 
-#[test]
-fn prompt_caching_defaults_on_only_for_official_anthropic_endpoint() {
-    assert_eq!(
-        default_cache_ttl_for_base_url("https://api.anthropic.com/v1"),
-        "5m"
+#[tokio::test]
+async fn model_discovery_maps_anthropics_native_metadata() {
+    use wiremock::matchers::{header, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let gateway = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/egress/chaos/v1/models"))
+        .and(header("x-lsd-upstream", "https://api.anthropic.com"))
+        .and(header("x-api-key", "test-key"))
+        .and(header(ANTHROPIC_VERSION_HEADER, ANTHROPIC_VERSION))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "data": [{
+                "type": "model",
+                "id": "claude-catalog-test",
+                "display_name": "Claude Catalog Test",
+                "created_at": "2026-01-01T00:00:00Z",
+                "max_input_tokens": 200000,
+                "max_tokens": 8192,
+                "capabilities": {
+                    "thinking": {"supported": true, "types": {"adaptive": true}},
+                    "image_input": {"supported": true},
+                    "structured_outputs": {"supported": true},
+                    "effort": {"supported": false}
+                }
+            }],
+            "has_more": false,
+            "first_id": "claude-catalog-test",
+            "last_id": "claude-catalog-test"
+        })))
+        .mount(&gateway)
+        .await;
+    let mut provider = test_provider();
+    provider.egress = Some(
+        chaos_client::Egress::parse(&format!("{}/egress/chaos", gateway.uri()))
+            .expect("test gateway"),
     );
-    assert_eq!(
-        default_cache_ttl_for_base_url("https://api.minimax.io/anthropic"),
-        "off"
-    );
-    assert_eq!(
-        default_cache_ttl_for_base_url("https://api.moonshot.ai/anthropic"),
-        "off"
-    );
-    assert_eq!(
-        default_cache_ttl_for_base_url("https://api.z.ai/api/anthropic"),
-        "off"
-    );
+    let adapter = AnthropicAdapter::new(provider, AnthropicAuth::ApiKey("test-key".into()), None);
+
+    let models = adapter.list_models().await.expect("native discovery");
+    assert_eq!(models.len(), 1);
+    let model = &models[0];
+    assert_eq!(model.id, "claude-catalog-test");
+    assert_eq!(model.display_name, "Claude Catalog Test");
+    assert_eq!(model.max_input_tokens, Some(200000));
+    assert_eq!(model.max_output_tokens, Some(8192));
+    assert!(model.supports_thinking);
+    assert!(model.supports_images);
+    assert!(model.supports_structured_output);
+    assert!(!model.supports_reasoning_effort);
 }
 
 #[test]

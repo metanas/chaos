@@ -48,8 +48,8 @@ pub const ANTHROPIC_DEFAULT_BASE_URL: &str = chaos_services::anthropic::API_BASE
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum WireApi {
-    /// Lazy auto-detection: try Responses first, fall back to Chat Completions
-    /// on 404/405/501. The winning format is cached for the session.
+    /// HTTP auto-detection: try Responses first, fall back to Chat Completions
+    /// on 404/405/501. Enabled WS v2 selects Responses without probing.
     #[default]
     Auto,
     /// The Responses API exposed by OpenAI at `/v1/responses`.
@@ -57,9 +57,9 @@ pub enum WireApi {
     /// The Chat Completions API at `/v1/chat/completions`.
     #[serde(rename = "chat_completions")]
     ChatCompletions,
-    /// TensorZero native inference API at `/inference`.
-    #[serde(rename = "tensorzero")]
-    TensorZero,
+    /// LSD native inference API at `/inference`.
+    #[serde(rename = "lsd")]
+    Lsd,
 }
 
 impl fmt::Display for WireApi {
@@ -68,7 +68,7 @@ impl fmt::Display for WireApi {
             Self::Auto => "auto",
             Self::Responses => "responses",
             Self::ChatCompletions => "chat_completions",
-            Self::TensorZero => "tensorzero",
+            Self::Lsd => "lsd",
         };
         f.write_str(value)
     }
@@ -84,10 +84,10 @@ impl<'de> Deserialize<'de> for WireApi {
             "auto" => Ok(Self::Auto),
             "responses" => Ok(Self::Responses),
             "chat_completions" => Ok(Self::ChatCompletions),
-            "tensorzero" => Ok(Self::TensorZero),
+            "lsd" => Ok(Self::Lsd),
             _ => Err(serde::de::Error::unknown_variant(
                 &value,
-                &["auto", "responses", "chat_completions", "tensorzero"],
+                &["auto", "responses", "chat_completions", "lsd"],
             )),
         }
     }
@@ -108,15 +108,11 @@ pub struct ProviderAuthCapabilities {
     pub methods: Vec<ProviderAuthMethod>,
 }
 
-/// Returns true if the provider's base URL indicates it speaks the Anthropic
-/// Messages wire format.
-///
-/// Catches the real `api.anthropic.com` and the clones who bolted
-/// `/anthropic` onto their base URL — MiniMax (`api.minimax.io/anthropic`),
-/// Kimi (`api.moonshot.ai/anthropic`), Z.ai (`api.z.ai/api/anthropic`).
-/// Imitation is the sincerest form of not having your own wire format.
+/// Select the Messages wire format for Anthropic's API host.
 pub fn is_anthropic_wire(base_url: Option<&str>) -> bool {
-    base_url.map(|u| u.contains("anthropic")).unwrap_or(false)
+    base_url
+        .and_then(|base_url| url::Url::parse(base_url).ok())
+        .is_some_and(|url| url.host_str() == Some(chaos_services::anthropic::API_HOST))
 }
 
 /// Returns the native server-side tools a provider injects based on its base URL.

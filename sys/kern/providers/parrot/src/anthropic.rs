@@ -127,11 +127,7 @@ impl ModelAdapter for AnthropicAdapter {
         Box::pin(async move {
             let url = self.messages_url();
             let model = self.model_for_request(&request.model)?;
-            let body = build_request_body(
-                &request,
-                &model,
-                default_cache_ttl_for_base_url(&self.provider.base_url),
-            )?;
+            let body = build_request_body(&request, &model)?;
             let headers = self.build_headers()?;
             let provider = self.provider.clone();
             let sniffer = self.sniffer.clone();
@@ -211,23 +207,7 @@ struct AnthropicTool {
     input_schema: Value,
 }
 
-pub(crate) fn default_cache_ttl_for_base_url(base_url: &str) -> &'static str {
-    let is_official_anthropic = url::Url::parse(base_url)
-        .ok()
-        .and_then(|url| url.host_str().map(str::to_owned))
-        .is_some_and(|host| host == "api.anthropic.com");
-    if is_official_anthropic {
-        DEFAULT_CACHE_TTL
-    } else {
-        "off"
-    }
-}
-
-pub(crate) fn build_request_body(
-    request: &TurnRequest,
-    model: &str,
-    default_cache_ttl: &str,
-) -> Result<Value, AbiError> {
+pub(crate) fn build_request_body(request: &TurnRequest, model: &str) -> Result<Value, AbiError> {
     let max_tokens = request
         .extensions
         .get("max_tokens")
@@ -239,7 +219,7 @@ pub(crate) fn build_request_body(
         .and_then(Value::as_str)
         .map(str::to_owned)
         .or_else(|| std::env::var(CACHE_TTL_ENV).ok())
-        .unwrap_or_else(|| default_cache_ttl.to_string());
+        .unwrap_or_else(|| DEFAULT_CACHE_TTL.to_string());
     let cache_control = match cache_ttl.as_str() {
         "off" => None,
         "1h" => Some(serde_json::json!({"type": "ephemeral", "ttl": "1h"})),
@@ -806,14 +786,7 @@ where
 
 // ── Model discovery ───────────────────────────────────────────────
 
-/// Fetch model list from an Anthropic-compatible `/models` endpoint.
-///
-/// The response shape is `{ "data": [{ "id", "display_name", ... }] }`.
-/// Works on api.anthropic.com (the original) and Z.ai (who at least
-/// added their own models to the response). MiniMax and Kimi copied
-/// the wire format but forgot to implement discovery, so they 404
-/// here and get `ListModelsError::Unsupported`. You can clone the
-/// protocol but apparently not the whole API surface.
+/// Fetch Anthropic's model list from `/models`.
 async fn fetch_anthropic_models(
     url: &str,
     headers: &HeaderMap,
@@ -837,22 +810,11 @@ async fn fetch_anthropic_models(
         #[serde(default)]
         display_name: Option<String>,
         #[serde(default)]
-        #[serde(alias = "context_length")]
-        #[serde(alias = "context_window")]
         max_input_tokens: Option<i64>,
         #[serde(default)]
         max_tokens: Option<i64>,
         #[serde(default)]
         capabilities: Option<Capabilities>,
-        // Flat capability fields — fallback for providers that omit the
-        // capabilities object (e.g. Kimi-style Anthropic-compat proxies).
-        #[serde(default)]
-        #[serde(alias = "supports_thinking")]
-        supports_reasoning: Option<bool>,
-        #[serde(default)]
-        #[serde(alias = "supports_vision")]
-        #[serde(alias = "supports_image_input")]
-        supports_image_in: Option<bool>,
     }
 
     #[derive(Deserialize)]
@@ -865,9 +827,6 @@ async fn fetch_anthropic_models(
         structured_outputs: Option<Supported>,
         #[serde(default)]
         effort: Option<Supported>,
-        /// Server-side web search capability (present on Claude 3.5+).
-        #[serde(default)]
-        web_search: Option<Supported>,
     }
 
     #[derive(Deserialize)]
@@ -900,9 +859,6 @@ async fn fetch_anthropic_models(
         })?;
 
     let status = response.status();
-    if status == StatusCode::NOT_FOUND {
-        return Err(chaos_abi::ListModelsError::Unsupported);
-    }
     if status != StatusCode::OK {
         let body = response
             .into_body()
@@ -934,9 +890,6 @@ async fn fetch_anthropic_models(
         .into_iter()
         .map(|m| {
             let caps = m.capabilities.as_ref();
-            let supports_web_search = caps
-                .and_then(|c| c.web_search.as_ref())
-                .is_some_and(|s| s.supported);
             let id = m.id;
             chaos_abi::AbiModelInfo {
                 display_name: m.display_name.unwrap_or_else(|| id.clone()),
@@ -945,26 +898,19 @@ async fn fetch_anthropic_models(
                 description: None,
                 max_input_tokens: m.max_input_tokens,
                 max_output_tokens: m.max_tokens,
-                // capabilities struct takes precedence; flat fields are fallback
                 supports_thinking: caps
                     .and_then(|c| c.thinking.as_ref())
-                    .is_some_and(|s| s.supported)
-                    || m.supports_reasoning.unwrap_or(false),
+                    .is_some_and(|s| s.supported),
                 supports_images: caps
                     .and_then(|c| c.image_input.as_ref())
-                    .is_some_and(|s| s.supported)
-                    || m.supports_image_in.unwrap_or(false),
+                    .is_some_and(|s| s.supported),
                 supports_structured_output: caps
                     .and_then(|c| c.structured_outputs.as_ref())
                     .is_some_and(|s| s.supported),
                 supports_reasoning_effort: caps
                     .and_then(|c| c.effort.as_ref())
                     .is_some_and(|s| s.supported),
-                native_server_side_tools: if supports_web_search {
-                    vec!["web_search_20250305".to_string()]
-                } else {
-                    vec![]
-                },
+                native_server_side_tools: vec![],
             }
         })
         .collect();

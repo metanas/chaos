@@ -1,7 +1,7 @@
 //! `ModelClientSession` streaming implementation — one turn per session.
 //!
-//! Covers the Responses API (HTTP), Anthropic Messages API, Chat Completions
-//! API, TensorZero native API, and the clamped first-party CLI paths.
+//! Covers the Responses API (HTTP or session-local WS), Anthropic Messages API, Chat Completions
+//! API, LSD native API, and the clamped first-party CLI paths.
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -213,7 +213,12 @@ where
     tokio::spawn(async move {
         let mut logged_error = false;
         let mut api_stream = api_stream;
-        while let Some(event) = api_stream.next().await {
+        loop {
+            let event = tokio::select! {
+                _ = tx_event.closed() => return,
+                event = api_stream.next() => event,
+            };
+            let Some(event) = event else { return };
             match event {
                 Ok(ResponseEvent::OutputItemDone(item)) => {
                     if tx_event
@@ -540,7 +545,7 @@ impl ModelClientSession {
         (request_telemetry, sse_telemetry)
     }
 
-    /// Streams a turn via the OpenAI Responses API (HTTP/SSE).
+    /// Streams via session-local WS v2 when supported; HTTP when WS is disabled.
     #[allow(clippy::too_many_arguments)]
     #[instrument(
         name = "model_client.stream_responses_api",
@@ -549,8 +554,7 @@ impl ModelClientSession {
         fields(
             model = %model_info.slug,
             wire_api = %self.client.state.provider.wire_api,
-            transport = "responses_http",
-            http.method = "POST",
+            transport = "responses",
             api.path = "responses",
             turn.has_metadata_header = turn_metadata_header.is_some()
         )
@@ -610,7 +614,7 @@ impl ModelClientSession {
                     options: &options,
                 },
             )?;
-            let adapter = OpenAiAdapter::new(
+            let mut adapter = OpenAiAdapter::new(
                 transport,
                 client_setup.api_provider,
                 client_setup.api_auth,
@@ -619,6 +623,9 @@ impl ModelClientSession {
             )
             .with_options(options.clone())
             .with_telemetry(Some(request_telemetry), Some(sse_telemetry));
+            if let Some(websocket) = &self.client.state.responses_websocket {
+                adapter = adapter.with_websocket(Arc::clone(websocket));
+            }
             let stream_result = adapter.stream(turn_request).await;
 
             match stream_result {
@@ -1474,7 +1481,7 @@ impl ModelClientSession {
                 .await;
         }
 
-        if self.client.state.provider.wire_api == WireApi::TensorZero {
+        if self.client.state.provider.wire_api == WireApi::Lsd {
             return self
                 .stream_lsd_api(prompt, model_info, session_telemetry)
                 .await;
@@ -1494,7 +1501,11 @@ impl ModelClientSession {
                 .await;
         }
 
-        if self.client.state.provider.wire_api == WireApi::Auto {
+        // Advertising WS v2 selects Responses, not a probe for an older wire
+        // format. A rejected upgrade must surface instead of trying another API.
+        if self.client.state.provider.wire_api == WireApi::Auto
+            && self.client.state.responses_websocket.is_none()
+        {
             if let Some(&resolved) = self.client.state.resolved_wire.get() {
                 return match resolved {
                     WireApi::ChatCompletions => {
@@ -1619,8 +1630,8 @@ impl ModelClientSession {
         skip_all,
         fields(
             model = %model_info.slug,
-            wire_api = "tensorzero",
-            transport = "tensorzero_http",
+            wire_api = "lsd",
+            transport = "lsd_http",
         )
     )]
     async fn stream_lsd_api(
@@ -1644,10 +1655,8 @@ impl ModelClientSession {
         )?;
 
         let api_key = client_setup.api_auth.bearer_token().unwrap_or_default();
-        let sniffer = chaos_libration::registry::sniffer_for(
-            "tensorzero",
-            &client_setup.api_provider.base_url,
-        );
+        let sniffer =
+            chaos_libration::registry::sniffer_for("lsd", &client_setup.api_provider.base_url);
         let adapter = chaos_parrot::lsd::LsdAdapter::new(
             client_setup.api_provider,
             api_key,
@@ -1657,8 +1666,8 @@ impl ModelClientSession {
 
         tracing::debug!(
             provider = %self.client.state.provider.name,
-            wire_api = "tensorzero",
-            "streaming via TensorZero native inference API"
+            wire_api = "lsd",
+            "streaming via LSD native inference API"
         );
 
         match adapter.stream(turn_request).await {
@@ -1667,7 +1676,7 @@ impl ModelClientSession {
                 tracing::error!(
                     error = %err,
                     model = %model_info.slug,
-                    "TensorZero adapter stream failed"
+                    "LSD adapter stream failed"
                 );
                 Err(map_api_error(abi_error_to_api_error(err)))
             }

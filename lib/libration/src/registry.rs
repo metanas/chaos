@@ -48,7 +48,7 @@ pub fn sniffer_for(wire: &str, base_url: &str) -> Option<Arc<UsageSniffer>> {
     let store = shared_store()?;
     let sniffer = match wire {
         "anthropic_messages" => UsageSniffer::new(AnthropicHeaders, base_url.to_string(), store),
-        "chat_completions" | "responses" | "tensorzero" => {
+        "chat_completions" | "responses" | "lsd" => {
             let provider_tag = openai_compatible_provider_tag(base_url);
             UsageSniffer::new(
                 OpenAICompatibleHeaders::new(provider_tag),

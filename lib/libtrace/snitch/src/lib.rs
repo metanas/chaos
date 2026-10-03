@@ -12,6 +12,7 @@ pub mod config;
 mod events;
 pub mod metrics;
 pub mod provider;
+pub mod startup;
 pub mod trace_context;
 
 mod otlp;

@@ -1,6 +1,6 @@
-//! TensorZero native inference API adapter.
+//! LSD native inference API adapter.
 //!
-//! Translates chaos-abi `TurnRequest` into TensorZero's native `/inference`
+//! Translates chaos-abi `TurnRequest` into LSD's native `/inference`
 //! wire format and streams `TurnEvent`s back from the SSE response.
 //!
 //! Uses the native API (not the OpenAI-compat endpoint) to get access to
@@ -32,12 +32,12 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 
-/// Adapter for the TensorZero native inference API (`POST /inference`).
+/// Adapter for the LSD native inference API (`POST /inference`).
 #[derive(Debug, Clone)]
 pub struct LsdAdapter {
     provider: Provider,
     api_key: String,
-    /// TensorZero function name (e.g. "coding_large").
+    /// LSD function name (e.g. "coding_large").
     default_function: Option<String>,
     sniffer: Option<Arc<UsageSniffer>>,
 }
@@ -65,7 +65,7 @@ impl LsdAdapter {
         default_function: Option<String>,
     ) -> Self {
         let provider =
-            Provider::from_base_url_with_default_streaming_config("TensorZero", base_url, false);
+            Provider::from_base_url_with_default_streaming_config("LSD", base_url, false);
         Self::new(provider, api_key, default_function)
     }
 
@@ -74,7 +74,7 @@ impl LsdAdapter {
     }
 
     fn function_for_request(&self, request_model: &str) -> String {
-        // The ABI passes the model slug — for TensorZero this maps to the
+        // The ABI passes the model slug — for LSD this maps to the
         // function_name. Falls back to default_function if model is empty.
         if request_model.is_empty() {
             self.default_function
@@ -87,9 +87,9 @@ impl LsdAdapter {
 
     fn build_headers(&self) -> Result<HeaderMap, AbiError> {
         let mut headers = self.provider.headers.clone();
-        // TensorZero auth is optional — only set Bearer if key is non-empty.
+        // LSD auth is optional — only set Bearer if key is non-empty.
         if !self.api_key.trim().is_empty() {
-            crate::http_helpers::insert_bearer_auth(&mut headers, &self.api_key, "TensorZero")?;
+            crate::http_helpers::insert_bearer_auth(&mut headers, &self.api_key, "LSD")?;
         }
         crate::http_helpers::insert_streaming_json_headers(&mut headers);
         Ok(headers)
@@ -138,7 +138,7 @@ impl ModelAdapter for LsdAdapter {
     }
 
     fn provider_name(&self) -> &str {
-        "TensorZero"
+        "LSD"
     }
 
     fn capabilities(&self) -> chaos_abi::AdapterCapabilities {
@@ -151,39 +151,39 @@ impl ModelAdapter for LsdAdapter {
 // ── Request building ───────────────────────────────────────────────
 
 #[derive(Serialize)]
-struct TzInferenceRequest {
+struct LsdInferenceRequest {
     function_name: String,
-    input: TzInput,
+    input: LsdInput,
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     episode_id: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    additional_tools: Vec<TzTool>,
+    additional_tools: Vec<LsdTool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    params: Option<TzParams>,
+    params: Option<LsdParams>,
 }
 
 #[derive(Serialize)]
-struct TzInput {
+struct LsdInput {
     #[serde(skip_serializing_if = "Option::is_none")]
     system: Option<Value>,
-    messages: Vec<TzMessage>,
+    messages: Vec<LsdMessage>,
 }
 
 #[derive(Serialize)]
-struct TzMessage {
+struct LsdMessage {
     role: String,
     content: Vec<Value>,
 }
 
-/// TensorZero tool format: flat struct with `type` as a sibling tag, not a wrapper.
+/// LSD tool format: flat struct with `type` as a sibling tag, not a wrapper.
 /// Accepts both tagged (`{"type": "function", ...}`) and untagged (`{...}`) forms.
 #[derive(Serialize)]
-struct TzTool {
+struct LsdTool {
     #[serde(rename = "type")]
     tool_type: String,
     name: String,
@@ -194,12 +194,12 @@ struct TzTool {
 }
 
 #[derive(Serialize)]
-struct TzParams {
-    chat_completion: TzChatCompletionParams,
+struct LsdParams {
+    chat_completion: LsdChatCompletionParams,
 }
 
 #[derive(Serialize)]
-struct TzChatCompletionParams {
+struct LsdChatCompletionParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -233,8 +233,8 @@ fn build_request_body(
             .get("temperature")
             .and_then(Value::as_f64);
         if max_tokens.is_some() || temperature.is_some() {
-            Some(TzParams {
-                chat_completion: TzChatCompletionParams {
+            Some(LsdParams {
+                chat_completion: LsdChatCompletionParams {
                     max_tokens,
                     temperature,
                 },
@@ -244,9 +244,9 @@ fn build_request_body(
         }
     };
 
-    let body = serde_json::to_value(TzInferenceRequest {
+    let body = serde_json::to_value(LsdInferenceRequest {
         function_name: function_name.to_string(),
-        input: TzInput { system, messages },
+        input: LsdInput { system, messages },
         stream: true,
         episode_id: episode_id.map(String::from),
         additional_tools: tools,
@@ -279,7 +279,7 @@ fn convert_content_item_to_value(c: &ContentItem) -> Option<Value> {
     }
 }
 
-fn convert_input_to_messages(input: &[ResponseItem]) -> Vec<TzMessage> {
+fn convert_input_to_messages(input: &[ResponseItem]) -> Vec<LsdMessage> {
     let mut messages = Vec::new();
 
     for item in input {
@@ -292,12 +292,12 @@ fn convert_input_to_messages(input: &[ResponseItem]) -> Vec<TzMessage> {
                 if parts.is_empty() {
                     continue;
                 }
-                let tz_role = match role.as_str() {
+                let lsd_role = match role.as_str() {
                     "assistant" => "assistant",
                     _ => "user",
                 };
-                messages.push(TzMessage {
-                    role: tz_role.to_string(),
+                messages.push(LsdMessage {
+                    role: lsd_role.to_string(),
                     content: parts,
                 });
             }
@@ -308,8 +308,8 @@ fn convert_input_to_messages(input: &[ResponseItem]) -> Vec<TzMessage> {
                 call_id,
                 ..
             } => {
-                // Assistant turn that issued a tool call — TZ uses tool_call content blocks.
-                messages.push(TzMessage {
+                // Assistant turn that issued a tool call — LSD uses tool_call content blocks.
+                messages.push(LsdMessage {
                     role: "assistant".to_string(),
                     content: vec![serde_json::json!({
                         "type": "tool_call",
@@ -333,7 +333,7 @@ fn convert_input_to_messages(input: &[ResponseItem]) -> Vec<TzMessage> {
                 ..
             } => {
                 let content_text = crate::common::function_output_text(&output.body);
-                messages.push(TzMessage {
+                messages.push(LsdMessage {
                     role: "user".to_string(),
                     content: vec![serde_json::json!({
                         "type": "tool_result",
@@ -351,7 +351,7 @@ fn convert_input_to_messages(input: &[ResponseItem]) -> Vec<TzMessage> {
                     chaos_ipc::models::LocalShellAction::Exec(exec) => exec.command.join(" "),
                 };
                 if let Some(id) = call_id {
-                    messages.push(TzMessage {
+                    messages.push(LsdMessage {
                         role: "assistant".to_string(),
                         content: vec![serde_json::json!({
                             "type": "tool_call",
@@ -367,7 +367,7 @@ fn convert_input_to_messages(input: &[ResponseItem]) -> Vec<TzMessage> {
 
             _ => {
                 tracing::debug!(
-                    "TensorZero adapter: skipping unsupported ResponseItem variant in history"
+                    "LSD adapter: skipping unsupported ResponseItem variant in history"
                 );
             }
         }
@@ -376,18 +376,18 @@ fn convert_input_to_messages(input: &[ResponseItem]) -> Vec<TzMessage> {
     messages
 }
 
-fn convert_tools(tools: &[chaos_abi::ToolDef]) -> Vec<TzTool> {
+fn convert_tools(tools: &[chaos_abi::ToolDef]) -> Vec<LsdTool> {
     tools
         .iter()
         .map(|tool| match tool {
-            chaos_abi::ToolDef::Function(f) => TzTool {
+            chaos_abi::ToolDef::Function(f) => LsdTool {
                 tool_type: "function".to_string(),
                 name: f.name.clone(),
                 description: Some(f.description.clone()),
                 parameters: f.parameters.clone(),
                 strict: f.strict,
             },
-            chaos_abi::ToolDef::Freeform(f) => TzTool {
+            chaos_abi::ToolDef::Freeform(f) => LsdTool {
                 tool_type: "function".to_string(),
                 name: f.name.clone(),
                 description: Some(format!("{}\n\nFormat: {}", f.description, f.definition)),
@@ -429,9 +429,9 @@ struct ThoughtAccumulator {
     text: String,
 }
 
-/// Parse a single `data: <json>` line from the TensorZero streaming response.
+/// Parse a single `data: <json>` line from the LSD streaming response.
 ///
-/// TensorZero native streaming chunks look like:
+/// LSD native streaming chunks look like:
 /// ```json
 /// {"inference_id":"...","episode_id":"...","variant_name":"...",
 ///  "content":[{"type":"text","id":"...","text":"token"}],
@@ -457,7 +457,7 @@ fn parse_chunk(
     }
 
     // We intentionally do NOT emit ServerModel from the variant_name in the
-    // chunk — the variant is an internal TZ routing detail (e.g. "glm_air")
+    // chunk — the variant is an internal LSD routing detail (e.g. "glm_air")
     // that would trigger the kernel's model-mismatch warning. The function
     // name (which matches the requested model) is injected by the caller.
 
@@ -529,7 +529,7 @@ fn parse_chunk(
                 }
 
                 "thought" => {
-                    // TensorZero thought blocks map to reasoning content.
+                    // LSD thought blocks map to reasoning content.
                     // Accumulate like text — emit OutputItemAdded on the first
                     // chunk, deltas for each chunk, and OutputItemDone at finish.
                     let thinking = block
@@ -643,12 +643,7 @@ async fn run_sse_stream(
     tx: mpsc::Sender<Result<TurnEvent, AbiError>>,
 ) -> Result<(), AbiError> {
     let response = crate::sse::transport::start_rama_post_sse_request(
-        url,
-        headers,
-        body,
-        provider,
-        "tensorzero",
-        sniffer,
+        url, headers, body, provider, "lsd", sniffer,
     )
     .await?;
     process_sse_data_stream(
@@ -707,7 +702,7 @@ where
             Err(_) => continue,
         };
 
-        // Check for TensorZero error response in the stream.
+        // Check for LSD error response in the stream.
         if let Some(error) = json.get("error").and_then(Value::as_str) {
             return Err(AbiError::Transport {
                 status: 500,

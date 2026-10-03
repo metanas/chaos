@@ -174,9 +174,18 @@ fn resolve_reference(home: &Path, value: &str) -> anyhow::Result<String> {
 }
 
 pub async fn open(home: &Path) -> anyhow::Result<RuntimeDbHandle> {
-    let bootstrap = BootstrapConfig::read(home)?;
-    let url = bootstrap.resolved_storage_url(home)?;
-    let sqlite_home = bootstrap.sqlite_home(home);
+    // Native Keychain access and vault decryption can block for an unlock.
+    // Never perform them on the async runtime thread serving other sessions.
+    let owned_home = home.to_path_buf();
+    let (url, sqlite_home) = tokio::task::spawn_blocking(move || {
+        let bootstrap = BootstrapConfig::read(&owned_home)?;
+        Ok::<_, anyhow::Error>((
+            bootstrap.resolved_storage_url(&owned_home)?,
+            bootstrap.sqlite_home(&owned_home),
+        ))
+    })
+    .await
+    .context("bootstrap storage resolution task failed")??;
     let effective_url = url
         .clone()
         .unwrap_or_else(|| format!("sqlite://{}", sqlite_home.join("chaos.sqlite").display()));
@@ -215,6 +224,13 @@ pub async fn open(home: &Path) -> anyhow::Result<RuntimeDbHandle> {
     Ok(runtime)
 }
 
+pub(crate) async fn bootstrap_values(home: &Path) -> anyhow::Result<Value> {
+    let home = home.to_path_buf();
+    tokio::task::spawn_blocking(move || BootstrapConfig::read(&home)?.effective_values(&home))
+        .await
+        .context("bootstrap configuration task failed")?
+}
+
 pub fn install_persistence() {
     chaos_sysctl::persistence::install(Arc::new(KernelSettingsPersistence));
 }
@@ -245,7 +261,10 @@ impl SettingsPersistence for KernelSettingsPersistence {
 
 pub async fn snapshot(home: &Path) -> anyhow::Result<SettingsSnapshot> {
     install_persistence();
-    let file = read_toml(home)?;
+    let owned_home = home.to_path_buf();
+    let file = tokio::task::spawn_blocking(move || read_toml(&owned_home))
+        .await
+        .context("bootstrap read task failed")??;
     let legacy = file
         .as_table()
         .context("configuration must be a table")?

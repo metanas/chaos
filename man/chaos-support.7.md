@@ -1,6 +1,6 @@
 +++
 title = "chaos-support(7)"
-summary = "Provider, operating system, and CI support matrix."
+summary = "Available providers, platforms, transports, and storage."
 +++
 
 # chaos-support(7)
@@ -11,36 +11,26 @@ chaos-support - FreeChaOS support matrix (providers, platforms, storage, clamp)
 
 ## DESCRIPTION
 
-This page is the operator-facing **support matrix** for FreeChaOS. It is derived
-from the tree as of the sources listed under **SOURCE OF TRUTH**, not from
-marketing copy. When code and this page disagree, trust the code and file a
-doc fix.
+This page lists available providers, platforms, transports, and storage
+backends. See the linked manuals for configuration and runtime behavior.
 
 Support levels used below:
 
 | Level | Meaning |
 |-------|---------|
 | **Supported** | Implemented and intended for normal use |
-| **CI-tested** | Exercised by PR/CI test jobs |
-| **Release-built** | Built on the release pipeline; not necessarily tested |
 | **Experimental** | Implemented, fail-closed where possible, may change |
-| **Config-only** | Works by configuring a wire format / URL; not a first-party product surface |
-| **Not supported** | Explicitly out of scope or not implemented |
+| **Config-only** | Selected through a custom provider entry |
 
 ## PROVIDERS (BUNDLED)
 
-Built-ins come from two places:
-
-1. Hardcoded constructors in `sys/kern/kern` (`openai`, `anthropic`)
-2. Bundled `lib/libnet/services/thirdparty.toml` (`xai`, `moonshotai`, `moonshotai-coding`, `zai`, `zai-coding`, `charm`)
-
-User entries under `[model_providers.<id>]` in `~/.chaos/config.toml` override
-or extend these.
+Entries under `[model_providers.<id>]` in the persisted configuration
+override or extend the built-in providers.
 
 | ID | Display name | Default wire | Auth env / methods | Notes | Level |
 |----|--------------|--------------|--------------------|-------|-------|
-| `openai` | OpenAI | `responses` | ChatGPT account + API key (`requires_openai_auth`) | Default provider path; WebSocket support enabled in provider info | Supported |
-| `anthropic` | Anthropic | `auto` (URL forces Messages) | `ANTHROPIC_API_KEY` | Base URL contains `anthropic` → Messages adapter | Supported |
+| `openai` | OpenAI | `responses` | ChatGPT account + API key | Default provider; Responses WebSocket v2 | Supported |
+| `anthropic` | Anthropic | Messages | `ANTHROPIC_API_KEY` | Native API at `api.anthropic.com` | Supported |
 | `xai` | xAI | `responses` | `XAI_API_KEY`; also `xai_account` | URLs containing `x.ai` inject native `web_search` / `x_search` | Supported |
 | `moonshotai` | Moonshot AI | `responses` | `MOONSHOT_API_KEY` | Pay-per-token API; Kimi K3; native `web_search` | Supported |
 | `moonshotai-coding` | Moonshot AI Coding | `responses` | `KIMI_API_KEY` | Kimi Code subscription endpoint; native `web_search` | Supported |
@@ -50,16 +40,15 @@ or extend these.
 
 ### Config-only examples (not bundled)
 
-Documented in `chaos-providers(7)`; same adapters, operator-supplied config:
+Configured as described in [chaos-providers(7)](./chaos-providers.7.md):
 
 | Example ID | Typical wire / routing | Env key | Level |
 |------------|------------------------|---------|-------|
 | `ollama` | `auto` / chat completions on local OpenAI-compatible server | none | Config-only |
 | `deepseek` | OpenAI-compatible | `DEEPSEEK_API_KEY` | Config-only |
 | `groq` | OpenAI-compatible | `GROQ_API_KEY` | Config-only |
-| `minimax` | Anthropic-compatible if `base_url` contains `anthropic` | provider-specific | Config-only |
-| `tensorzero` | explicit `wire_api = "tensorzero"` | optional | Config-only |
-| Azure OpenAI-compatible | `responses` with Azure URL detection helpers | provider-specific | Config-only |
+| `lsd` | explicit `wire_api = "lsd"` | optional | Config-only |
+| Azure OpenAI-compatible | `responses` over HTTP/SSE | provider-specific | Config-only |
 
 ## REFLEX BACKENDS
 
@@ -80,29 +69,18 @@ See [chaos-reflex(7)](./chaos-reflex.7.md).
 
 ## WIRE FORMATS
 
-Config enum `WireApi` (`model_provider_info`):
+| `wire_api` value | Endpoint selection |
+|------------------|--------------------|
+| `auto` (default) | Responses directly with WebSocket v2; HTTP/SSE tries Responses, then Chat Completions on 404/405/501 |
+| `responses` | `/v1/responses` |
+| `chat_completions` | `/v1/chat/completions` |
+| `lsd` | LSD `/inference` |
 
-| `wire_api` value | HTTP surface | Parrot adapter key | Level |
-|------------------|--------------|--------------------|-------|
-| `auto` (default) | try Responses, fall back to Chat Completions on 404/405/501 | resolved at runtime | Supported |
-| `responses` | `/v1/responses` | `responses` → `OpenAiAdapter` | Supported |
-| `chat_completions` | `/v1/chat/completions` | `chat_completions` → `ChatCompletionsAdapter` | Supported |
-| `tensorzero` | TensorZero `/inference` | `tensorzero` → `LsdAdapter` | Supported |
+Selection rules:
 
-Anthropic is **not** a `wire_api` variant. Selection rules:
-
-1. If `base_url` contains `anthropic` → Anthropic Messages (`anthropic_messages` adapter), overriding `wire_api`
+1. Requests to `api.anthropic.com` → Anthropic Messages
 2. Else if `wire_api` is set → use it
 3. Else → `auto`
-
-`chaos_parrot::adapter_for_wire` currently maps:
-
-- `anthropic_messages`
-- `responses`
-- `chat_completions`
-- `tensorzero`
-
-Any other string returns `None`.
 
 ## CLAMP TRANSPORTS
 
@@ -113,70 +91,39 @@ Clamp uses a first-party CLI instead of a direct provider API:
 | Claude Code | `clamp_backend = "claude-code"` (default) | `claude` on `PATH` | Supported |
 | Antigravity | `clamp_backend = "antigravity"` | `agy` (`CHAOS_AGY_PATH` / `CHAOS_AGY_HOME`) | Experimental |
 
-Both fail closed: CLI/auth failures never fall back to metered API billing.
+CLI and authentication failures terminate the turn with an error.
 See [setup and commands](./chaos-providers.7.md#clamp-transports).
 
 ## PLATFORMS AND SANDBOXES
 
-| Platform | Sandbox crate | Mechanism | Kernel / notes | CI tests | Release build | Level |
-|----------|---------------|-----------|----------------|----------|---------------|-------|
-| Linux x86_64 | `alcatraz` | landlock + seccomp + `no_new_privs` | Requires Linux **≥ 6.10** (hard refuse on older) | Yes (`ubuntu-24.04`) | Yes | Supported + CI-tested |
-| Linux aarch64 | `alcatraz` | same | same | Yes (`ubuntu-24.04-arm`) | Yes | Supported + CI-tested |
-| macOS aarch64 | `alcatraz` | seatbelt profiles | Apple sandbox | Yes (`macos-26`) | Yes | Supported + CI-tested |
-| FreeBSD x86_64 | `alcatraz` | capsicum | Implemented | **No** PR test job | Yes (self-hosted `blackship`) | Supported; release-built, not CI-tested |
-| DragonFly BSD x86_64 | — | no Alcatraz backend | No dedicated `sys/arch` crate in-tree | No | No | Not supported |
-| OpenBSD | — | README mentions pledge/unveil | **No** `sys/arch/openbsd` crate | No | No | Not supported (aspirational docs only) |
-| Windows | — | — | Explicitly unsupported | No | No | Not supported |
-
-Source of platform claims: `sys/arch/*`, `.github/workflows/rust-ci.yml`,
-`.github/workflows/release.yml`, README hardware section.
+| Platform | Sandbox mechanism | Requirement |
+|----------|-------------------|-------------|
+| Linux x86_64 | Landlock + seccomp + `no_new_privs` | Linux **≥ 6.10** |
+| Linux aarch64 | Landlock + seccomp + `no_new_privs` | Linux **≥ 6.10** |
+| macOS aarch64 | Seatbelt profiles | Apple sandbox |
+| FreeBSD x86_64 | Capsicum | FreeBSD |
 
 ## STORAGE AND RECALL
 
 | Backend | How selected | Level | Notes |
 |---------|--------------|-------|-------|
 | SQLite | default (`chaos.sqlite` under chaos home) | Supported | Default single-node store |
-| PostgreSQL | `storage_url` / `CHAOS_STORAGE_URL` | Supported | Shared multi-node history; schema tested vs PG 18, needs ≥ PG 10 features |
+| PostgreSQL | `storage_url` / `CHAOS_STORAGE_URL` | Supported | Shared multi-node history; PostgreSQL ≥ 10 |
 | Semantic recall (`chaos-recall`) | same PG mount + **pgvector** | Supported (PG only) | SQLite mount returns backend error for recall |
 
-See `chaos-storage(7)`.
+See [chaos-storage(7)](./chaos-storage.7.md).
 
 ## MCP / DRIVERS
 
 | Surface | Level | Notes |
 |---------|-------|-------|
 | MCP client (`.mcp.json`, managed servers) | Supported | Kernel + `mcpd` runtime |
-| In-tree tools / arsenal | Supported | Local FS/shell/etc. tool surface |
-| External MCP drivers | Separate repos/submodules | Excluded from main workspace members; own release cycles |
-
-## WHAT IS NOT CLAIMED
-
-- **Every** OpenAI-compatible host is not individually certified. Compatibility
-  is wire-format level (`responses` / `chat_completions` / Anthropic URL /
-  TensorZero).
-- FreeBSD is a first-class sandbox implementation but **not** on the PR test
-  matrix; treat FreeBSD regressions as higher risk until CI grows a FreeBSD
-  test runner.
-- OpenBSD pledge/unveil text in the README is **not** backed by an in-tree
-  arch crate today.
-- Antigravity clamp is experimental and depends on an official `agy` install
-  plus a dedicated credential home.
-
-## SOURCE OF TRUTH
-
-| Topic | Primary sources |
-|-------|-----------------|
-| Bundled third-party providers | `lib/libnet/services/thirdparty.toml` |
-| Built-in OpenAI/Anthropic + `WireApi` | `sys/kern/kern/src/model_provider_info.rs` |
-| Reflex backends and judgments | `sys/kern/reflex/src/`, `sys/kern/kern/src/reflex.rs` |
-| Wire → adapter map | `sys/kern/providers/parrot/src/lib.rs` (`adapter_for_wire`) |
-| Clamp backends | `sys/kern/kern/src/config.rs` (`ClampBackend`), `sys/modules/clamp/` |
-| Sandboxes | `sys/arch/linux`, `sys/arch/macos`, `sys/arch/freebsd`, `sys/arch/base` |
-| PR CI targets | `.github/workflows/rust-ci.yml` |
-| Release targets | `.github/workflows/release.yml` |
-| Storage | `sys/vfs`, `man/chaos-storage.7.md` |
-| Provider how-to | `man/chaos-providers.7.md` |
+| Session tools | Supported | Filesystem, shell, and other activated tools |
+| External MCP servers | Supported | Tools and resources from configured server connections |
 
 ## SEE ALSO
 
-`chaos-providers(7)`, `chaos-storage(7)`, `chaos-mcp(7)`, `chaos-install(7)`
+- [chaos-providers(7)](./chaos-providers.7.md)
+- [chaos-storage(7)](./chaos-storage.7.md)
+- [chaos-mcp(7)](./chaos-mcp.7.md)
+- [chaos-install(7)](./chaos-install.7.md)

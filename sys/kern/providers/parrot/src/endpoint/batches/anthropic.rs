@@ -26,7 +26,6 @@ use super::classify_status;
 use crate::anthropic::ANTHROPIC_VERSION;
 use crate::anthropic::ANTHROPIC_VERSION_HEADER;
 use crate::anthropic::build_request_body;
-use crate::anthropic::default_cache_ttl_for_base_url;
 use crate::common::MIME_APPLICATION_JSON;
 
 const DEFAULT_BASE_URL: &str = "https://api.anthropic.com/v1";
@@ -156,12 +155,8 @@ impl SpoolBackend for AnthropicSpoolBackend {
             let mut requests = Vec::with_capacity(items.len());
             for (custom_id, req) in items {
                 let model = self.model_for(&req);
-                let mut body = build_request_body(
-                    &req,
-                    &model,
-                    default_cache_ttl_for_base_url(&self.base_url),
-                )
-                .map_err(|e| SpoolError::Translation(e.to_string()))?;
+                let mut body = build_request_body(&req, &model)
+                    .map_err(|e| SpoolError::Translation(e.to_string()))?;
                 if let Some(obj) = body.as_object_mut() {
                     obj.remove("stream");
                 }

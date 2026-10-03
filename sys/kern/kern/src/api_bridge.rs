@@ -260,7 +260,7 @@ pub(crate) fn auth_provider_from_auth(
         return Err(provider_auth_missing(provider));
     }
 
-    // Self-hosted providers (Ollama, TensorZero) don't need credentials.
+    // Self-hosted providers (Ollama, LSD) don't need credentials.
     Ok(CoreAuthProvider {
         token: None,
         account_id: None,

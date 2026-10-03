@@ -255,6 +255,22 @@ press `?` with an empty input for in-app help.
 
 The non-interactive mode (`chaos exec`) defaults to `RUST_LOG=error`, printed inline.
 
+### Startup checkpoints
+
+The TUI's default log filter also records `chaos_snitch::startup=info`.
+Each checkpoint has `scope`, `stage`, cumulative `elapsed_ms`, and incremental
+`duration_ms`. Early milestones are replayed once tracing is installed.
+
+`scope=console` measures frontend entry, configuration, storage, logging,
+terminal readiness, first successful frame, and coreboot. `scope=kernel_session`
+measures journal/auth readiness, MCP scheduling, and session readiness. First
+frame can be an onboarding/picker frame; it does not mean the model session is
+ready. MCP scheduling likewise does not mean all servers have connected.
+
+To keep startup records when overriding `RUST_LOG`, include
+`chaos_snitch::startup=info`. These checkpoints contain no prompts, paths, or
+credentials and make no provider requests.
+
 See the Rust docs on [`RUST_LOG`](https://docs.rs/env_logger/latest/env_logger/#enabling-logging) for configuration options.
 
 ## FILES

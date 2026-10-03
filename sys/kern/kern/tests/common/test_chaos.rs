@@ -208,6 +208,8 @@ impl TestChaosBuilder {
     ) -> anyhow::Result<(Config, Arc<TempDir>)> {
         let model_provider = ModelProviderInfo {
             base_url: Some(base_url),
+            // These fixtures implement HTTP SSE, not Responses WebSocket v2.
+            supports_websockets: false,
             ..built_in_model_providers()["openai"].clone()
         };
         let cwd = Arc::new(TempDir::new()?);

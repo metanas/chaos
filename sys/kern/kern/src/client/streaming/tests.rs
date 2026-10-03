@@ -5,6 +5,39 @@ use chaos_clamp::AntigravityUsage;
 use chaos_clamp::Usage;
 use chaos_ipc::openai_models::ReasoningEffort;
 
+#[tokio::test]
+async fn canceling_kernel_stream_releases_provider_even_when_no_more_events_arrive() {
+    use futures::StreamExt;
+    use tokio::sync::mpsc;
+
+    const TEST_DEADLINE: jiff::SignedDuration = jiff::SignedDuration::from_secs(5);
+    let telemetry = chaos_snitch::SessionTelemetry::new(
+        chaos_ipc::ProcessId::new(),
+        "test",
+        "test",
+        None,
+        "test",
+        false,
+        "test",
+        chaos_ipc::protocol::SessionSource::Exec,
+    );
+    let (provider_tx, provider_rx) = mpsc::channel(1);
+    let provider = futures::stream::unfold(provider_rx, |mut rx| async move {
+        rx.recv().await.map(|event| (event, rx))
+    })
+    .boxed();
+    let mut stream = super::map_response_stream(provider, telemetry);
+    provider_tx
+        .send(Ok(super::ResponseEvent::Created {}))
+        .await
+        .unwrap();
+    assert!(stream.rx_event.recv().await.unwrap().is_ok());
+    drop(stream);
+    tokio::time::timeout(TEST_DEADLINE.unsigned_abs(), provider_tx.closed())
+        .await
+        .expect("our forwarding task must drop a silent provider stream on cancellation");
+}
+
 #[test]
 fn global_egress_disables_chatgpt_request_compression_for_dlp() {
     let auth = crate::ChaosAuth::create_dummy_chatgpt_auth_for_testing();

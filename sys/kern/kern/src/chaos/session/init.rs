@@ -169,6 +169,9 @@ impl Session {
         file_watcher: Arc<FileWatcher>,
         agent_control: AgentControl,
     ) -> anyhow::Result<Arc<Self>> {
+        let startup = chaos_snitch::startup::StartupTimeline::new("kernel_session");
+        startup.enable_logging();
+        startup.mark("session_entry");
         tracing::debug!(
             "Configuring session: model={}; provider={:?}",
             session_configuration.collaboration_mode.model(),
@@ -269,6 +272,7 @@ impl Session {
 
         let (rollout_recorder_and_state_db, (auth, mcp_servers, auth_statuses)) =
             tokio::join!(rollout_fut, auth_and_mcp_fut);
+        startup.mark("journal_and_auth_ready");
 
         let (rollout_recorder, state_db_ctx) = rollout_recorder_and_state_db.map_err(|e| {
             error!("failed to initialize rollout recorder: {e:#}");
@@ -641,6 +645,7 @@ impl Session {
             session_init.required_mcp_server_count = required_mcp_server_count,
         ))
         .await;
+        startup.mark("mcp_connections_scheduled");
         if !required_mcp_servers.is_empty() {
             let failures = mcp_connection_manager
                 .required_startup_failures(&required_mcp_servers)
@@ -729,6 +734,7 @@ impl Session {
         // servers). Publish only once startup succeeds, so failed spawns cannot
         // leave an unregistered child stuck in PendingInit on the parent stream.
         Box::pin(sess.publish_agent_status(None)).await;
+        startup.mark("session_ready");
         Ok(sess)
     }
 }

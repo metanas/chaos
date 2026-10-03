@@ -45,6 +45,77 @@ fn openai(provider: Provider) -> OpenAiAdapter<StaticAuthProvider> {
 }
 
 #[tokio::test]
+async fn lsd_wire_selection_reaches_the_native_inference_adapter() {
+    use futures::StreamExt;
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/inference"))
+        .and(wiremock::matchers::body_partial_json(
+            json!({"function_name": "my-function"}),
+        ))
+        .respond_with(ResponseTemplate::new(402).set_body_json(json!({"error": "test rejection"})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let adapter = chaos_parrot::adapter_for_wire("lsd", server.uri(), String::new(), None)
+        .expect("LSD wire adapter");
+    let mut request = turn();
+    request.model = "my-function".into();
+    let mut stream = adapter.stream(request).await.expect("LSD response stream");
+    let mut rejection = None;
+    while let Some(event) = stream.next().await {
+        if let Err(error) = event {
+            rejection = Some(error);
+            break;
+        }
+    }
+    assert!(matches!(
+        rejection,
+        Some(AbiError::Transport { status: 402, .. })
+    ));
+    server.verify().await;
+}
+
+#[tokio::test]
+async fn enabled_websocket_and_prewarm_cannot_bypass_configured_egress() {
+    let vendor = MockServer::start().await;
+    let gateway = MockServer::start().await;
+    let adapter = openai(provider(&format!("{}/v1", vendor.uri()), &gateway)).with_websocket(
+        std::sync::Arc::new(chaos_parrot::openai::ResponsesWebSocket::default()),
+    );
+    adapter.prewarm();
+    Mock::given(method("POST"))
+        .and(path("/egress/chaos/v1/responses"))
+        .and(header("x-lsd-upstream", vendor.uri().as_str()))
+        .respond_with(
+            ResponseTemplate::new(402).set_body_json(json!({"error": "denied by gateway"})),
+        )
+        .expect(1)
+        .mount(&gateway)
+        .await;
+    assert!(matches!(
+        adapter.stream(turn()).await,
+        Err(AbiError::Transport { status: 402, .. })
+    ));
+    let requests = gateway.received_requests().await.unwrap();
+    assert_eq!(
+        requests.len(),
+        1,
+        "only the inspectable HTTP generation reached egress"
+    );
+    assert_eq!(
+        requests[0].body_json::<serde_json::Value>().unwrap()["model"],
+        "test-model"
+    );
+    assert!(
+        vendor.received_requests().await.unwrap().is_empty(),
+        "no direct upgrade or generation"
+    );
+    gateway.verify().await;
+}
+
+#[tokio::test]
 async fn egress_preserves_streams_and_gateway_errors_without_contacting_vendor() {
     use chaos_client::{HttpTransport, Request, TransportError};
     use futures::StreamExt;

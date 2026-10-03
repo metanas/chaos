@@ -24,9 +24,13 @@ use std::sync::OnceLock;
 use tracing::debug;
 use tracing::instrument;
 
+mod websocket;
+pub use websocket::ResponsesWebSocket;
+
 pub struct ResponsesClient<T: HttpTransport, A: AuthProvider> {
     session: EndpointSession<T, A>,
     sse_telemetry: Option<Arc<dyn SseTelemetry>>,
+    websocket: Option<Arc<ResponsesWebSocket>>,
 }
 
 #[derive(Default, Clone)]
@@ -43,6 +47,7 @@ impl<T: HttpTransport, A: AuthProvider> ResponsesClient<T, A> {
         Self {
             session: EndpointSession::new(transport, provider, auth),
             sse_telemetry: None,
+            websocket: None,
         }
     }
 
@@ -54,6 +59,39 @@ impl<T: HttpTransport, A: AuthProvider> ResponsesClient<T, A> {
         Self {
             session: self.session.with_request_telemetry(request),
             sse_telemetry: sse,
+            websocket: self.websocket,
+        }
+    }
+
+    pub fn with_websocket(mut self, websocket: Arc<ResponsesWebSocket>) -> Self {
+        self.websocket = Some(websocket);
+        self
+    }
+
+    fn connection(&self, headers: &HeaderMap) -> Option<websocket::Connection> {
+        let provider = self.session.provider();
+        // Gateway/DLP policies require an inspectable HTTP JSON body. Never
+        // bypass configured egress with a direct websocket connection.
+        if provider.egress.is_some() || provider.is_azure_responses_endpoint() {
+            return None;
+        }
+        let request = self
+            .session
+            .make_request(&Method::GET, Self::path(), headers, None);
+        Some(websocket::Connection {
+            url: request.url,
+            headers: request.headers,
+            idle_timeout: jiff::SignedDuration::try_from(provider.stream_idle_timeout)
+                .unwrap_or(jiff::SignedDuration::MAX),
+            telemetry: self.session.request_telemetry(),
+        })
+    }
+
+    pub fn prewarm(&self, options: &ResponsesOptions) {
+        if let Some(websocket) = &self.websocket
+            && let Some(connection) = self.connection(&responses_headers(options))
+        {
+            websocket.prewarm(connection);
         }
     }
 
@@ -62,8 +100,7 @@ impl<T: HttpTransport, A: AuthProvider> ResponsesClient<T, A> {
         level = "info",
         skip_all,
         fields(
-            transport = "responses_http",
-            http.method = "POST",
+            transport = tracing::field::Empty,
             api.path = "responses"
         )
     )]
@@ -72,13 +109,16 @@ impl<T: HttpTransport, A: AuthProvider> ResponsesClient<T, A> {
         request: ResponsesApiRequest,
         options: ResponsesOptions,
     ) -> Result<ResponseStream, ApiError> {
-        let ResponsesOptions {
-            conversation_id,
-            session_source,
-            extra_headers,
-            compression,
-            turn_state,
-        } = options;
+        let headers = responses_headers(&options);
+        if let Some(websocket) = &self.websocket
+            && let Some(connection) = self.connection(&headers)
+        {
+            tracing::Span::current().record("transport", "responses_websocket");
+            return websocket
+                .stream(&request, connection, options.turn_state.clone())
+                .await;
+        }
+        tracing::Span::current().record("transport", "responses_http");
 
         let mut body = serde_json::to_value(&request)
             .map_err(|e| ApiError::Stream(format!("failed to encode responses request: {e}")))?;
@@ -91,16 +131,8 @@ impl<T: HttpTransport, A: AuthProvider> ResponsesClient<T, A> {
             "responses api request body"
         );
 
-        let mut headers = extra_headers;
-        if let Some(ref conv_id) = conversation_id {
-            insert_header(&mut headers, "x-client-request-id", conv_id);
-        }
-        headers.extend(build_conversation_headers(conversation_id));
-        if let Some(subagent) = subagent_header(&session_source) {
-            insert_header(&mut headers, "x-openai-subagent", &subagent);
-        }
-
-        self.stream(body, headers, compression, turn_state).await
+        self.stream(body, headers, options.compression, options.turn_state)
+            .await
     }
 
     fn path() -> &'static str {
@@ -157,4 +189,16 @@ impl<T: HttpTransport, A: AuthProvider> ResponsesClient<T, A> {
             use_openai_codex_rate_limits,
         ))
     }
+}
+
+fn responses_headers(options: &ResponsesOptions) -> HeaderMap {
+    let mut headers = options.extra_headers.clone();
+    if let Some(ref conv_id) = options.conversation_id {
+        insert_header(&mut headers, "x-client-request-id", conv_id);
+    }
+    headers.extend(build_conversation_headers(options.conversation_id.clone()));
+    if let Some(subagent) = subagent_header(&options.session_source) {
+        insert_header(&mut headers, "x-openai-subagent", &subagent);
+    }
+    headers
 }

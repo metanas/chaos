@@ -116,10 +116,15 @@ fn account_provider(name: &str, base_url: &str) -> ModelProviderInfo {
     }
 }
 
-fn anthropic_provider_for(base_url: String) -> ModelProviderInfo {
+fn anthropic_provider_for(gateway: &MockServer) -> ModelProviderInfo {
     ModelProviderInfo {
+        name: "Anthropic".into(),
+        egress: Some(
+            chaos_client::Egress::parse(&format!("{}/egress/chaos", gateway.uri()))
+                .expect("test gateway"),
+        ),
         experimental_bearer_token: Some("test-bearer-token".into()),
-        ..provider_for(base_url)
+        ..provider_for(crate::model_provider_info::ANTHROPIC_DEFAULT_BASE_URL.into())
     }
 }
 
@@ -656,8 +661,10 @@ async fn refresh_available_models_uses_cache_for_anthropic_provider() {
     let server = MockServer::start().await;
     let response_body = json!({
         "data": [{
+            "type": "model",
             "id": "claude-cache-test",
             "display_name": "Claude Cache Test",
+            "created_at": "2026-01-01T00:00:00Z",
             "max_input_tokens": 200000,
             "max_tokens": 8192,
             "capabilities": {
@@ -666,10 +673,17 @@ async fn refresh_available_models_uses_cache_for_anthropic_provider() {
                 "structured_outputs": { "supported": true },
                 "effort": { "supported": true }
             }
-        }]
+        }],
+        "has_more": false,
+        "first_id": "claude-cache-test",
+        "last_id": "claude-cache-test"
     });
     Mock::given(method("GET"))
-        .and(path("/anthropic/models"))
+        .and(path("/egress/chaos/v1/models"))
+        .and(wiremock::matchers::header(
+            "x-lsd-upstream",
+            "https://api.anthropic.com",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(response_body))
         .expect(1)
         .mount(&server)
@@ -680,7 +694,7 @@ async fn refresh_available_models_uses_cache_for_anthropic_provider() {
     let manager = manager_over_own_cache(
         chaos_home.path().to_path_buf(),
         auth_manager,
-        anthropic_provider_for(format!("{}/anthropic", server.uri())),
+        anthropic_provider_for(&server),
     )
     .await;
 
@@ -701,12 +715,14 @@ async fn refresh_available_models_uses_cache_for_anthropic_provider() {
 }
 
 #[tokio::test]
-async fn unsupported_anthropic_provider_caches_empty_catalog_instead_of_bundled_models() {
+async fn anthropic_discovery_failure_preserves_the_existing_catalog() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
-        .and(path("/anthropic/models"))
-        .respond_with(ResponseTemplate::new(404))
-        .expect(1)
+        .and(path("/egress/chaos/v1/models"))
+        .respond_with(ResponseTemplate::new(404).set_body_json(json!({
+            "type": "error",
+            "error": {"type": "not_found_error", "message": "catalog unavailable"}
+        })))
         .mount(&server)
         .await;
 
@@ -715,26 +731,29 @@ async fn unsupported_anthropic_provider_caches_empty_catalog_instead_of_bundled_
     let manager = manager_over_own_cache(
         chaos_home.path().to_path_buf(),
         auth_manager,
-        anthropic_provider_for(format!("{}/anthropic", server.uri())),
+        anthropic_provider_for(&server),
     )
     .await;
-
+    let cached_models = vec![remote_model("claude-cached", "Claude Cached", 0)];
     manager
+        .apply_live_catalog(cached_models.clone(), None)
+        .await;
+
+    let error = manager
+        .refresh_available_models(RefreshStrategy::Online)
+        .await
+        .expect_err("the official API failure must be reported");
+    assert!(error.to_string().contains("404"), "{error}");
+
+    assert_eq!(manager.get_remote_models().await, cached_models);
+    let rebound = manager
+        .rebound_to(manager.provider_id(), anthropic_provider_for(&server))
+        .expect("rebind to the same provider");
+    rebound
         .refresh_available_models(RefreshStrategy::OnlineIfUncached)
         .await
-        .expect("unsupported anthropic refresh should not fail");
-
-    assert!(
-        manager.get_remote_models().await.is_empty(),
-        "unsupported provider should not inherit bundled OpenAI models"
-    );
-    assert!(
-        manager
-            .list_models(RefreshStrategy::OnlineIfUncached)
-            .await
-            .is_empty(),
-        "cached unsupported provider should stay empty until real discovery exists"
-    );
+        .expect("reuse the persisted catalog");
+    assert_eq!(rebound.get_remote_models().await, cached_models);
 }
 
 #[tokio::test]

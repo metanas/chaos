@@ -89,7 +89,7 @@ pub fn adapter_for_wire(
             )
             .with_sniffer(sniffer),
         )),
-        "tensorzero" => Some(Box::new(
+        "lsd" => Some(Box::new(
             lsd::LsdAdapter::from_base_url_and_api_key(base_url, api_key, default_model)
                 .with_sniffer(sniffer),
         )),
