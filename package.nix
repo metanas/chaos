@@ -22,13 +22,33 @@ rustPlatform.buildRustPackage {
   pname = "chaos";
   version = "47.10.2";
 
-  src = lib.cleanSourceWith {
-    src = lib.cleanSource ./.;
-    # Drop local cargo target/ dirs so a dirty checkout doesn't bloat src.
-    filter =
-      path: type:
-      !(type == "directory" && builtins.elem (baseNameOf path) [ "target" ]);
-  };
+  # Restrict src to what cargo actually needs so flake/tooling edits don't
+  # invalidate the build. Keep the list minimal: sys/kern/kern/build.rs
+  # embeds a catalog from man/, and embed macros may reference other
+  # root-level files, so docs/ and the markdown files stay in.
+  src =
+    let
+      excluded = [
+        "target"
+        ".tmp" # with-local-qa-tmp.sh scratch dir
+        ".github"
+        ".idea"
+        "drivers" # git submodules, excluded from the workspace
+        "flake.nix"
+        "flake.lock"
+        "package.nix"
+        "install.sh"
+        "justfile"
+        "mise.toml"
+        ".gitignore"
+      ];
+    in
+    lib.cleanSourceWith {
+      src = lib.cleanSource ./.;
+      filter =
+        path: type:
+        !(builtins.elem (baseNameOf path) excluded);
+    };
 
   cargoHash = "sha256-y/yPoo0ZB60qB1R0FmHYYuMBVpc84YYSaVjm5IGwDb4=";
 

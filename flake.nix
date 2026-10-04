@@ -68,6 +68,14 @@
               pkgs.dbus # arboard clipboard backend links libdbus-1
               pkgs.cargo-nextest
             ];
+            # The pkg-config wrapper execs the real pkg-config with the
+            # role-suffixed variable only, and stdenv initializes it to "."
+            # in dev shells — so build scripts probing via the pkg_config
+            # crate (libdbus-sys) see no search path at all. Mirror the
+            # plain variable into the role variable after all hooks ran.
+            shellHook = ''
+              export PKG_CONFIG_PATH_x86_64_unknown_linux_gnu="''${PKG_CONFIG_PATH:-}"
+            '';
             env.LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
           };
         }
